@@ -1,0 +1,77 @@
+sudo: false
+
+language: haskell
+
+cache:
+  directories:
+  - $HOME/.ghc
+  - $HOME/.stack
+
+matrix:
+  include:
+  - env: BUILD=nightly
+    compiler: "GHC-8.2.1"
+    addons: {apt: {packages: [libgmp-dev]}}
+
+  - env: BUILD=lts-9
+    compiler: "GHC-8.0.2"
+    addons: {apt: {packages: [libgmp-dev]}}
+
+  - env: BUILD=lts-8
+    compiler: "GHC-8.0.2"
+    addons: {apt: {packages: [libgmp-dev]}}
+
+  - env: BUILD=lts-7
+    compiler: "GHC-8.0.1"
+    addons: {apt: {packages: [libgmp-dev]}}
+
+  - env: BUILD=lint
+    compiler: "GHC-8.0.2"
+    addons: {apt: {packages: [libgmp-dev]}}
+
+  - env: BUILD=pretty
+    compiler: "GHC-8.0.2"
+    addons: {apt: {packages: [libgmp-dev]}}
+
+  - env: BUILD=sdist
+    compiler: "GHC-8.0.2"
+    addons: {apt: {packages: [libgmp-dev]}}
+
+before_install:
+- export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:$HOME/.local/bin:/opt/alex/$ALEXVER/bin:/opt/happy/$HAPPYVER/bin:$HOME/.cabal/bin:$PATH
+- |
+  set -ex
+  mkdir -p ~/.local/bin
+  travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+  set +ex
+
+install:
+- |
+  set -ex
+  stack setup --upgrade-cabal && stack install --pedantic
+  set +ex
+
+script:
+- |
+  set -ex
+  case "$BUILD" in
+    lts-*)
+      RESOLVER=$BUILD make test
+      ;;
+    nightly)
+      RESOLVER=$BUILD make test
+      ;;
+    lint)
+      make lint
+      ;;
+    pretty)
+      make pretty
+      ;;
+    sdist)
+      make test_sdist
+      ;;
+  esac
+  set +ex
+
+notifications:
+  email: false

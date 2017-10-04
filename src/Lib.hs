@@ -12,7 +12,7 @@ import Data.Time.Clock (NominalDiffTime, UTCTime, getCurrentTime, diffUTCTime)
 import Control.Exception.Safe (try)
 import Data.Default           (Default (..))
 import Data.HashMap.Strict    (HashMap)
-import Data.IORef             (IORef, atomicModifyIORef, newIORef, readIORef)
+import Data.IORef             (IORef, newIORef, atomicModifyIORef)
 
 import           Data.UUID    (UUID)
 import qualified Data.UUID.V4 as UUID (nextRandom)
@@ -40,17 +40,13 @@ data SupervisorEvent
     , seSupervisorId   :: !SupervisorId
     , seErrorMessage   :: !Text }
   | SupervisorStarted
-    {
-      seSupervisorName :: !SupervisorName
+    { seSupervisorName :: !SupervisorName
     , seSupervisorId   :: !SupervisorId
-    , seEventTime      :: !UTCTime
-    }
+    , seEventTime      :: !UTCTime }
   | SupervisorHalted
-    {
-      seSupervisorName :: !SupervisorName
+    { seSupervisorName :: !SupervisorName
     , seSupervisorId   :: !SupervisorId
-    , seEventTime      :: !UTCTime
-    }
+    , seEventTime      :: !UTCTime }
   | ChildAlreadyHalted
     { seSupervisorName :: !SupervisorName
     , seSupervisorId   :: !SupervisorId
@@ -61,6 +57,13 @@ data SupervisorEvent
     , seSupervisorId   :: !SupervisorId
     , seChildThreadId  :: !ChildThreadId
     , seChildId        :: !ChildId
+    , seChildName      :: !ChildName
+    , seEventTime      :: !UTCTime }
+  | ChildRestartCountReset
+    { seSupervisorName :: !SupervisorName
+    , seSupervisorId   :: !SupervisorId
+    , seChildId        :: !ChildId
+    , seChildThreadId  :: !ChildThreadId
     , seChildName      :: !ChildName
     , seEventTime      :: !UTCTime }
   | ChildRestarted
@@ -107,9 +110,9 @@ instance NFData SupervisorRestartStrategy
 
 data SupervisorFlags
   = SupervisorFlags {
-      supervisorRestartStrategy :: !SupervisorRestartStrategy
-    , supervisorIntensity       :: !Int
-    , supervisorPeriodSeconds   :: !NominalDiffTime
+      sfRestartStrategy :: !SupervisorRestartStrategy
+    , sfIntensity       :: !Int
+    , sfPeriodSeconds   :: !NominalDiffTime
     }
   deriving (Generic)
 
@@ -124,7 +127,17 @@ data ChildRestartStrategy
 instance NFData ChildRestartStrategy
 
 type RestartCount = Int
+type Intensity = Int
+type PeriodSeconds = NominalDiffTime
+type DiffSeconds = NominalDiffTime
 
+data RestartAction
+  = ResetRestartCount
+  | IncreaseRestartCount
+  | HaltRestart
+  deriving (Generic, Show, Eq)
+
+instance NFData RestartAction
 
 data ChildEvent
   -- ^ Indicates when a child thread finished without any errors
@@ -147,18 +160,17 @@ data ChildEvent
 
 data ChildSpec
   = ChildSpec {
-      childName            :: !ChildName  -- ^ Child name (tracing purposes)
-    , childRestartStrategy :: !ChildRestartStrategy -- ^ Restart strategy for child thread
-    , childOnFailure       :: !(SomeException -> IO ()) -- ^ Callback executed on child failure
-    , childOnCompleted     :: !(IO ()) -- ^ Callback executed on child successful exit
-    , childAction          :: !(IO ()) -- ^ Child action to be monitored
+      csName            :: !ChildName  -- ^ Child name (tracing purposes)
+    , csRestartStrategy :: !ChildRestartStrategy -- ^ Restart strategy for child thread
+    , csOnFailure       :: !(SomeException -> IO ()) -- ^ Callback executed on child failure
+    , csOnCompleted     :: !(IO ()) -- ^ Callback executed on child successful exit
+    , csAction          :: !(IO ()) -- ^ Child action to be monitored
     }
     deriving (Generic)
 
 data ChildRuntime
   = ChildRuntime {
       crChildId              :: !ChildId
-    , crChildRestartCountRef :: !(IORef RestartCount)
     , crChildCreationTime    :: !UTCTime
     , crChildSpec            :: !ChildSpec
     }
@@ -173,11 +185,11 @@ data ChildProcess
 
 data SupervisorSpec
   = SupervisorSpec {
-      supervisorName          :: !SupervisorName
-    , supervisorRestartPolicy :: !SupervisorRestartStrategy
-    , supervisorFlags         :: !SupervisorFlags
-    , supervisorChildSpecList :: ![ChildSpec]
-    , supervisorNotifyEvent   :: !(SupervisorEvent -> IO ())
+      ssName          :: !SupervisorName
+    , ssRestartPolicy :: !SupervisorRestartStrategy
+    , ssFlags         :: !SupervisorFlags
+    , ssChildSpecList :: ![ChildSpec]
+    , ssNotifyEvent   :: !(SupervisorEvent -> IO ())
     }
   deriving (Generic)
 
@@ -202,15 +214,15 @@ data SupervisorRuntime
 
 data Supervisor
   = Supervisor {
-      supervisorAsync          :: !(Async ())
+      supervisorAsync   :: !(Async ())
     , supervisorRuntime :: !SupervisorRuntime
     }
   deriving (Generic)
 
 data ChildException
   = KillChild {
-      exChildId    :: ChildId
-    , exKillReason :: Text
+      exChildId    :: !ChildId
+    , exKillReason :: !Text
     }
     deriving (Generic, Show)
 
@@ -227,8 +239,7 @@ _forkChild
   -> IO ChildId
 _forkChild (SupervisorRuntime {..}) mChildId mChildRestartCount crChildSpec = do
         crChildId              <- maybe UUID.nextRandom return mChildId
-        crChildRestartCountRef <- newIORef (fromMaybe 0 mChildRestartCount)
-        cpRuntime              <- buildChildRuntime crChildId crChildRestartCountRef
+        cpRuntime              <- buildChildRuntime crChildId
 
         atomicModifyIORef srChildProcessMap
                           (\m -> ( H.alter (const $ Just cpRuntime) crChildId m
@@ -236,22 +247,24 @@ _forkChild (SupervisorRuntime {..}) mChildId mChildRestartCount crChildSpec = do
                                  ))
         return crChildId
     where
-        buildChildRuntime crChildId crChildRestartCountRef = do
+        restartCount =
+          fromMaybe 0 mChildRestartCount
+
+        buildChildRuntime crChildId = do
           let
             ChildSpec {..} =
               crChildSpec
 
           crChildCreationTime <- getCurrentTime
           cpAsync <- async $ do
-              eResult <- try childAction
-              crRestartCount <- atomicModifyIORef crChildRestartCountRef (\n -> (succ n, n))
+              eResult <- try csAction
               result <-
                   case eResult of
                       Left err ->
                           return
-                            $ ChildFailed childName crChildId crRestartCount crChildCreationTime err
+                            $ ChildFailed csName crChildId (succ restartCount) crChildCreationTime err
                       Right _ ->
-                          return $ ChildCompleted childName crChildId crRestartCount crChildCreationTime
+                          return $ ChildCompleted csName crChildId restartCount crChildCreationTime
               atomically
                   $ writeTQueue srEventQueue result
 
@@ -278,10 +291,11 @@ _restartChild sr childId childRestartCount =
     _forkChild sr (Just childId) (Just childRestartCount)
 
 _restartChildren
-  :: SupervisorRuntime
+  :: RestartCount
+  -> SupervisorRuntime
   -> SupervisorTerminationPolicy
   -> IO ()
-_restartChildren sr@(SupervisorRuntime {..}) terminationPolicy = do
+_restartChildren restartCount sr@(SupervisorRuntime {..}) terminationPolicy = do
     childMap <- atomicModifyIORef srChildProcessMap (\m -> (H.empty, m))
 
     let
@@ -304,8 +318,7 @@ _restartChildren sr@(SupervisorRuntime {..}) terminationPolicy = do
         ChildSpec {..} =
           crChildSpec
 
-      crRestartCount<- readIORef crChildRestartCountRef
-      _restartChild sr crChildId crRestartCount crChildSpec
+      _restartChild sr crChildId restartCount crChildSpec
 
 _haltChildren :: Text -> SupervisorTerminationPolicy -> Supervisor -> IO ()
 _haltChildren reason policy sup = do
@@ -374,8 +387,8 @@ _withChildProcess (SupervisorRuntime {..}) childId actionFn = do
           -- Child has been removed from known map, unlikely
           -- event, need to trace why this would happen
           eventTime <- getCurrentTime
-          supervisorNotifyEvent
-            (ChildAlreadyHalted supervisorName
+          ssNotifyEvent
+            (ChildAlreadyHalted ssName
                                 srSupervisorId
                                 childId
                                 eventTime)
@@ -388,15 +401,37 @@ getDiffSeconds ev = do
   currentTime <- liftIO getCurrentTime
   return $ diffUTCTime currentTime (ceStartTime ev)
 
-_violatedIntensityPerPeriodTreshold
-  :: Int
-  -> NominalDiffTime
-  -> Int
-  -> NominalDiffTime
-  -> Bool
-_violatedIntensityPerPeriodTreshold intensity periodSeconds restartCount diffSeconds =
-   diffSeconds <= periodSeconds &&
-      restartCount >= intensity
+_getRestartAction
+  :: Intensity
+  -> PeriodSeconds
+  -> RestartCount
+  -> DiffSeconds
+  -> RestartAction
+_getRestartAction intensity periodSeconds restartCount diffSeconds =
+  case () of
+    _ | diffSeconds <= periodSeconds &&
+          restartCount >= intensity ->
+        HaltRestart
+      | diffSeconds >= periodSeconds ->
+        ResetRestartCount
+      | otherwise ->
+        IncreaseRestartCount
+
+__invokeRestartPolicy
+  :: SupervisorRuntime
+  -> ChildId
+  -> ChildSpec
+  -> RestartCount
+  -> SupervisorRestartStrategy
+  -> IO ()
+__invokeRestartPolicy sr childId childSpec restartCount policy =
+  case policy of
+      AllForOne terminationPolicy ->
+          _restartChildren restartCount sr terminationPolicy
+
+      OneForOne ->
+          void $ _restartChild sr childId 1 childSpec
+
 
 _invokeRestartPolicy
   :: SupervisorRuntime
@@ -411,7 +446,7 @@ _invokeRestartPolicy sr@(SupervisorRuntime {..}) (ChildProcess {..}) ev = do
         srSupervisorSpec
 
       SupervisorFlags {..} =
-        supervisorFlags
+        ssFlags
 
       ChildRuntime {..} =
         cpRuntime
@@ -419,23 +454,37 @@ _invokeRestartPolicy sr@(SupervisorRuntime {..}) (ChildProcess {..}) ev = do
       ChildSpec {..} =
         crChildSpec
 
-    supervisorNotifyEvent
-      (ChildRestarted supervisorName
+      restartCount =
+        ceRestartCount ev
+
+    ssNotifyEvent
+      (ChildRestarted ssName
                       srSupervisorId
                       crChildId
-                      childName
+                      csName
                       eventTime
                       ev)
 
-    -- TODO: Validate intensity and period to force a halt if necessary
+    -- Validate intensity and period to force a halt if necessary
+    restartAction <- _getRestartAction sfIntensity sfPeriodSeconds restartCount <$> (getDiffSeconds ev)
 
-    case supervisorRestartPolicy of
-        AllForOne terminationPolicy ->
-            _restartChildren sr terminationPolicy
+    case restartAction of
+      HaltRestart ->
+        panic "pending"
 
-        OneForOne ->
-            void $ _restartChild sr crChildId (ceRestartCount ev) crChildSpec
+      ResetRestartCount -> do
+        evTime <- getCurrentTime
+        ssNotifyEvent
+          (ChildRestartCountReset ssName
+                                  srSupervisorId
+                                  crChildId
+                                  (asyncThreadId cpAsync)
+                                  csName
+                                  evTime)
+        __invokeRestartPolicy sr crChildId crChildSpec 1 ssRestartPolicy
 
+      IncreaseRestartCount ->
+        __invokeRestartPolicy sr crChildId crChildSpec (succ restartCount) ssRestartPolicy
 
 _processChildEvent
   :: SupervisorRuntime
@@ -456,13 +505,13 @@ _processChildEvent sr@(SupervisorRuntime {..}) ev child = do
 
     case ev of
         ChildCompleted {} -> do
-            case childRestartStrategy of
+            case csRestartStrategy of
                 Permanent ->
                     _invokeRestartPolicy sr child ev
 
                 _ ->
-                    supervisorNotifyEvent
-                      (ChildDropped supervisorName
+                    ssNotifyEvent
+                      (ChildDropped ssName
                                     srSupervisorId
                                     (asyncThreadId (cpAsync child))
                                     (ceChildId ev)
@@ -470,10 +519,10 @@ _processChildEvent sr@(SupervisorRuntime {..}) ev child = do
                                     eventTime)
 
         ChildFailed {} -> do
-            case childRestartStrategy of
+            case csRestartStrategy of
                 Temporal -> do
-                    supervisorNotifyEvent
-                      (ChildDropped supervisorName
+                    ssNotifyEvent
+                      (ChildDropped ssName
                                     srSupervisorId
                                     (asyncThreadId (cpAsync child))
                                     (ceChildId ev)
@@ -484,10 +533,10 @@ _processChildEvent sr@(SupervisorRuntime {..}) ev child = do
 
 
         ChildKilled {} -> do
-            case childRestartStrategy of
+            case csRestartStrategy of
                 Temporal ->
-                    supervisorNotifyEvent
-                      (ChildDropped supervisorName
+                    ssNotifyEvent
+                      (ChildDropped ssName
                                     srSupervisorId
                                     (asyncThreadId (cpAsync child))
                                     (ceChildId ev)
@@ -495,8 +544,8 @@ _processChildEvent sr@(SupervisorRuntime {..}) ev child = do
                                     eventTime)
                 Transient -> do
                     wait (cpAsync child)
-                    supervisorNotifyEvent
-                      (ChildTerminated supervisorName
+                    ssNotifyEvent
+                      (ChildTerminated ssName
                                        srSupervisorId
                                        (asyncThreadId (cpAsync child))
                                        (ceChildId ev)
@@ -534,12 +583,12 @@ haltChild reason childId sup = do
             ChildSpec {..} =
                 crChildSpec
 
-        supervisorNotifyEvent
-            (ChildTerminated supervisorName
+        ssNotifyEvent
+            (ChildTerminated ssName
                              srSupervisorId
                              (asyncThreadId cpAsync)
                              crChildId
-                             childName
+                             csName
                              eventTime)
 
         cancelWith cpAsync (KillChild childId reason)
@@ -570,7 +619,7 @@ startSupervisor spec = do
       supervisorRuntime = SupervisorRuntime {srSupervisorSpec = spec, ..}
 
     supervisorAsync    <- async $ do
-      mapM_ (_startChild supervisorRuntime) (supervisorChildSpecList spec)
+      mapM_ (_startChild supervisorRuntime) (ssChildSpecList spec)
       childEventLoop supervisorRuntime
 
     return $ Supervisor { .. }
@@ -593,14 +642,14 @@ startSupervisor spec = do
                 let
                   errMsg =
                     "Event Loop execution on inconsistent state; supervisor not initialized."
-                supervisorNotifyEvent (SupervisorStateError supervisorName srSupervisorId errMsg)
+                ssNotifyEvent (SupervisorStateError ssName srSupervisorId errMsg)
                 panic errMsg
 
             SupHalted -> do
                 -- Finish of supervisor loop
                 -- TODO: Cleanup queue
                 eventTime <- getCurrentTime
-                supervisorNotifyEvent (SupervisorHalted supervisorName srSupervisorId eventTime)
+                ssNotifyEvent (SupervisorHalted ssName srSupervisorId eventTime)
                 return ()
 
             SupHalting ->

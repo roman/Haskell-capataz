@@ -1,0 +1,84 @@
+name: supervisor
+version: '0.0.0.1'
+category: TODO
+author: Roman Gonzalez
+maintainer: romanandreg@gmail.com
+copyright: © 2017 Roman Gonzalez
+license: MIT
+license-file: LICENSE
+github: roman/Haskell-supervisor
+tested-with: GHC==8.0.1 GHC==8.0.2 GHC==8.2.1
+extra-source-files:
+- README.md
+- CHANGELOG.md
+
+ghc-options:
+- -Wall
+# as recommended in:
+# https://functor.tokyo/blog/2017-07-28-ghc-warnings-you-should-enable
+- -Wincomplete-uni-patterns
+- -Wincomplete-record-updates
+
+dependencies:
+- base
+- protolude
+- flow
+- safe-exceptions
+- text
+- bytestring
+- time
+- uuid
+- unordered-containers
+- vector
+- data-default
+- stm
+
+library:
+  source-dirs: src
+  exposed-modules:
+  - Lib
+
+tests:
+  supervisor-test:
+    main: Main.hs
+    source-dirs: test/testsuite
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    - -O2
+    dependencies:
+    - tasty
+    - tasty-hunit
+    - tasty-smallcheck
+    - tasty-rerun
+    - supervisor
+
+  supervisor-doctest:
+    main: Main.hs
+    source-dirs: test/doctest
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    - -O2
+    dependencies:
+    - doctest
+    - Glob
+    - QuickCheck
+    - supervisor
+
+benchmarks:
+  supervisor-benchmark:
+    main: Main.hs
+    source-dirs: benchmark
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    - -O2
+    dependencies:
+    - criterion
+    - supervisor
+
+stability: alpha (experimental)

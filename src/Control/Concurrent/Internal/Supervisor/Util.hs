@@ -11,15 +11,15 @@ import Control.Concurrent.STM.TVar (TVar, readTVar, writeTVar)
 import Data.IORef                  (atomicModifyIORef')
 import Data.Time.Clock             (getCurrentTime)
 
-import qualified Data.HashMap.Strict as H
+import qualified Data.HashMap.Strict as HashMap
 
 import Control.Concurrent.Internal.Supervisor.Types
 
 appendChildToMap :: SupervisorEnv -> ChildId -> Child -> IO ()
-appendChildToMap (SupervisorEnv { supervisorChildMap }) childId child =
+appendChildToMap SupervisorEnv { supervisorChildMap } childId child =
   atomicModifyIORef' supervisorChildMap
                      (\childMap -> (appendChild childMap, ()))
-  where appendChild = H.alter (const $ Just child) childId
+  where appendChild = HashMap.alter (const $ Just child) childId
 
 readSupervisorStatus :: TVar SupervisorStatus -> STM SupervisorStatus
 readSupervisorStatus statusVar = do
@@ -27,7 +27,7 @@ readSupervisorStatus statusVar = do
   if status == Initializing then retry else return status
 
 writeSupervisorStatus :: SupervisorEnv -> SupervisorStatus -> IO ()
-writeSupervisorStatus (SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, notifyEvent }) newSupervisorStatus
+writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, notifyEvent } newSupervisorStatus
   = do
 
     prevSupervisorStatus <- atomically $ do
@@ -37,15 +37,14 @@ writeSupervisorStatus (SupervisorEnv { supervisorId, supervisorName, supervisorS
 
     eventTime <- getCurrentTime
     notifyEvent
-      ( SupervisorStatusChanged
+      SupervisorStatusChanged
         { supervisorId
         , supervisorName
         , prevSupervisorStatus
         , newSupervisorStatus
         , eventTime
         }
-      )
 
 runtimeToEnv :: SupervisorRuntime -> SupervisorEnv
-runtimeToEnv supervisorRuntime@(SupervisorRuntime {..}) =
-  let (SupervisorSpec {..}) = supervisorSpec in SupervisorEnv {..}
+runtimeToEnv supervisorRuntime@SupervisorRuntime {..} =
+  let SupervisorSpec {..} = supervisorSpec in SupervisorEnv {..}

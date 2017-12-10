@@ -13,7 +13,7 @@ import Control.Concurrent.STM.TVar   (newTVarIO)
 import Data.IORef                    (newIORef)
 import Data.Time.Clock               (getCurrentTime)
 
-import qualified Data.HashMap.Strict as H
+import qualified Data.HashMap.Strict as HashMap
 import qualified Data.UUID.V4        as UUID (nextRandom)
 
 import qualified Control.Concurrent.Internal.Supervisor.Child as Child
@@ -33,8 +33,7 @@ handleControlAction env controlAction = case controlAction of
     childId <- Child.forkChild env childSpec Nothing Nothing
     returnChildId childId
 
-  TerminateChild{} -> do
-    panic "pending implementation"
+  TerminateChild{} -> panic "pending implementation"
 
 handleSupervisorMessage :: SupervisorEnv -> SupervisorMessage -> IO ()
 handleSupervisorMessage env message = case message of
@@ -43,7 +42,7 @@ handleSupervisorMessage env message = case message of
   MonitorEvent  monitorEvent  -> handleMonitorEvent env monitorEvent
 
 runSupervisorLoop :: SupervisorEnv -> IO ()
-runSupervisorLoop env@(SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, supervisorQueue, notifyEvent })
+runSupervisorLoop env@SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, supervisorQueue, notifyEvent }
   = do
     (status, message) <-
       atomically
@@ -54,7 +53,7 @@ runSupervisorLoop env@(SupervisorEnv { supervisorId, supervisorName, supervisorS
     case status of
       Initializing -> do
         eventTime <- getCurrentTime
-        notifyEvent $ InvalidSupervisorStatusReached
+        notifyEvent InvalidSupervisorStatusReached
           { supervisorId
           , supervisorName
           , eventTime
@@ -73,8 +72,8 @@ buildSupervisorRuntime supervisorSpec = do
   supervisorId        <- UUID.nextRandom
   supervisorQueue     <- newTQueueIO
   supervisorStatusVar <- newTVarIO Initializing
-  supervisorChildMap  <- newIORef H.empty
-  return $ SupervisorRuntime {..}
+  supervisorChildMap  <- newIORef HashMap.empty
+  return SupervisorRuntime {..}
 
 forkSupervisor :: SupervisorSpec -> IO Supervisor
 forkSupervisor supervisorSpec = do
@@ -86,19 +85,18 @@ forkSupervisor supervisorSpec = do
 
   writeSupervisorStatus supervisorEnv Running
 
-  return $ Supervisor {..}
+  return Supervisor {..}
 
 forkChild :: ChildSpec -> Supervisor -> IO ChildId
-forkChild childSpec (Supervisor { supervisorEnv }) = do
-  let (SupervisorEnv { supervisorQueue }) = supervisorEnv
+forkChild childSpec Supervisor { supervisorEnv } = do
+  let SupervisorEnv { supervisorQueue } = supervisorEnv
 
   childIdVar <- newEmptyMVar
   atomically $ writeTQueue
     supervisorQueue
-    ( ControlAction $ ForkChild
+    (ControlAction ForkChild
       { childSpec
       , childRestartCount = 0
       , returnChildId     = putMVar childIdVar
-      }
-    )
+      })
   takeMVar childIdVar

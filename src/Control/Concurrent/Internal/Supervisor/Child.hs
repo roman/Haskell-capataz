@@ -1,7 +1,6 @@
 {-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
 module Control.Concurrent.Internal.Supervisor.Child where
 
 import Protolude
@@ -15,7 +14,7 @@ import Control.Concurrent.Internal.Supervisor.Types
 import Control.Concurrent.Internal.Supervisor.Util  (appendChildToMap)
 
 childMain :: SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO Child
-childMain (SupervisorEnv { supervisorQueue }) childSpec@(ChildSpec { childName, childAction }) childId restartCount
+childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, childAction } childId restartCount
   = do
 
     childCreationTime <- getCurrentTime
@@ -24,14 +23,14 @@ childMain (SupervisorEnv { supervisorQueue }) childSpec@(ChildSpec { childName, 
       monitorEventTime <- getCurrentTime
       result           <- case eResult of
         Left err -> case fromException err of
-          Just (TerminateChildException{}) -> return $ ChildTerminated
+          Just TerminateChildException{} -> return ChildTerminated
             { childId
             , childName
             , monitorEventTime
             , childRestartCount = restartCount
             }
 
-          Nothing -> return $ ChildFailed
+          Nothing -> return ChildFailed
             { childName
             , childId
             , monitorEventTime
@@ -39,11 +38,11 @@ childMain (SupervisorEnv { supervisorQueue }) childSpec@(ChildSpec { childName, 
             , childRestartCount = succ restartCount
             }
         Right _ ->
-          return $ ChildCompleted {childName , childId , monitorEventTime }
+          return ChildCompleted {childName , childId , monitorEventTime }
 
       atomically $ writeTQueue supervisorQueue (MonitorEvent result)
 
-    return $ Child {childId , childAsync , childCreationTime , childSpec }
+    return Child {childId , childAsync , childCreationTime , childSpec }
 
 forkChild
   :: SupervisorEnv

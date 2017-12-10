@@ -63,8 +63,8 @@ data ControlAction
     childId :: !ChildId
   }
 
-data SupervisorException
-  = TerminateChildException { childId :: !ChildId }
+newtype SupervisorException
+  = TerminateChildException { childId :: ChildId }
   deriving (Show)
 
 instance Exception SupervisorException

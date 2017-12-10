@@ -16,43 +16,36 @@ import qualified Data.HashMap.Strict as H
 import Control.Concurrent.Internal.Supervisor.Types
 
 appendChildToMap :: SupervisorEnv -> ChildId -> Child -> IO ()
-appendChildToMap (SupervisorEnv {supervisorChildMap}) childId child =
-    atomicModifyIORef' supervisorChildMap
-                       (\childMap -> (appendChild childMap, ()))
-  where
-    appendChild = H.alter (const $ Just child) childId
+appendChildToMap (SupervisorEnv { supervisorChildMap }) childId child =
+  atomicModifyIORef' supervisorChildMap
+                     (\childMap -> (appendChild childMap, ()))
+  where appendChild = H.alter (const $ Just child) childId
 
 readSupervisorStatus :: TVar SupervisorStatus -> STM SupervisorStatus
 readSupervisorStatus statusVar = do
   status <- readTVar statusVar
-  if status == Initializing then
-    retry
-  else
-    return status
+  if status == Initializing then retry else return status
 
 writeSupervisorStatus :: SupervisorEnv -> SupervisorStatus -> IO ()
-writeSupervisorStatus (SupervisorEnv { supervisorId
-                                     , supervisorName
-                                     , supervisorStatusVar
-                                     , notifyEvent})
-                    newSupervisorStatus = do
+writeSupervisorStatus (SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, notifyEvent }) newSupervisorStatus
+  = do
 
-  prevSupervisorStatus <- atomically $ do
-    prevStatus <- readTVar supervisorStatusVar
-    writeTVar supervisorStatusVar newSupervisorStatus
-    return prevStatus
+    prevSupervisorStatus <- atomically $ do
+      prevStatus <- readTVar supervisorStatusVar
+      writeTVar supervisorStatusVar newSupervisorStatus
+      return prevStatus
 
-  eventTime <- getCurrentTime
-  notifyEvent (SupervisorStatusChanged { supervisorId
-                                       , supervisorName
-                                       , prevSupervisorStatus
-                                       , newSupervisorStatus
-                                       , eventTime })
+    eventTime <- getCurrentTime
+    notifyEvent
+      ( SupervisorStatusChanged
+        { supervisorId
+        , supervisorName
+        , prevSupervisorStatus
+        , newSupervisorStatus
+        , eventTime
+        }
+      )
 
 runtimeToEnv :: SupervisorRuntime -> SupervisorEnv
 runtimeToEnv supervisorRuntime@(SupervisorRuntime {..}) =
-  let
-    (SupervisorSpec {..}) =
-      supervisorSpec
-  in
-    SupervisorEnv {..}
+  let (SupervisorSpec {..}) = supervisorSpec in SupervisorEnv {..}

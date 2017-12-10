@@ -1,32 +1,28 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Protolude
 
-import Test.Tasty (TestTree, defaultMainWithIngredients, testGroup)
-import Test.Tasty.HUnit (Assertion, (@?=), testCase)
-import Test.Tasty.SmallCheck (testProperty)
-import Test.Tasty.Runners (listingTests, consoleTestReporter)
+import Test.Tasty                   (TestTree, defaultMainWithIngredients, testGroup)
+import Test.Tasty.HUnit             (Assertion, testCase, (@?=))
 import Test.Tasty.Ingredients.Rerun (rerunningTests)
+import Test.Tasty.Runners           (consoleTestReporter, listingTests)
+import Test.Tasty.SmallCheck        (testProperty)
 
 import Lib (inc)
 
 main :: IO ()
-main =
-  defaultMainWithIngredients
-    [ rerunningTests [listingTests, consoleTestReporter] ]
-    (testGroup "all-tests" tests)
+main = defaultMainWithIngredients
+  [rerunningTests [listingTests, consoleTestReporter]]
+  (testGroup "all-tests" tests)
 
 tests :: [TestTree]
-tests =
-  [ testGroup "SmallCheck" scTests
-  , testGroup "Unit tests" huTests
-  ]
+tests = [testGroup "SmallCheck" scTests, testGroup "Unit tests" huTests]
 
 scTests :: [TestTree]
 scTests =
-  [ testProperty "inc == succ" prop_succ
+  [ testProperty "inc == succ"                   prop_succ
   , testProperty "inc . negate == negate . pred" prop_pred
   ]
 

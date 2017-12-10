@@ -1,6 +1,6 @@
-{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE NoImplicitPrelude     #-}
 module Control.Concurrent.Internal.Supervisor.Child where
 
 import Protolude

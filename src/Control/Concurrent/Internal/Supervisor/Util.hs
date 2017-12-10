@@ -36,14 +36,13 @@ writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorSt
       return prevStatus
 
     eventTime <- getCurrentTime
-    notifyEvent
-      SupervisorStatusChanged
-        { supervisorId
-        , supervisorName
-        , prevSupervisorStatus
-        , newSupervisorStatus
-        , eventTime
-        }
+    notifyEvent SupervisorStatusChanged
+      { supervisorId
+      , supervisorName
+      , prevSupervisorStatus
+      , newSupervisorStatus
+      , eventTime
+      }
 
 runtimeToEnv :: SupervisorRuntime -> SupervisorEnv
 runtimeToEnv supervisorRuntime@SupervisorRuntime {..} =

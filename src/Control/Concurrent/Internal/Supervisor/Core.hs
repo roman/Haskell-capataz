@@ -94,9 +94,10 @@ forkChild childSpec Supervisor { supervisorEnv } = do
   childIdVar <- newEmptyMVar
   atomically $ writeTQueue
     supervisorQueue
-    (ControlAction ForkChild
+    ( ControlAction ForkChild
       { childSpec
       , childRestartCount = 0
       , returnChildId     = putMVar childIdVar
-      })
+      }
+    )
   takeMVar childIdVar

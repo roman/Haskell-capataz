@@ -1,0 +1,7 @@
+resolver: lts-9.17
+extra-deps:
+- czipwith-1.0.0.0
+- data-tree-print-0.1.0.0
+- deque-0.2
+- monad-memo-0.4.1
+- butcher-1.2.1.0

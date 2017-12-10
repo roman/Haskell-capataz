@@ -1,15 +1,21 @@
-SOURCES=$$(find . -maxdepth 3 -type d | grep 'src\|test\|benchmark')
+SOURCES=$$(find . -maxdepth 1 -type d | grep 'src\|test\|benchmark')
 
 DIST_DIR:=$$(stack path --dist-dir)
 SDIST_TAR:=$$(find $(DIST_DIR) -name "*.tar.gz" | tail -1)
 SDIST_FOLDER:=$$(basename $(SDIST_TAR) .tar.gz)
 SDIST_INIT:=$$(stack init --force)
 
-STYLISH=stylish-haskell -i {} \;
-HLINT=hlint --refactor --refactor-options -i {} \;
+BRITTANY_BIN:=./bin/brittany
+STYLISH_BIN:=./bin/stylish-haskell
+HLINT_BIN:=./bin/hlint
+INTERO_BIN:=./bin/intero
 
-RESOLVER ?= lts
-STACK:=stack --resolver $(RESOLVER) --install-ghc --local-bin-path ./bin
+BRITTANY=$(BRITTANY_BIN) --config-file .brittany.yml --write-mode inplace {} \;
+STYLISH=$(STYLISH_BIN) -i {} \;
+HLINT=$(HLINT_BIN) --refactor --refactor-options -i {} \;
+
+STACK:=stack --install-ghc --local-bin-path ./target/bin
+TOOLS_STACK:=stack --stack-yaml .tools.stack.yaml --install-ghc --local-bin-path ./bin
 
 TEST_DOC:=$(STACK) --haddock --no-haddock-deps build --pedantic
 TEST:=$(STACK) build --test
@@ -22,17 +28,20 @@ help:	## Display this message
 
 ################################################################################
 
-bin/hlint:
-	$(STACK) install hlint
+$(HLINT_BIN):
+	$(TOOLS_STACK) install hlint
 
-bin/stylish-haskell:
-	$(STACK) install stylish-haskell
+$(STYLISH_BIN):
+	$(TOOLS_STACK) install stylish-haskell
 
-bin/intero:
+$(BRITTANY_BIN):
+	$(TOOLS_STACK) install brittany
+
+$(INTERO_BIN):
 	$(STACK) install pretty-show intero
 
 .make/setup_done:
-	$(STACK) install hlint stylish-haskell pretty-show
+	$(TOOLS_STACK) install hlint stylish-haskell pretty-show brittany
 	mkdir -p .make
 	mkdir -p .stack-work/intero
 	chmod go-w .
@@ -66,15 +75,19 @@ test_sdist: untar_sdist
 	cd tmp/$(SDIST_FOLDER) && $(TEST) supervisor:supervisor-doctest
 .PHONY: test_sdist
 
-pretty: bin/stylish-haskell ## Normalize style of source files
-	find $(SOURCES) -name "*.hs" -exec $(STYLISH) && git diff --exit-code
-.PHONY: pretty
+# pretty: bin/stylish-haskell ## Normalize style of source files
+#		find $(SOURCES) -name "*.hs" -exec $(STYLISH) && git diff --exit-code
+# .PHONY: pretty
 
-lint: bin/hlint ## Execute linter
+format: $(BRITTANY_BIN) $(STYLISH_BIN) ## Normalize style of source files
+	find $(SOURCES) -name "*.hs" -exec $(BRITTANY) -exec $(STYLISH) && git diff --exit-code
+.PHONY: format
+
+lint: $(HLINT_BIN) ## Execute linter
 	hlint $(SOURCES)
 .PHONY: lint
 
-repl: bin/intero ## Start project's repl
+repl: $(INTERO_BIN) ## Start project's repl
 	stack ghci
 .PHONY: repl
 

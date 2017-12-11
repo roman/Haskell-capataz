@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
 module Control.Concurrent.Supervisor.Internal.Types where
 
@@ -21,18 +22,28 @@ type ChildId = UUID
 type SupervisorId = UUID
 type ChildMap = HashMap ChildId Child
 
-data SupervisorTerminationPolicy
+data ChildTerminationOrder
   = NewestFirst -- ^ Terminate child threads from most recent to oldest
   | OldestFirst -- ^ Terminate child threads from oldest to most recent
   deriving (Generic, Show, Eq, Ord)
 
-instance Default SupervisorTerminationPolicy where
+instance Default ChildTerminationOrder where
   def = OldestFirst
 
-instance NFData SupervisorTerminationPolicy
+instance NFData ChildTerminationOrder
+
+data ChildTerminationPolicy
+  = BrutalTermination
+  | TimeoutSeconds !Int
+  deriving (Generic, Show, Eq, Ord)
+
+instance Default ChildTerminationPolicy where
+  def = TimeoutSeconds 3
+
+instance NFData ChildTerminationPolicy
 
 data SupervisorRestartStrategy
-  = AllForOne !SupervisorTerminationPolicy -- ^ Terminate all children threads when one fails and restart them all
+  = AllForOne !ChildTerminationOrder -- ^ Terminate all children threads when one fails and restart them all
   | OneForOne -- ^ Only restart child thread that terminated
   deriving (Generic, Show, Eq, Ord)
 
@@ -60,12 +71,16 @@ data SupervisorSpec
   = SupervisorSpec {
     supervisorName                        :: !SupervisorName
   , supervisorIntensity                   :: !Int
+    -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
   , supervisorPeriodSeconds               :: !NominalDiffTime
   , supervisorRestartStrategy             :: !SupervisorRestartStrategy
-  , supervisorChildShutdownTimeoutSeconds :: !Int
+  , supervisorChildTerminationPolicy :: !ChildTerminationPolicy
   , supervisorShutdownTimeoutSeconds      :: !Int
   , notifyEvent                           :: !(SupervisorEvent -> IO ())
   }
+
+instance Default SupervisorSpec where
+  def = defSupervisorSpec
 
 data SupervisorEnv
   = SupervisorEnv {
@@ -233,3 +248,18 @@ data SupervisorEvent
     , childId        :: !ChildId
     , childName      :: !ChildName
     , eventTime      :: !UTCTime }
+
+defSupervisorSpec :: SupervisorSpec
+defSupervisorSpec =
+  SupervisorSpec {
+    supervisorName                        = "default-supervisor"
+
+  -- One (1) restart every five (5) seconds
+  , supervisorIntensity                   = 1
+  , supervisorPeriodSeconds               = 5
+
+  , supervisorRestartStrategy             = def
+  , supervisorChildTerminationPolicy      = def
+  , supervisorShutdownTimeoutSeconds      = 10
+  , notifyEvent                           = const $ return ()
+  }

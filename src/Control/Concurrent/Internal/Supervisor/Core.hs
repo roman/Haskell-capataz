@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes    #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -6,6 +7,7 @@ module Control.Concurrent.Internal.Supervisor.Core where
 
 import Protolude
 
+import Control.Teardown (newTeardown)
 import Control.Concurrent.MVar       (newEmptyMVar, takeMVar)
 import Control.Concurrent.STM        (atomically)
 import Control.Concurrent.STM.TQueue (newTQueueIO, readTQueue, writeTQueue)
@@ -20,29 +22,41 @@ import qualified Control.Concurrent.Internal.Supervisor.Child as Child
 
 import Control.Concurrent.Internal.Supervisor.Types
 import Control.Concurrent.Internal.Supervisor.Util
-    (readSupervisorStatus, runtimeToEnv, writeSupervisorStatus)
+    (readSupervisorStatus, runtimeToEnv, writeSupervisorStatus, sendSyncControlMsg, childOptionsToSpec)
 
 --------------------------------------------------------------------------------
 
-handleMonitorEvent :: SupervisorEnv -> MonitorEvent -> IO ()
+handleMonitorEvent :: SupervisorEnv -> MonitorEvent -> IO Bool
 handleMonitorEvent = panic "pending implementation"
 
-handleControlAction :: SupervisorEnv -> ControlAction -> IO ()
+handleControlAction :: SupervisorEnv -> ControlAction -> IO Bool
 handleControlAction env controlAction = case controlAction of
   ForkChild { childSpec, returnChildId } -> do
     childId <- Child.forkChild env childSpec Nothing Nothing
     returnChildId childId
+    return True
 
-  TerminateChild{} -> panic "pending implementation"
+  TerminateChild { terminationReason, childId, notifyChildTermination } -> do
+    Child.terminateChild terminationReason env childId
+    notifyChildTermination
+    return True
 
-handleSupervisorMessage :: SupervisorEnv -> SupervisorMessage -> IO ()
+  TerminateSupervisor { notifySupervisorTermination } -> do
+    putText "0. Here I am"
+    Child.terminateChildren "supervisor shutdown" env
+    putText "1. Here I am"
+    notifySupervisorTermination
+    putText "2. Here I am"
+    writeSupervisorStatus env Halted
+    return False
+
+handleSupervisorMessage :: SupervisorEnv -> SupervisorMessage -> IO Bool
 handleSupervisorMessage env message = case message of
   ControlAction controlAction -> handleControlAction env controlAction
-
   MonitorEvent  monitorEvent  -> handleMonitorEvent env monitorEvent
 
-runSupervisorLoop :: SupervisorEnv -> IO ()
-runSupervisorLoop env@SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, supervisorQueue, notifyEvent }
+runSupervisorLoop :: (forall b. IO b -> IO b) -> SupervisorEnv -> IO ()
+runSupervisorLoop unmask env@SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, supervisorQueue, notifyEvent }
   = do
     (status, message) <-
       atomically
@@ -58,12 +72,19 @@ runSupervisorLoop env@SupervisorEnv { supervisorId, supervisorName, supervisorSt
           , supervisorName
           , eventTime
           }
+        runSupervisorLoop unmask env
 
       Running -> do
-        handleSupervisorMessage env message
-        runSupervisorLoop env
-
-      Halting -> panic "pending implementation"
+        eContinueLoop <- unmask $ try $ handleSupervisorMessage env message
+        case eContinueLoop of
+          Left supervisorError -> do
+            eventTime <- getCurrentTime
+            notifyEvent SupervisorFailed { supervisorId, supervisorName, supervisorError, eventTime }
+          Right continueLoop
+            | continueLoop -> runSupervisorLoop unmask env
+            | otherwise -> do
+                eventTime <- getCurrentTime
+                notifyEvent SupervisorTerminated { supervisorId, supervisorName, eventTime }
 
       Halted  -> panic "pending implementation"
 
@@ -76,20 +97,25 @@ buildSupervisorRuntime supervisorSpec = do
   return SupervisorRuntime {..}
 
 forkSupervisor :: SupervisorSpec -> IO Supervisor
-forkSupervisor supervisorSpec = do
+forkSupervisor supervisorSpec@SupervisorSpec {supervisorName} = do
   supervisorRuntime <- buildSupervisorRuntime supervisorSpec
 
   let supervisorEnv = runtimeToEnv supervisorRuntime
 
-  supervisorAsync <- async $ runSupervisorLoop supervisorEnv
+  supervisorAsync <- asyncWithUnmask $ \unmask -> runSupervisorLoop unmask supervisorEnv
 
   writeSupervisorStatus supervisorEnv Running
 
+  supervisorTeardown <-
+    newTeardown ("supervisor[" <> supervisorName <> "]")
+                (sendSyncControlMsg supervisorEnv TerminateSupervisor)
+
   return Supervisor {..}
 
-forkChild :: ChildSpec -> Supervisor -> IO ChildId
-forkChild childSpec Supervisor { supervisorEnv } = do
-  let SupervisorEnv { supervisorQueue } = supervisorEnv
+forkChild :: ChildOptions -> IO () -> Supervisor -> IO ChildId
+forkChild childOptions childAction Supervisor { supervisorEnv } = do
+  let childSpec = childOptionsToSpec childOptions childAction
+      SupervisorEnv { supervisorQueue } = supervisorEnv
 
   childIdVar <- newEmptyMVar
   atomically $ writeTQueue
@@ -100,4 +126,10 @@ forkChild childSpec Supervisor { supervisorEnv } = do
       , returnChildId     = putMVar childIdVar
       }
     )
-  takeMVar childIdVar
+  childId <- takeMVar childIdVar
+  return childId
+
+terminateChild :: Text -> ChildId -> Supervisor -> IO ()
+terminateChild terminationReason childId Supervisor { supervisorEnv } =
+  sendSyncControlMsg supervisorEnv
+    (\notifyChildTermination -> TerminateChild { terminationReason, childId, notifyChildTermination })

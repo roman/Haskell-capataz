@@ -53,6 +53,7 @@ tests:
     - tasty-hunit
     - tasty-smallcheck
     - tasty-rerun
+    - pretty-show
     - supervisor
 
   supervisor-doctest:

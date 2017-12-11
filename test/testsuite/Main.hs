@@ -5,9 +5,11 @@ module Main where
 import Protolude
 
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
+import Text.Show.Pretty (pPrint)
 
 import Test.Tasty                   (TestTree, defaultMainWithIngredients, testGroup)
-import Test.Tasty.HUnit             (assertEqual, testCase)
+-- import Test.Tasty.HUnit             (assertEqual, testCase)
+import Test.Tasty.HUnit             (testCase)
 import Test.Tasty.Ingredients.Rerun (rerunningTests)
 import Test.Tasty.Runners           (consoleTestReporter, listingTests)
 -- import Test.Tasty.SmallCheck        (testProperty)
@@ -33,7 +35,7 @@ assertSupervisor assertionsFn callbackFn = do
 tests :: [TestTree]
 tests =
   [ testCase "initialize and teardown supervisor" $ do
-      assertSupervisor print $ \supSpec -> do
+      assertSupervisor pPrint $ \supSpec -> do
         supervisor <- SUT.forkSupervisor supSpec
         _childId   <- SUT.forkChild SUT.defChildOptions
                                     (forever $ threadDelay 1000100)

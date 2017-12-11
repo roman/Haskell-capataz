@@ -47,11 +47,8 @@ handleControlAction env controlAction = case controlAction of
     return True
 
   TerminateSupervisor { notifySupervisorTermination } -> do
-    putText "0. Here I am"
     Child.terminateChildren "supervisor shutdown" env
-    putText "1. Here I am"
     notifySupervisorTermination
-    putText "2. Here I am"
     writeSupervisorStatus env Halted
     return False
 

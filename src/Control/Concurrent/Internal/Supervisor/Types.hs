@@ -146,6 +146,16 @@ data SupervisorException
 instance Exception SupervisorException
 instance NFData SupervisorException
 
+data ChildException
+  = ChildCallbackException {
+      childId            :: !ChildId
+    , childActionError   :: !SomeException
+    , childCallbackError :: !SomeException
+    }
+    deriving (Generic, Show)
+
+instance Exception ChildException
+
 data MonitorEvent
   = ChildTerminated {
     childId           :: !ChildId

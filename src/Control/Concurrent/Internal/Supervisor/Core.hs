@@ -1,17 +1,17 @@
-{-# LANGUAGE RankNTypes    #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE RecordWildCards   #-}
 module Control.Concurrent.Internal.Supervisor.Core where
 
 import Protolude
 
-import Control.Teardown (newTeardown)
 import Control.Concurrent.MVar       (newEmptyMVar, takeMVar)
 import Control.Concurrent.STM        (atomically)
 import Control.Concurrent.STM.TQueue (newTQueueIO, readTQueue, writeTQueue)
 import Control.Concurrent.STM.TVar   (newTVarIO)
+import Control.Teardown              (newTeardown)
 import Data.IORef                    (newIORef)
 import Data.Time.Clock               (getCurrentTime)
 
@@ -22,7 +22,12 @@ import qualified Control.Concurrent.Internal.Supervisor.Child as Child
 
 import Control.Concurrent.Internal.Supervisor.Types
 import Control.Concurrent.Internal.Supervisor.Util
-    (readSupervisorStatus, runtimeToEnv, writeSupervisorStatus, sendSyncControlMsg, childOptionsToSpec)
+    ( childOptionsToSpec
+    , readSupervisorStatus
+    , runtimeToEnv
+    , sendSyncControlMsg
+    , writeSupervisorStatus
+    )
 
 --------------------------------------------------------------------------------
 
@@ -55,7 +60,7 @@ handleSupervisorMessage env message = case message of
   ControlAction controlAction -> handleControlAction env controlAction
   MonitorEvent  monitorEvent  -> handleMonitorEvent env monitorEvent
 
-runSupervisorLoop :: (forall b. IO b -> IO b) -> SupervisorEnv -> IO ()
+runSupervisorLoop :: (forall b . IO b -> IO b) -> SupervisorEnv -> IO ()
 runSupervisorLoop unmask env@SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, supervisorQueue, notifyEvent }
   = do
     (status, message) <-
@@ -79,14 +84,23 @@ runSupervisorLoop unmask env@SupervisorEnv { supervisorId, supervisorName, super
         case eContinueLoop of
           Left supervisorError -> do
             eventTime <- getCurrentTime
-            notifyEvent SupervisorFailed { supervisorId, supervisorName, supervisorError, eventTime }
+            notifyEvent SupervisorFailed
+              { supervisorId
+              , supervisorName
+              , supervisorError
+              , eventTime
+              }
           Right continueLoop
             | continueLoop -> runSupervisorLoop unmask env
             | otherwise -> do
-                eventTime <- getCurrentTime
-                notifyEvent SupervisorTerminated { supervisorId, supervisorName, eventTime }
+              eventTime <- getCurrentTime
+              notifyEvent SupervisorTerminated
+                { supervisorId
+                , supervisorName
+                , eventTime
+                }
 
-      Halted  -> panic "pending implementation"
+      Halted -> panic "pending implementation"
 
 buildSupervisorRuntime :: SupervisorSpec -> IO SupervisorRuntime
 buildSupervisorRuntime supervisorSpec = do
@@ -97,18 +111,19 @@ buildSupervisorRuntime supervisorSpec = do
   return SupervisorRuntime {..}
 
 forkSupervisor :: SupervisorSpec -> IO Supervisor
-forkSupervisor supervisorSpec@SupervisorSpec {supervisorName} = do
+forkSupervisor supervisorSpec@SupervisorSpec { supervisorName } = do
   supervisorRuntime <- buildSupervisorRuntime supervisorSpec
 
   let supervisorEnv = runtimeToEnv supervisorRuntime
 
-  supervisorAsync <- asyncWithUnmask $ \unmask -> runSupervisorLoop unmask supervisorEnv
+  supervisorAsync <- asyncWithUnmask
+    $ \unmask -> runSupervisorLoop unmask supervisorEnv
 
   writeSupervisorStatus supervisorEnv Running
 
-  supervisorTeardown <-
-    newTeardown ("supervisor[" <> supervisorName <> "]")
-                (sendSyncControlMsg supervisorEnv TerminateSupervisor)
+  supervisorTeardown <- newTeardown
+    ("supervisor[" <> supervisorName <> "]")
+    (sendSyncControlMsg supervisorEnv TerminateSupervisor)
 
   return Supervisor {..}
 
@@ -131,5 +146,8 @@ forkChild childOptions childAction Supervisor { supervisorEnv } = do
 
 terminateChild :: Text -> ChildId -> Supervisor -> IO ()
 terminateChild terminationReason childId Supervisor { supervisorEnv } =
-  sendSyncControlMsg supervisorEnv
-    (\notifyChildTermination -> TerminateChild { terminationReason, childId, notifyChildTermination })
+  sendSyncControlMsg
+    supervisorEnv
+    ( \notifyChildTermination ->
+      TerminateChild {terminationReason , childId , notifyChildTermination }
+    )

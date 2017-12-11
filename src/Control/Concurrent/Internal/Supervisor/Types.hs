@@ -1,16 +1,16 @@
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
 module Control.Concurrent.Internal.Supervisor.Types where
 
 import Protolude
 
-import Control.Teardown (ITeardown(..), Teardown)
-import Data.Default                  (Default (..))
 import Control.Concurrent.STM.TQueue (TQueue)
 import Control.Concurrent.STM.TVar   (TVar)
+import Control.Teardown              (ITeardown (..), Teardown)
+import Data.Default                  (Default (..))
 import Data.HashMap.Strict           (HashMap)
 import Data.IORef                    (IORef)
 import Data.Time.Clock               (UTCTime)
@@ -39,36 +39,36 @@ data SupervisorEvent
   , eventTime            :: !UTCTime
   }
   | SupervisedChildTerminated {
-    supervisorName :: !SupervisorName
-  , supervisorId   :: !SupervisorId
-  , childThreadId  :: !ChildThreadId
-  , childId        :: !ChildId
-  , childName      :: !ChildName
+    supervisorName    :: !SupervisorName
+  , supervisorId      :: !SupervisorId
+  , childThreadId     :: !ChildThreadId
+  , childId           :: !ChildId
+  , childName         :: !ChildName
   , terminationReason :: !Text
-  , eventTime      :: !UTCTime
+  , eventTime         :: !UTCTime
   }
   | SupervisedChildrenTerminationStarted {
-    supervisorName :: !SupervisorName
-  , supervisorId   :: !SupervisorId
+    supervisorName    :: !SupervisorName
+  , supervisorId      :: !SupervisorId
   , terminationReason :: !Text
-  , eventTime      :: !UTCTime
+  , eventTime         :: !UTCTime
   }
   | SupervisedChildrenTerminationFinished {
-    supervisorName :: !SupervisorName
-  , supervisorId   :: !SupervisorId
+    supervisorName    :: !SupervisorName
+  , supervisorId      :: !SupervisorId
   , terminationReason :: !Text
-  , eventTime      :: !UTCTime
+  , eventTime         :: !UTCTime
   }
   | SupervisorFailed {
-    supervisorName :: !SupervisorName
-  , supervisorId   :: !SupervisorId
+    supervisorName  :: !SupervisorName
+  , supervisorId    :: !SupervisorId
   , supervisorError :: !SomeException
   , eventTime       :: !UTCTime
   }
   | SupervisorTerminated {
     supervisorName :: !SupervisorName
   , supervisorId   :: !SupervisorId
-  , eventTime       :: !UTCTime
+  , eventTime      :: !UTCTime
   }
   deriving (Generic, Show)
 
@@ -84,27 +84,27 @@ instance NFData ChildTerminationPolicy
 
 data SupervisorSpec
   = SupervisorSpec {
-    supervisorName      :: Text
+    supervisorName                   :: Text
   -- , supervisorIntensity :: !Int
   , supervisorChildTerminationPolicy :: !ChildTerminationPolicy
-  , notifyEvent         :: !(SupervisorEvent -> IO ())
+  , notifyEvent                      :: !(SupervisorEvent -> IO ())
   }
 
 data ChildOptions
   = ChildOptions {
-    childName :: !ChildName
-  , childOnError      :: !(SomeException -> IO ())
-  , childOnCompletion :: !(IO ())
+    childName          :: !ChildName
+  , childOnError       :: !(SomeException -> IO ())
+  , childOnCompletion  :: !(IO ())
   , childOnTermination :: !(IO ())
   }
   deriving (Generic)
 
 data ChildSpec
   = ChildSpec {
-    childName     :: !ChildName
-  , childAction   :: !ChildAction
-  , childOnError      :: !(SomeException -> IO ())
-  , childOnCompletion :: !(IO ())
+    childName          :: !ChildName
+  , childAction        :: !ChildAction
+  , childOnError       :: !(SomeException -> IO ())
+  , childOnCompletion  :: !(IO ())
   , childOnTermination :: !(IO ())
   }
   deriving (Generic)
@@ -125,8 +125,8 @@ data ControlAction
   , returnChildId     :: !(ChildId -> IO ())
   }
   | TerminateChild {
-    childId :: !ChildId
-  , terminationReason :: !Text
+    childId                :: !ChildId
+  , terminationReason      :: !Text
   , notifyChildTermination :: !(IO ())
   }
   | TerminateSupervisor {
@@ -182,9 +182,9 @@ data SupervisorMessage
 
 data Supervisor
   = Supervisor {
-    supervisorRuntime :: !SupervisorRuntime
-  , supervisorEnv     :: !SupervisorEnv
-  , supervisorAsync   :: !(Async ())
+    supervisorRuntime  :: !SupervisorRuntime
+  , supervisorEnv      :: !SupervisorEnv
+  , supervisorAsync    :: !(Async ())
   , supervisorTeardown :: !Teardown
   }
 
@@ -214,24 +214,22 @@ data SupervisorEnv
   }
 
 defSupervisorSpec :: SupervisorSpec
-defSupervisorSpec =
-  SupervisorSpec {
-    supervisorName                        = "default-supervisor"
+defSupervisorSpec = SupervisorSpec
+  { supervisorName                   = "default-supervisor"
 
   -- One (1) restart every five (5) seconds
   -- , supervisorIntensity                   = 1
   -- , supervisorPeriodSeconds               = 5
 
   -- , supervisorRestartStrategy             = def
-  , supervisorChildTerminationPolicy      = def
-  , notifyEvent                           = const $ return ()
+  , supervisorChildTerminationPolicy = def
+  , notifyEvent                      = const $ return ()
   }
 
 defChildOptions :: ChildOptions
-defChildOptions =
-  ChildOptions {
-    childName           = "default-child"
-  , childOnError        = const $ return ()
-  , childOnCompletion   = return ()
-  , childOnTermination  = return ()
+defChildOptions = ChildOptions
+  { childName          = "default-child"
+  , childOnError       = const $ return ()
+  , childOnCompletion  = return ()
+  , childOnTermination = return ()
   }

@@ -4,10 +4,10 @@ module Main where
 
 import Protolude
 
-import Data.IORef (newIORef, atomicModifyIORef', readIORef)
+import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 
 import Test.Tasty                   (TestTree, defaultMainWithIngredients, testGroup)
-import Test.Tasty.HUnit             (testCase, assertEqual)
+import Test.Tasty.HUnit             (assertEqual, testCase)
 import Test.Tasty.Ingredients.Rerun (rerunningTests)
 import Test.Tasty.Runners           (consoleTestReporter, listingTests)
 -- import Test.Tasty.SmallCheck        (testProperty)
@@ -19,28 +19,30 @@ main = defaultMainWithIngredients
   [rerunningTests [listingTests, consoleTestReporter]]
   (testGroup "supervisor" tests)
 
-assertSupervisor :: ([SUT.SupervisorEvent] -> IO ()) -> (SUT.SupervisorSpec -> IO ()) -> IO ()
+assertSupervisor
+  :: ([SUT.SupervisorEvent] -> IO ()) -> (SUT.SupervisorSpec -> IO ()) -> IO ()
 assertSupervisor assertionsFn callbackFn = do
-    accRef <- newIORef []
-    callbackFn (SUT.defSupervisorSpec { SUT.notifyEvent = trackEvent accRef })
-    events <- readIORef accRef
-    assertionsFn (reverse events)
-  where
-    trackEvent accRef ev =
-      atomicModifyIORef' accRef (\old -> (ev:old, ()))
+  accRef <- newIORef []
+  callbackFn (SUT.defSupervisorSpec { SUT.notifyEvent = trackEvent accRef })
+  events <- readIORef accRef
+  assertionsFn (reverse events)
+ where
+  trackEvent accRef ev = atomicModifyIORef' accRef (\old -> (ev : old, ()))
 
 
 tests :: [TestTree]
-tests = [
-  testCase "initialize and teardown supervisor" $ do
+tests =
+  [ testCase "initialize and teardown supervisor" $ do
       assertSupervisor print $ \supSpec -> do
         supervisor <- SUT.forkSupervisor supSpec
-        _childId <- SUT.forkChild SUT.defChildOptions (forever $ threadDelay 1000100) supervisor
+        _childId   <- SUT.forkChild SUT.defChildOptions
+                                    (forever $ threadDelay 1000100)
+                                    supervisor
         threadDelay 3000
         void $ SUT.teardown supervisor
 
   -- testGroup "Create children"
-        ]
+  ]
 -- tests = [
 --   testGroup "SmallCheck" scTests, testGroup "Unit tests" huTests
 --   ]

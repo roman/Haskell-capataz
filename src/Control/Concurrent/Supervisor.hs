@@ -6,18 +6,15 @@ module Control.Concurrent.Supervisor
 )
 where
 
-import Control.Concurrent.Internal.Supervisor.Core as Core (
-    forkSupervisor
-  , forkChild
-  , terminateChild
-  )
-import Control.Concurrent.Internal.Supervisor.Types as Types (
-    SupervisorSpec (..)
-  , Supervisor
-  , SupervisorEvent (..)
-  , ChildOptions
-  , ChildAction
-  , defSupervisorSpec
-  , defChildOptions
-  )
-import Control.Teardown as Teardown (teardown)
+import Control.Concurrent.Internal.Supervisor.Core  as Core
+    (forkChild, forkSupervisor, terminateChild)
+import Control.Concurrent.Internal.Supervisor.Types as Types
+    ( ChildAction
+    , ChildOptions
+    , Supervisor
+    , SupervisorEvent (..)
+    , SupervisorSpec (..)
+    , defChildOptions
+    , defSupervisorSpec
+    )
+import Control.Teardown                             as Teardown (teardown)

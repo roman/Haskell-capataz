@@ -6,11 +6,11 @@ module Control.Concurrent.Internal.Supervisor.Util where
 
 import Protolude
 
-import Control.Concurrent.STM      (atomically, STM, retry)
-import Control.Concurrent.STM.TVar (TVar, readTVar, writeTVar)
+import Control.Concurrent.STM        (STM, atomically, retry)
 import Control.Concurrent.STM.TQueue (writeTQueue)
-import Data.IORef                  (atomicModifyIORef')
-import Data.Time.Clock             (getCurrentTime)
+import Control.Concurrent.STM.TVar   (TVar, readTVar, writeTVar)
+import Data.IORef                    (atomicModifyIORef')
+import Data.Time.Clock               (getCurrentTime)
 
 import qualified Data.HashMap.Strict as HashMap
 
@@ -24,11 +24,13 @@ appendChildToMap SupervisorEnv { supervisorChildMap } childId child =
 
 removeChildFromMap :: SupervisorEnv -> ChildId -> (Child -> IO ()) -> IO ()
 removeChildFromMap SupervisorEnv { supervisorChildMap } childId withChild = do
-  mChild <- atomicModifyIORef' supervisorChildMap
-            (\childMap ->
-                maybe (childMap, Nothing)
-                (\child -> (HashMap.delete childId childMap, Just child))
-                (HashMap.lookup childId childMap))
+  mChild <- atomicModifyIORef'
+    supervisorChildMap
+    ( \childMap -> maybe
+      (childMap, Nothing)
+      (\child -> (HashMap.delete childId childMap, Just child))
+      (HashMap.lookup childId childMap)
+    )
   maybe (return ()) withChild mChild
 
 readSupervisorStatus :: TVar SupervisorStatus -> STM SupervisorStatus
@@ -55,17 +57,14 @@ writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorSt
       }
 
 sendControlMsg :: SupervisorEnv -> ControlAction -> IO ()
-sendControlMsg SupervisorEnv {supervisorQueue} ctrlMsg =
-  atomically $ writeTQueue
-    supervisorQueue
-    (ControlAction ctrlMsg)
+sendControlMsg SupervisorEnv { supervisorQueue } ctrlMsg =
+  atomically $ writeTQueue supervisorQueue (ControlAction ctrlMsg)
 
 sendSyncControlMsg :: SupervisorEnv -> (IO () -> ControlAction) -> IO ()
-sendSyncControlMsg SupervisorEnv {supervisorQueue} mkCtrlMsg = do
+sendSyncControlMsg SupervisorEnv { supervisorQueue } mkCtrlMsg = do
   result <- newEmptyMVar
-  atomically $ writeTQueue
-    supervisorQueue
-    (ControlAction $ mkCtrlMsg (putMVar result ()))
+  atomically $ writeTQueue supervisorQueue
+                           (ControlAction $ mkCtrlMsg (putMVar result ()))
   takeMVar result
 
 runtimeToEnv :: SupervisorRuntime -> SupervisorEnv
@@ -73,5 +72,4 @@ runtimeToEnv supervisorRuntime@SupervisorRuntime {..} =
   let SupervisorSpec {..} = supervisorSpec in SupervisorEnv {..}
 
 childOptionsToSpec :: ChildOptions -> IO () -> ChildSpec
-childOptionsToSpec ChildOptions {..} childAction =
-  ChildSpec {..}
+childOptionsToSpec ChildOptions {..} childAction = ChildSpec {..}

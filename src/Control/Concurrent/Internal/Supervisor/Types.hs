@@ -47,6 +47,15 @@ data SupervisorEvent
   , terminationReason :: !Text
   , eventTime         :: !UTCTime
   }
+  | SupervisedChildCompleted {
+    supervisorName    :: !SupervisorName
+  , supervisorId      :: !SupervisorId
+  , childThreadId     :: !ChildThreadId
+  , childId           :: !ChildId
+  , childName         :: !ChildName
+  , childRestartStrategy :: !ChildRestartStrategy
+  , eventTime         :: !UTCTime
+  }
   | SupervisedChildrenTerminationStarted {
     supervisorName    :: !SupervisorName
   , supervisorId      :: !SupervisorId
@@ -96,8 +105,22 @@ data ChildOptions
   , childOnError       :: !(SomeException -> IO ())
   , childOnCompletion  :: !(IO ())
   , childOnTermination :: !(IO ())
+  , childRestartStrategy :: !ChildRestartStrategy
   }
   deriving (Generic)
+
+data ChildRestartStrategy
+  = Permanent
+  -- ^ Child thread is always restarted on completion
+  | Transient
+  -- ^ Child thread is restarted only if completed with failure
+  | Temporal
+  -- ^ Child thread is never restarted on completion
+  deriving (Generic, Show, Eq)
+
+instance NFData ChildRestartStrategy
+instance Default ChildRestartStrategy where
+  def = Permanent
 
 data ChildSpec
   = ChildSpec {
@@ -106,6 +129,7 @@ data ChildSpec
   , childOnError       :: !(SomeException -> IO ())
   , childOnCompletion  :: !(IO ())
   , childOnTermination :: !(IO ())
+  , childRestartStrategy :: !ChildRestartStrategy
   }
   deriving (Generic)
 
@@ -238,8 +262,9 @@ defSupervisorSpec = SupervisorSpec
 
 defChildOptions :: ChildOptions
 defChildOptions = ChildOptions
-  { childName          = "default-child"
-  , childOnError       = const $ return ()
-  , childOnCompletion  = return ()
-  , childOnTermination = return ()
+  { childName            = "default-child"
+  , childOnError         = const $ return ()
+  , childOnCompletion    = return ()
+  , childOnTermination   = return ()
+  , childRestartStrategy = def
   }

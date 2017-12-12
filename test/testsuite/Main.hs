@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
@@ -37,8 +38,8 @@ tests =
   [ testCase "initialize and teardown supervisor" $ do
       assertSupervisor pPrint $ \supSpec -> do
         supervisor <- SUT.forkSupervisor supSpec
-        _childId   <- SUT.forkChild SUT.defChildOptions
-                                    (forever $ threadDelay 1000100)
+        _childId   <- SUT.forkChild SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
+                                    (return ()) -- (forever $ threadDelay 1000100)
                                     supervisor
         threadDelay 3000
         void $ SUT.teardown supervisor

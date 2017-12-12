@@ -155,3 +155,6 @@ terminateChildren terminationReason env@SupervisorEnv { supervisorName, supervis
         , eventTime
         }
       )
+
+restartChild :: SupervisorEnv -> ChildId -> RestartCount -> IO ()
+restartChild = panic "pending restartChild implementation"

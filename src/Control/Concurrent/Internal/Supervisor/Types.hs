@@ -47,6 +47,23 @@ data SupervisorEvent
   , terminationReason :: !Text
   , eventTime         :: !UTCTime
   }
+  | SupervisedChildStarted {
+    supervisorName       :: !SupervisorName
+  , supervisorId         :: !SupervisorId
+  , childThreadId        :: !ChildThreadId
+  , childId              :: !ChildId
+  , childName            :: !ChildName
+  , eventTime            :: !UTCTime
+  }
+  | SupervisedChildRestarted {
+    supervisorName       :: !SupervisorName
+  , supervisorId         :: !SupervisorId
+  , childThreadId        :: !ChildThreadId
+  , childId              :: !ChildId
+  , childName            :: !ChildName
+  , restartCount         :: !Int
+  , eventTime            :: !UTCTime
+  }
   | SupervisedChildCompleted {
     supervisorName       :: !SupervisorName
   , supervisorId         :: !SupervisorId

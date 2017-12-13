@@ -90,17 +90,46 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
       , childSpec
       }
 
+notifyChildStarted :: Maybe (ChildId, Int) -> SupervisorEnv -> Child -> IO ()
+notifyChildStarted mRestartInfo SupervisorEnv {supervisorId, supervisorName, notifyEvent} Child {childId, childName, childAsync} = do
+  eventTime <- getCurrentTime
+  case mRestartInfo of
+    Just (_childId, restartCount) ->
+      notifyEvent SupervisedChildRestarted
+        { supervisorId
+        , supervisorName
+        , childId
+        , childName
+        , eventTime
+        , restartCount
+        , childThreadId = asyncThreadId childAsync
+        }
+    Nothing ->
+      notifyEvent SupervisedChildStarted
+        { supervisorId
+        , supervisorName
+        , childId
+        , childName
+        , eventTime
+        , childThreadId = asyncThreadId childAsync
+        }
+
 forkChild
   :: SupervisorEnv
   -> ChildSpec
-  -> Maybe ChildId
-  -> Maybe RestartCount
+  -> Maybe (ChildId, RestartCount)
   -> IO ChildId
-forkChild env childSpec mChildId mRestartCount = do
-  let restartCount = fromMaybe 0 mRestartCount
-  childId <- maybe UUID.nextRandom return mChildId
-  child   <- childMain env childSpec childId restartCount
+forkChild env childSpec mRestartInfo = do
+  (childId, restartCount) <-
+    case mRestartInfo of
+      Just (childId, restartCount) ->
+        pure (childId, restartCount)
+      Nothing ->
+        ((,) <$> UUID.nextRandom <*> pure 0)
+
+  child <- childMain env childSpec childId restartCount
   appendChildToMap env childId child
+  notifyChildStarted mRestartInfo env child
   return childId
 
 terminateChild :: Text -> SupervisorEnv -> ChildId -> IO ()
@@ -149,4 +178,4 @@ terminateChildren terminationReason env@SupervisorEnv { supervisorName, supervis
 
 restartChild :: SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO ()
 restartChild supervisorEnv childSpec childId restartCount =
-  void $ forkChild supervisorEnv childSpec (Just childId) (Just restartCount)
+  void $ forkChild supervisorEnv childSpec (Just (childId, restartCount))

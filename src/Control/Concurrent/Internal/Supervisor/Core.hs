@@ -75,7 +75,7 @@ handleMonitorEvent env monitorEv = do
 handleControlAction :: SupervisorEnv -> ControlAction -> IO Bool
 handleControlAction env controlAction = case controlAction of
   ForkChild { childSpec, returnChildId } -> do
-    childId <- Child.forkChild env childSpec Nothing Nothing
+    childId <- Child.forkChild env childSpec Nothing
     returnChildId childId
     return True
 

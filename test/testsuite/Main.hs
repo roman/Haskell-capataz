@@ -38,6 +38,10 @@ orP predList a = or $ map ($ a) predList
 --------------------------------------------------------------------------------
 -- Assertions and Testers
 
+combineAssertions :: [[SUT.SupervisorEvent]-> IO ()] -> [SUT.SupervisorEvent] -> IO ()
+combineAssertions assertions events =
+  mapM_ (\assertFn -> assertFn events) assertions
+
 assertInOrder :: [SUT.SupervisorEvent -> Bool] -> [SUT.SupervisorEvent] -> IO ()
 assertInOrder assertions0 events0 =
   let loop assertions events = case (assertions, events) of
@@ -55,8 +59,33 @@ assertInOrder assertions0 events0 =
           )
   in  loop assertions0 events0
 
-assertEventType :: Text -> SUT.SupervisorEvent -> Bool
-assertEventType evName ev = fetchEventName ev == evName
+assertAll :: (SUT.SupervisorEvent -> Bool) -> [SUT.SupervisorEvent] -> IO ()
+assertAll predFn events =
+  if all predFn events then
+    return ()
+  else
+    assertFailure
+          (  "Expected all events to match predicate, but didn't ("
+          <> (show $ length events)
+          <> " events tried)\n"
+          <> (ppShow $ zip ([0 ..] :: [Int]) events)
+          )
+
+data EventType
+  = InvalidSupervisorStatusReached
+  | SupervisorStatusChanged
+  | SupervisedChildTerminated
+  | SupervisedChildStarted
+  | SupervisedChildRestarted
+  | SupervisedChildCompleted
+  | SupervisedChildrenTerminationStarted
+  | SupervisedChildrenTerminationFinished
+  | SupervisorFailed
+  | SupervisorTerminated
+  deriving (Show)
+
+assertEventType :: EventType -> SUT.SupervisorEvent -> Bool
+assertEventType evType ev = fetchEventName ev == show evType
 
 assertSupervisorStatusChanged
   :: SUT.SupervisorStatus -> SUT.SupervisorStatus -> SUT.SupervisorEvent -> Bool
@@ -74,7 +103,7 @@ testSupervisorWithOptions
 testSupervisorWithOptions testCaseStr assertionsFn optionModFn setupFn =
   testCase testCaseStr $ do
     accRef     <- newIORef []
-    supervisor <- SUT.forkSupervisor $ optionModFn $ SUT.defSupervisorOptions
+    supervisor <- SUT.forkSupervisor $ (optionModFn $ SUT.defSupervisorOptions)
       { SUT.notifyEvent = trackEvent accRef
       }
     setupFn supervisor `finally` SUT.teardown supervisor
@@ -97,46 +126,43 @@ testSupervisor testCaseStr assertionsFn setupFn =
 tests :: [TestTree]
 tests =
   [ testSupervisor
-      "initialize and teardown without children"
+      "initialize and teardown without supervised action"
       ( assertInOrder
         [ andP
-          [ assertEventType "SupervisorStatusChanged"
+          [ assertEventType SupervisorStatusChanged
           , assertSupervisorStatusChanged SUT.Initializing SUT.Running
           ]
         , andP
-          [ assertEventType "SupervisorStatusChanged"
+          [ assertEventType SupervisorStatusChanged
           , assertSupervisorStatusChanged SUT.Running SUT.Halted
           ]
         ]
       )
       (\_supervisor -> threadDelay 500)
 
-  -- testGroup "Create children"
+  , testGroup "single supervised IO sub-routine"
+    [
+      testGroup "with transient strategy"
+      [
+        testSupervisor "does not execute restart on completion"
+          (combineAssertions
+          [
+            assertInOrder
+            [ assertEventType SupervisedChildStarted
+            , assertEventType SupervisedChildCompleted
+            , assertEventType SupervisorTerminated
+            ]
+          , assertAll
+            ( not . assertEventType SupervisedChildRestarted )
+          ]
+          )
+          (\supervisor -> do
+              _childId <- SUT.forkChild
+                            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
+                            (return ())
+                            supervisor
+              threadDelay 1000
+          )
+      ]
+    ]
   ]
--- tests = [
---   testGroup "SmallCheck" scTests, testGroup "Unit tests" huTests
---   ]
-
--- scTests :: [TestTree]
--- scTests =
---   [ testProperty "inc == succ"                   prop_succ
---   , testProperty "inc . negate == negate . pred" prop_pred
---   ]
-
--- huTests :: [TestTree]
--- huTests =
---   [ testCase "Increment below TheAnswer" case_inc_below
---   , testCase "Decrement above TheAnswer" case_dec_above
---   ]
-
--- prop_succ :: Int -> Bool
--- prop_succ n = inc n == succ n
-
--- prop_pred :: Int -> Bool
--- prop_pred n = inc (negate n) == negate (pred n)
-
--- case_inc_below :: Assertion
--- case_inc_below = inc 41 @?= (42 :: Int)
-
--- case_dec_above :: Assertion
--- case_dec_above = negate (inc (negate 43)) @?= (42 :: Int)

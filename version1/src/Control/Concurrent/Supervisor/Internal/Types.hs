@@ -58,7 +58,7 @@ data SupervisorRuntime
   , supervisorChildMap   :: !(IORef ChildMap)
   , supervisorEventQueue :: !(TQueue MonitorEvent )
   , supervisorStatusVar  :: !(TVar SupervisorStatus)
-  , supervisorSpec       :: !SupervisorSpec
+  , supervisorOptions       :: !SupervisorOptions
   }
 
 data Supervisor
@@ -67,8 +67,8 @@ data Supervisor
   , supervisorAsync   :: !(Async ())
   }
 
-data SupervisorSpec
-  = SupervisorSpec {
+data SupervisorOptions
+  = SupervisorOptions {
     supervisorName                        :: !SupervisorName
   , supervisorIntensity                   :: !Int
     -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
@@ -79,8 +79,8 @@ data SupervisorSpec
   , notifyEvent                           :: !(SupervisorEvent -> IO ())
   }
 
-instance Default SupervisorSpec where
-  def = defSupervisorSpec
+instance Default SupervisorOptions where
+  def = defSupervisorOptions
 
 data SupervisorEnv
   = SupervisorEnv {
@@ -249,9 +249,9 @@ data SupervisorEvent
     , childName      :: !ChildName
     , eventTime      :: !UTCTime }
 
-defSupervisorSpec :: SupervisorSpec
-defSupervisorSpec =
-  SupervisorSpec {
+defSupervisorOptions :: SupervisorOptions
+defSupervisorOptions =
+  SupervisorOptions {
     supervisorName                        = "default-supervisor"
 
   -- One (1) restart every five (5) seconds

@@ -65,40 +65,51 @@ assertSupervisorStatusChanged fromEv toEv ev = case ev of
     fromEv == prevSupervisorStatus && toEv == newSupervisorStatus
   _ -> False
 
-testSupervisor
-  :: ([SUT.SupervisorEvent] -> IO ()) -> (SUT.SupervisorSpec -> IO ()) -> IO ()
-testSupervisor assertionsFn callbackFn = do
-  accRef <- newIORef []
-  callbackFn (SUT.defSupervisorSpec { SUT.notifyEvent = trackEvent accRef })
-  events <- readIORef accRef
-  assertionsFn (reverse events)
+testSupervisorWithOptions
+  :: [Char]
+  -> ([SUT.SupervisorEvent] -> IO ())
+  -> (SUT.SupervisorOptions -> SUT.SupervisorOptions)
+  -> (SUT.Supervisor -> IO ())
+  -> TestTree
+testSupervisorWithOptions testCaseStr assertionsFn optionModFn setupFn =
+  testCase testCaseStr $ do
+    accRef     <- newIORef []
+    supervisor <- SUT.forkSupervisor $ optionModFn $ SUT.defSupervisorOptions
+      { SUT.notifyEvent = trackEvent accRef
+      }
+    setupFn supervisor `finally` SUT.teardown supervisor
+    events <- readIORef accRef
+    assertionsFn (reverse events)
  where
   trackEvent accRef ev = atomicModifyIORef' accRef (\old -> (ev : old, ()))
+
+testSupervisor
+  :: [Char]
+  -> ([SUT.SupervisorEvent] -> IO ())
+  -> (SUT.Supervisor -> IO ())
+  -> TestTree
+testSupervisor testCaseStr assertionsFn setupFn =
+  testSupervisorWithOptions testCaseStr assertionsFn identity setupFn
 
 --------------------------------------------------------------------------------
 -- Actual Tests
 
 tests :: [TestTree]
 tests =
-  [ testCase "initialize and teardown without children" $ do
-      testSupervisor
-        ( assertInOrder
-          [ andP
-            [ assertEventType "SupervisorStatusChanged"
-            , assertSupervisorStatusChanged SUT.Initializing SUT.Running
-            ]
-          , andP
-            [ assertEventType "SupervisorStatusChanged"
-            , assertSupervisorStatusChanged SUT.Running SUT.Halted
-            ]
-          , assertEventType "SupervisorTerminated"
+  [ testSupervisor
+      "initialize and teardown without children"
+      ( assertInOrder
+        [ andP
+          [ assertEventType "SupervisorStatusChanged"
+          , assertSupervisorStatusChanged SUT.Initializing SUT.Running
           ]
-        )
-        ( \supSpec -> do
-          supervisor <- SUT.forkSupervisor supSpec
-          threadDelay 500
-          void $ SUT.teardown supervisor
-        )
+        , andP
+          [ assertEventType "SupervisorStatusChanged"
+          , assertSupervisorStatusChanged SUT.Running SUT.Halted
+          ]
+        ]
+      )
+      (\_supervisor -> threadDelay 500)
 
   -- testGroup "Create children"
   ]

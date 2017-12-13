@@ -137,17 +137,17 @@ runSupervisorLoop unmask env@SupervisorEnv { supervisorId, supervisorName, super
 
       Halted -> panic "pending implementation"
 
-buildSupervisorRuntime :: SupervisorSpec -> IO SupervisorRuntime
-buildSupervisorRuntime supervisorSpec = do
+buildSupervisorRuntime :: SupervisorOptions -> IO SupervisorRuntime
+buildSupervisorRuntime supervisorOptions = do
   supervisorId        <- UUID.nextRandom
   supervisorQueue     <- newTQueueIO
   supervisorStatusVar <- newTVarIO Initializing
   supervisorChildMap  <- newIORef HashMap.empty
   return SupervisorRuntime {..}
 
-forkSupervisor :: SupervisorSpec -> IO Supervisor
-forkSupervisor supervisorSpec@SupervisorSpec { supervisorName } = do
-  supervisorRuntime <- buildSupervisorRuntime supervisorSpec
+forkSupervisor :: SupervisorOptions -> IO Supervisor
+forkSupervisor supervisorOptions@SupervisorOptions { supervisorName } = do
+  supervisorRuntime <- buildSupervisorRuntime supervisorOptions
 
   let supervisorEnv = runtimeToEnv supervisorRuntime
 

@@ -85,7 +85,7 @@ toSupervisorEnv :: SupervisorRuntime -> SupervisorEnv
 toSupervisorEnv (SupervisorRuntime {..}) =
   -- MAGIC!
   let
-    (SupervisorSpec {..}) =
-      supervisorSpec
+    (SupervisorOptions {..}) =
+      supervisorOptions
   in
     SupervisorEnv {..}

@@ -14,9 +14,9 @@ import Control.Concurrent.Internal.Supervisor.Types as Types
     , ChildRestartStrategy (..)
     , Supervisor
     , SupervisorEvent (..)
-    , SupervisorSpec (..)
+    , SupervisorOptions (..)
     , SupervisorStatus (..)
     , defChildOptions
-    , defSupervisorSpec
+    , defSupervisorOptions
     )
 import Control.Teardown                             as Teardown (teardown)

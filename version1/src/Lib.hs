@@ -183,8 +183,8 @@ data ChildProcess
     }
     deriving (Generic)
 
-data SupervisorSpec
-  = SupervisorSpec {
+data SupervisorOptions
+  = SupervisorOptions {
       ssName          :: !SupervisorName
     , ssRestartPolicy :: !SupervisorRestartStrategy
     , ssFlags         :: !SupervisorFlags
@@ -208,7 +208,7 @@ data SupervisorRuntime
     , srEventQueue      :: !(TQueue ChildEvent)
     , srChildProcessMap :: !(IORef (HashMap ChildId ChildProcess))
     , srStatus          :: !(TVar SupervisorStatus)
-    , srSupervisorSpec  :: !SupervisorSpec
+    , srSupervisorSpec  :: !SupervisorOptions
     }
   deriving (Generic)
 
@@ -377,7 +377,7 @@ _withChildProcess
   -> IO ()
 _withChildProcess (SupervisorRuntime {..}) childId actionFn = do
     let
-      SupervisorSpec {..} =
+      SupervisorOptions {..} =
         srSupervisorSpec
 
     mChild <- _removeChildFromMap childId srChildProcessMap
@@ -442,7 +442,7 @@ _invokeRestartPolicy sr@(SupervisorRuntime {..}) (ChildProcess {..}) ev = do
     eventTime <- getCurrentTime
 
     let
-      SupervisorSpec {..} =
+      SupervisorOptions {..} =
         srSupervisorSpec
 
       SupervisorFlags {..} =
@@ -494,7 +494,7 @@ _processChildEvent
 _processChildEvent sr@(SupervisorRuntime {..}) ev child = do
     eventTime <- getCurrentTime
     let
-      SupervisorSpec {..} =
+      SupervisorOptions {..} =
         srSupervisorSpec
 
       ChildRuntime {..} =
@@ -571,7 +571,7 @@ haltChild reason childId sup = do
         eventTime <- getCurrentTime
 
         let
-            SupervisorSpec {..} =
+            SupervisorOptions {..} =
               srSupervisorSpec
 
             ChildProcess {..} =
@@ -608,7 +608,7 @@ stopSupervisor reason terminationPolicy sup = do
     _haltChildren reason terminationPolicy sup
     atomically $ writeTVar srStatus SupHalted
 
-startSupervisor :: SupervisorSpec -> IO Supervisor
+startSupervisor :: SupervisorOptions -> IO Supervisor
 startSupervisor spec = do
     srSupervisorId    <- UUID.nextRandom
     srStatus          <- newTVarIO SupInit
@@ -629,7 +629,7 @@ startSupervisor spec = do
       -> IO ()
     childEventLoop sr@(SupervisorRuntime {..}) = do
         let
-          SupervisorSpec {..} =
+          SupervisorOptions {..} =
             srSupervisorSpec
 
         (status, ev) <-

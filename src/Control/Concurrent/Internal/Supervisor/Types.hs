@@ -91,8 +91,8 @@ instance Default ChildTerminationPolicy where
 
 instance NFData ChildTerminationPolicy
 
-data SupervisorSpec
-  = SupervisorSpec {
+data SupervisorOptions
+  = SupervisorOptions {
     supervisorName                   :: Text
   -- , supervisorIntensity :: !Int
   , supervisorChildTerminationPolicy :: !ChildTerminationPolicy
@@ -232,7 +232,7 @@ data SupervisorRuntime
   , supervisorQueue     :: !(TQueue SupervisorMessage)
   , supervisorChildMap  :: !(IORef (HashMap ChildId Child))
   , supervisorStatusVar :: !(TVar SupervisorStatus)
-  , supervisorSpec      :: !SupervisorSpec
+  , supervisorOptions   :: !SupervisorOptions
   }
 
 data SupervisorEnv
@@ -242,13 +242,13 @@ data SupervisorEnv
   , supervisorQueue     :: !(TQueue SupervisorMessage)
   , supervisorChildMap  :: !(IORef (HashMap ChildId Child))
   , supervisorStatusVar :: !(TVar SupervisorStatus)
-  , supervisorSpec      :: !SupervisorSpec
+  , supervisorOptions   :: !SupervisorOptions
   , supervisorRuntime   :: !SupervisorRuntime
   , notifyEvent         :: !(SupervisorEvent -> IO ())
   }
 
-defSupervisorSpec :: SupervisorSpec
-defSupervisorSpec = SupervisorSpec
+defSupervisorOptions :: SupervisorOptions
+defSupervisorOptions = SupervisorOptions
   { supervisorName                   = "default-supervisor"
 
   -- One (1) restart every five (5) seconds

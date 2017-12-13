@@ -86,8 +86,8 @@ supervisorLoop env@(SupervisorEnv { supervisorName
       removeChild env (monitorChildId event) (flip ingestChildMonitorEvent event)
       supervisorLoop env
 
-specToRuntime :: SupervisorSpec -> IO SupervisorRuntime
-specToRuntime supervisorSpec = do
+specToRuntime :: SupervisorOptions -> IO SupervisorRuntime
+specToRuntime supervisorOptions = do
   supervisorId         <- UUID.nextRandom
   supervisorChildMap   <- newIORef H.empty
   supervisorStatusVar  <- newTVarIO Initializing
@@ -98,7 +98,7 @@ specToRuntime supervisorSpec = do
     , supervisorChildMap
     , supervisorEventQueue
     , supervisorStatusVar
-    , supervisorSpec
+    , supervisorOptions
     }
 
 --------------------------------------------------------------------------------
@@ -106,7 +106,7 @@ specToRuntime supervisorSpec = do
 
 -- | Creates a supervisor green thread that monitors children threads
 -- spawned from this supervisor
-forkSupervisor :: SupervisorSpec -> IO Supervisor
+forkSupervisor :: SupervisorOptions -> IO Supervisor
 forkSupervisor spec = do
   supervisorRuntime <- specToRuntime spec
   supervisorAsync <- async $ supervisorLoop (toSupervisorEnv supervisorRuntime)

@@ -69,7 +69,7 @@ sendSyncControlMsg SupervisorEnv { supervisorQueue } mkCtrlMsg = do
 
 runtimeToEnv :: SupervisorRuntime -> SupervisorEnv
 runtimeToEnv supervisorRuntime@SupervisorRuntime {..} =
-  let SupervisorSpec {..} = supervisorSpec in SupervisorEnv {..}
+  let SupervisorOptions {..} = supervisorOptions in SupervisorEnv {..}
 
 childOptionsToSpec :: ChildOptions -> IO () -> ChildSpec
 childOptionsToSpec ChildOptions {..} childAction = ChildSpec {..}

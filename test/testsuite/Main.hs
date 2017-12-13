@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -6,14 +7,14 @@ module Main where
 import Protolude
 
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
-import Text.Show.Pretty (pPrint)
+import Text.Show.Pretty (ppShow)
 
 import Test.Tasty                   (TestTree, defaultMainWithIngredients, testGroup)
--- import Test.Tasty.HUnit             (assertEqual, testCase)
-import Test.Tasty.HUnit             (testCase)
+import Test.Tasty.HUnit             (assertFailure, testCase)
 import Test.Tasty.Ingredients.Rerun (rerunningTests)
 import Test.Tasty.Runners           (consoleTestReporter, listingTests)
--- import Test.Tasty.SmallCheck        (testProperty)
+
+import qualified Data.Text as T
 
 import qualified Control.Concurrent.Supervisor as SUT
 
@@ -22,9 +23,60 @@ main = defaultMainWithIngredients
   [rerunningTests [listingTests, consoleTestReporter]]
   (testGroup "supervisor" tests)
 
-assertSupervisor
-  :: ([SUT.SupervisorEvent] -> IO ()) -> (SUT.SupervisorSpec -> IO ()) -> IO ()
-assertSupervisor assertionsFn callbackFn = do
+--------------------------------------------------------------------------------
+-- Util
+
+fetchEventName :: SUT.SupervisorEvent -> Text
+fetchEventName = T.takeWhile (/= ' ') . show
+
+andP :: [(a -> Bool)] -> a -> Bool
+andP predList a = and $ map ($ a) predList
+
+orP :: [(a -> Bool)] -> a -> Bool
+orP predList a = or $ map ($ a) predList
+
+--------------------------------------------------------------------------------
+-- Assertions and Testers
+
+assertInOrder :: [SUT.SupervisorEvent -> Bool] -> [SUT.SupervisorEvent] -> IO ()
+assertInOrder assertions0 events0 =
+  let loop assertions events =
+        case (assertions, events) of
+          ([], _) ->
+            return ()
+          (assertionFn:assertions', event:events')
+            | assertionFn event -> loop assertions' events'
+            | otherwise -> loop assertions events'
+          (assertions', []) ->
+            assertFailure ("Expected all assertions to match, but didn't ("
+                           <> (show $ length assertions')
+                           <> " assertions remaining, "
+                           <> (show $ length events0)
+                           <> " events tried)\n"
+                           <> (ppShow $ zip ([0..] :: [Int]) events0))
+  in loop assertions0 events0
+
+assertEventType :: Text -> SUT.SupervisorEvent -> Bool
+assertEventType evName ev =
+  fetchEventName ev == evName
+
+assertSupervisorStatusChanged
+  :: SUT.SupervisorStatus
+  -> SUT.SupervisorStatus
+  -> SUT.SupervisorEvent
+  -> Bool
+assertSupervisorStatusChanged fromEv toEv ev =
+  case ev of
+    SUT.SupervisorStatusChanged {prevSupervisorStatus, newSupervisorStatus} ->
+      fromEv == prevSupervisorStatus && toEv == newSupervisorStatus
+    _ ->
+      False
+
+testSupervisor
+  :: ([SUT.SupervisorEvent] -> IO ())
+  -> (SUT.SupervisorSpec -> IO ())
+  -> IO ()
+testSupervisor assertionsFn callbackFn = do
   accRef <- newIORef []
   callbackFn (SUT.defSupervisorSpec { SUT.notifyEvent = trackEvent accRef })
   events <- readIORef accRef
@@ -32,17 +84,25 @@ assertSupervisor assertionsFn callbackFn = do
  where
   trackEvent accRef ev = atomicModifyIORef' accRef (\old -> (ev : old, ()))
 
+--------------------------------------------------------------------------------
+-- Actual Tests
 
 tests :: [TestTree]
 tests =
-  [ testCase "initialize and teardown supervisor" $ do
-      assertSupervisor pPrint $ \supSpec -> do
-        supervisor <- SUT.forkSupervisor supSpec
-        _childId   <- SUT.forkChild SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
-                                    (return ()) -- (forever $ threadDelay 1000100)
-                                    supervisor
-        threadDelay 3000
-        void $ SUT.teardown supervisor
+  [ testCase "initialize and teardown without children" $ do
+      testSupervisor
+        (assertInOrder [ andP [ assertEventType "SupervisorStatusChanged"
+                              , assertSupervisorStatusChanged SUT.Initializing SUT.Running
+                              ]
+                       , andP [ assertEventType "SupervisorStatusChanged"
+                              , assertSupervisorStatusChanged SUT.Running SUT.Halted
+                              ]
+                       , assertEventType "SupervisorTerminated"
+                       ])
+        (\supSpec -> do
+          supervisor <- SUT.forkSupervisor supSpec
+          threadDelay 500
+          void $ SUT.teardown supervisor)
 
   -- testGroup "Create children"
   ]

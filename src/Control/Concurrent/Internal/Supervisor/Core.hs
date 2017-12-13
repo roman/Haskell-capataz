@@ -39,14 +39,14 @@ handleChildCompleted env@SupervisorEnv {supervisorName, supervisorId, notifyEven
     let ChildSpec {childRestartStrategy} = childSpec
     case childRestartStrategy of
       Permanent -> do
-        -- NOTE: Completed children should never account as errors happening
-        -- on a supervised thread, ergo, they should be restarted every time.
+        -- NOTE: Completed children should never account as errors happening on
+        -- a supervised thread, ergo, they should be restarted every time.
 
         -- TODO: Notify a warning around having a childRestartStrategy different
         -- than Temporal on children that may complete.
 
         let restartCount = 0
-        Child.restartChild env childId restartCount
+        Child.restartChild env childSpec childId restartCount
 
       _ ->
         notifyEvent SupervisedChildCompleted

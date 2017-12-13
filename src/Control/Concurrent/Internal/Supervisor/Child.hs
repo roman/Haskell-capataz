@@ -156,5 +156,6 @@ terminateChildren terminationReason env@SupervisorEnv { supervisorName, supervis
         }
       )
 
-restartChild :: SupervisorEnv -> ChildId -> RestartCount -> IO ()
-restartChild = panic "pending restartChild implementation"
+restartChild :: SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO ()
+restartChild supervisorEnv childSpec childId restartCount =
+  void $ forkChild supervisorEnv childSpec (Just childId) (Just restartCount)

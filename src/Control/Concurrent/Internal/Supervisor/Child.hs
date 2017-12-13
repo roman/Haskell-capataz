@@ -28,64 +28,55 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
           Just TerminateChildException{} -> do
             eErrResult <- try $ unmask $ childOnTermination
             case eErrResult of
-              Left childCallbackError ->
-                return ChildFailed
-                  { childName
-                  , childId
-                  , monitorEventTime
-                  , childError        =
-                    toException $
-                      ChildCallbackException {
-                        childId
-                        , childCallbackError
-                        , childActionError = err
-                        }
-                  , childRestartCount = succ restartCount
-                  }
-              Right _ ->
-                return ChildTerminated
+              Left childCallbackError -> return ChildFailed
+                { childName
+                , childId
+                , monitorEventTime
+                , childError        = toException $ ChildCallbackException
                   { childId
-                  , childName
-                  , monitorEventTime
-                  , childRestartCount = restartCount
+                  , childCallbackError
+                  , childActionError   = err
                   }
+                , childRestartCount = succ restartCount
+                }
+              Right _ -> return ChildTerminated
+                { childId
+                , childName
+                , monitorEventTime
+                , childRestartCount = restartCount
+                }
 
           Nothing -> do
             eErrResult <- try $ unmask $ childOnError err
             case eErrResult of
-              Left childCallbackError ->
-                return ChildFailed
-                  { childName
-                  , childId
-                  , monitorEventTime
-                  , childError        =
-                    toException $
-                      ChildCallbackException {
-                        childId
-                        , childCallbackError
-                        , childActionError = err
-                        }
-                  , childRestartCount = succ restartCount
+              Left childCallbackError -> return ChildFailed
+                { childName
+                , childId
+                , monitorEventTime
+                , childError        = toException $ ChildCallbackException
+                  { childId
+                  , childCallbackError
+                  , childActionError   = err
                   }
-              Right _ ->
-                 return ChildFailed
-                   { childName
-                   , childId
-                   , monitorEventTime
-                   , childError        = err
-                   , childRestartCount = succ restartCount
-                   }
-        Right _ -> do
-          eCompResult <- try $ unmask childOnCompletion
-          case eCompResult of
-            Left err ->
-              return ChildFailed
+                , childRestartCount = succ restartCount
+                }
+              Right _ -> return ChildFailed
                 { childName
                 , childId
                 , monitorEventTime
                 , childError        = err
                 , childRestartCount = succ restartCount
                 }
+        Right _ -> do
+          eCompResult <- try $ unmask childOnCompletion
+          case eCompResult of
+            Left err -> return ChildFailed
+              { childName
+              , childId
+              , monitorEventTime
+              , childError        = err
+              , childRestartCount = succ restartCount
+              }
             Right _ ->
               return ChildCompleted {childName , childId , monitorEventTime }
 

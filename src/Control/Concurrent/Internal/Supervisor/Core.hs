@@ -7,13 +7,13 @@ module Control.Concurrent.Internal.Supervisor.Core where
 
 import Protolude
 
-import Data.Time.Clock (UTCTime)
 import Control.Concurrent.MVar       (newEmptyMVar, takeMVar)
 import Control.Concurrent.STM        (atomically)
 import Control.Concurrent.STM.TQueue (newTQueueIO, readTQueue, writeTQueue)
 import Control.Concurrent.STM.TVar   (newTVarIO)
 import Control.Teardown              (newTeardown)
 import Data.IORef                    (newIORef)
+import Data.Time.Clock               (UTCTime)
 import Data.Time.Clock               (getCurrentTime)
 
 import qualified Data.HashMap.Strict as HashMap
@@ -25,8 +25,8 @@ import Control.Concurrent.Internal.Supervisor.Types
 import Control.Concurrent.Internal.Supervisor.Util
     ( childOptionsToSpec
     , readSupervisorStatus
-    , runtimeToEnv
     , removeChildFromMap
+    , runtimeToEnv
     , sendSyncControlMsg
     , writeSupervisorStatus
     )
@@ -34,30 +34,31 @@ import Control.Concurrent.Internal.Supervisor.Util
 --------------------------------------------------------------------------------
 
 handleChildCompleted :: SupervisorEnv -> ChildId -> UTCTime -> IO ()
-handleChildCompleted env@SupervisorEnv {supervisorName, supervisorId, notifyEvent} childId eventTime = do
-  removeChildFromMap env childId $ \Child {childName, childAsync, childSpec} -> do
-    let ChildSpec {childRestartStrategy} = childSpec
-    case childRestartStrategy of
-      Permanent -> do
-        -- NOTE: Completed children should never account as errors happening on
-        -- a supervised thread, ergo, they should be restarted every time.
+handleChildCompleted env@SupervisorEnv { supervisorName, supervisorId, notifyEvent } childId eventTime
+  = do
+    removeChildFromMap env childId
+      $ \Child { childName, childAsync, childSpec } -> do
+          let ChildSpec { childRestartStrategy } = childSpec
+          case childRestartStrategy of
+            Permanent -> do
+              -- NOTE: Completed children should never account as errors happening on
+              -- a supervised thread, ergo, they should be restarted every time.
 
-        -- TODO: Notify a warning around having a childRestartStrategy different
-        -- than Temporal on children that may complete.
+              -- TODO: Notify a warning around having a childRestartStrategy different
+              -- than Temporal on children that may complete.
 
-        let restartCount = 0
-        Child.restartChild env childSpec childId restartCount
+              let restartCount = 0
+              Child.restartChild env childSpec childId restartCount
 
-      _ ->
-        notifyEvent SupervisedChildCompleted
-          { supervisorId
-          , supervisorName
-          , childId
-          , childName
-          , eventTime
-          , childRestartStrategy
-          , childThreadId = asyncThreadId childAsync
-          }
+            _ -> notifyEvent SupervisedChildCompleted
+              { supervisorId
+              , supervisorName
+              , childId
+              , childName
+              , eventTime
+              , childRestartStrategy
+              , childThreadId        = asyncThreadId childAsync
+              }
 
 handleMonitorEvent :: SupervisorEnv -> MonitorEvent -> IO Bool
 handleMonitorEvent env monitorEv = do
@@ -65,11 +66,9 @@ handleMonitorEvent env monitorEv = do
     ChildCompleted { childId, monitorEventTime } ->
       handleChildCompleted env childId monitorEventTime
 
-    ChildTerminated {} ->
-      panic "pending"
+    ChildTerminated{} -> panic "pending"
 
-    ChildFailed {} ->
-      panic "pending"
+    ChildFailed{}     -> panic "pending"
 
   return True
 

@@ -48,13 +48,13 @@ data SupervisorEvent
   , eventTime         :: !UTCTime
   }
   | SupervisedChildCompleted {
-    supervisorName    :: !SupervisorName
-  , supervisorId      :: !SupervisorId
-  , childThreadId     :: !ChildThreadId
-  , childId           :: !ChildId
-  , childName         :: !ChildName
+    supervisorName       :: !SupervisorName
+  , supervisorId         :: !SupervisorId
+  , childThreadId        :: !ChildThreadId
+  , childId              :: !ChildId
+  , childName            :: !ChildName
   , childRestartStrategy :: !ChildRestartStrategy
-  , eventTime         :: !UTCTime
+  , eventTime            :: !UTCTime
   }
   | SupervisedChildrenTerminationStarted {
     supervisorName    :: !SupervisorName
@@ -101,10 +101,10 @@ data SupervisorSpec
 
 data ChildOptions
   = ChildOptions {
-    childName          :: !ChildName
-  , childOnError       :: !(SomeException -> IO ())
-  , childOnCompletion  :: !(IO ())
-  , childOnTermination :: !(IO ())
+    childName            :: !ChildName
+  , childOnError         :: !(SomeException -> IO ())
+  , childOnCompletion    :: !(IO ())
+  , childOnTermination   :: !(IO ())
   , childRestartStrategy :: !ChildRestartStrategy
   }
   deriving (Generic)
@@ -124,11 +124,11 @@ instance Default ChildRestartStrategy where
 
 data ChildSpec
   = ChildSpec {
-    childName          :: !ChildName
-  , childAction        :: !ChildAction
-  , childOnError       :: !(SomeException -> IO ())
-  , childOnCompletion  :: !(IO ())
-  , childOnTermination :: !(IO ())
+    childName            :: !ChildName
+  , childAction          :: !ChildAction
+  , childOnError         :: !(SomeException -> IO ())
+  , childOnCompletion    :: !(IO ())
+  , childOnTermination   :: !(IO ())
   , childRestartStrategy :: !ChildRestartStrategy
   }
   deriving (Generic)

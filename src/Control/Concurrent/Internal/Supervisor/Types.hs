@@ -70,7 +70,16 @@ data SupervisorEvent
   , childThreadId        :: !ChildThreadId
   , childId              :: !ChildId
   , childName            :: !ChildName
+  , eventTime            :: !UTCTime
+  }
+  | SupervisedChildFailed {
+    supervisorName       :: !SupervisorName
+  , supervisorId         :: !SupervisorId
+  , childThreadId        :: !ChildThreadId
+  , childId              :: !ChildId
+  , childName            :: !ChildName
   , childRestartStrategy :: !ChildRestartStrategy
+  , childError           :: !SomeException
   , eventTime            :: !UTCTime
   }
   | SupervisedChildrenTerminationStarted {
@@ -157,6 +166,19 @@ data Child
   , childCreationTime :: !UTCTime
   , childName         :: !ChildName
   , childSpec         :: !ChildSpec
+  }
+
+data ChildEnv
+  = ChildEnv {
+    childId           :: !ChildId
+  , childAsync        :: !(Async ())
+  , childCreationTime :: !UTCTime
+  , childName         :: !ChildName
+  , childAction          :: !ChildAction
+  , childOnError         :: !(SomeException -> IO ())
+  , childOnCompletion    :: !(IO ())
+  , childOnTermination   :: !(IO ())
+  , childRestartStrategy :: !ChildRestartStrategy
   }
 
 data ControlAction

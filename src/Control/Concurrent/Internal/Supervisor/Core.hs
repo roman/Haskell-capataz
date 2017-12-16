@@ -26,7 +26,7 @@ import Control.Concurrent.Internal.Supervisor.Util
     ( childOptionsToSpec
     , readSupervisorStatus
     , removeChildFromMap
-    , runtimeToEnv
+    , supervisorToEnv
     , sendSyncControlMsg
     , writeSupervisorStatus
     )
@@ -56,9 +56,31 @@ handleChildCompleted env@SupervisorEnv { supervisorName, supervisorId, notifyEve
               , childId
               , childName
               , eventTime
-              , childRestartStrategy
               , childThreadId        = asyncThreadId childAsync
               }
+
+handleChildFailed :: SupervisorEnv -> ChildId -> SomeException -> Int -> IO ()
+handleChildFailed SupervisorEnv {supervisorName, supervisorId, notifyEvent} childId childError restartCount =
+  withChildEnv env
+               childId $ \ChildEnv {childName, childRestartStrategy, childOnError, childAsync, childSpec} -> mask $ \unmask -> do
+    eventTime <- getCurrentTime
+    notifyEvent (SupervisedChildFailed { supervisorName
+                                       , supervisorId
+                                       , childId
+                                       , childName
+                                       , childThreadId = asyncThreadId childAsync
+                                       })
+    unmask $ childOnError childError
+    case childRestartStrategy of
+      Permanent ->
+        Child.restartChild env childSpec childId restartCount
+      Transient ->
+        panic "pending"
+      Temporal ->
+        panic "pending"
+
+
+
 
 handleMonitorEvent :: SupervisorEnv -> MonitorEvent -> IO Bool
 handleMonitorEvent env monitorEv = do
@@ -68,7 +90,8 @@ handleMonitorEvent env monitorEv = do
 
     ChildTerminated{} -> panic "pending"
 
-    ChildFailed{}     -> panic "pending"
+    ChildFailed {childId, childError, childRestartCount} ->
+      handleChildFailed env childId childError childRestartCount
 
   return True
 
@@ -149,7 +172,7 @@ forkSupervisor :: SupervisorOptions -> IO Supervisor
 forkSupervisor supervisorOptions@SupervisorOptions { supervisorName } = do
   supervisorRuntime <- buildSupervisorRuntime supervisorOptions
 
-  let supervisorEnv = runtimeToEnv supervisorRuntime
+  let supervisorEnv = supervisorToEnv supervisorRuntime
 
   supervisorAsync <- asyncWithUnmask
     $ \unmask -> runSupervisorLoop unmask supervisorEnv

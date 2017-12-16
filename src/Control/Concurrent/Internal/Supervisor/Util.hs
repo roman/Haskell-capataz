@@ -1,4 +1,4 @@
-{-# LANGUAGE DisambiguateRecordFields #-}
+{-# LANGUAGE DuplicateRecordFields    #-}
 {-# LANGUAGE NamedFieldPuns           #-}
 {-# LANGUAGE NoImplicitPrelude        #-}
 {-# LANGUAGE RecordWildCards          #-}
@@ -9,12 +9,18 @@ import Protolude
 import Control.Concurrent.STM        (STM, atomically, retry)
 import Control.Concurrent.STM.TQueue (writeTQueue)
 import Control.Concurrent.STM.TVar   (TVar, readTVar, writeTVar)
-import Data.IORef                    (atomicModifyIORef')
+import Data.IORef                    (atomicModifyIORef', readIORef)
 import Data.Time.Clock               (getCurrentTime)
 
 import qualified Data.HashMap.Strict as HashMap
 
 import Control.Concurrent.Internal.Supervisor.Types
+
+withChildEnv :: SupervisorEnv -> ChildId -> (ChildEnv -> IO ()) -> IO ()
+withChildEnv SupervisorEnv { supervisorChildMap } childId withChildFn = do
+  childMap <- readIORef supervisorChildMap
+  maybe (return ()) (withChildFn . childToEnv) (HashMap.lookup childId childMap)
+
 
 appendChildToMap :: SupervisorEnv -> ChildId -> Child -> IO ()
 appendChildToMap SupervisorEnv { supervisorChildMap } childId child =
@@ -23,7 +29,7 @@ appendChildToMap SupervisorEnv { supervisorChildMap } childId child =
   where appendChild = HashMap.alter (const $ Just child) childId
 
 removeChildFromMap :: SupervisorEnv -> ChildId -> (Child -> IO ()) -> IO ()
-removeChildFromMap SupervisorEnv { supervisorChildMap } childId withChild = do
+removeChildFromMap SupervisorEnv { supervisorChildMap } childId withChildFn = do
   mChild <- atomicModifyIORef'
     supervisorChildMap
     ( \childMap -> maybe
@@ -31,7 +37,7 @@ removeChildFromMap SupervisorEnv { supervisorChildMap } childId withChild = do
       (\child -> (HashMap.delete childId childMap, Just child))
       (HashMap.lookup childId childMap)
     )
-  maybe (return ()) withChild mChild
+  maybe (return ()) withChildFn mChild
 
 readSupervisorStatus :: TVar SupervisorStatus -> STM SupervisorStatus
 readSupervisorStatus statusVar = do
@@ -67,9 +73,18 @@ sendSyncControlMsg SupervisorEnv { supervisorQueue } mkCtrlMsg = do
                            (ControlAction $ mkCtrlMsg (putMVar result ()))
   takeMVar result
 
-runtimeToEnv :: SupervisorRuntime -> SupervisorEnv
-runtimeToEnv supervisorRuntime@SupervisorRuntime {..} =
+supervisorToEnv :: SupervisorRuntime -> SupervisorEnv
+supervisorToEnv supervisorRuntime@SupervisorRuntime {..} =
   let SupervisorOptions {..} = supervisorOptions in SupervisorEnv {..}
 
+childToEnv :: Child -> ChildEnv
+childToEnv Child {..} =
+  let ChildSpec {childAction,
+                 childOnError,
+                 childOnCompletion,
+                 childOnTermination,
+                 childRestartStrategy} = childSpec in ChildEnv {..}
+
 childOptionsToSpec :: ChildOptions -> IO () -> ChildSpec
-childOptionsToSpec ChildOptions {..} childAction = ChildSpec {..}
+childOptionsToSpec ChildOptions {..} childAction =
+  ChildSpec {..}

@@ -78,6 +78,7 @@ data EventType
   | SupervisedChildStarted
   | SupervisedChildRestarted
   | SupervisedChildCompleted
+  | SupervisedChildFailed
   | SupervisedChildrenTerminationStarted
   | SupervisedChildrenTerminationFinished
   | SupervisorFailed
@@ -93,6 +94,23 @@ assertSupervisorStatusChanged fromEv toEv ev = case ev of
   SUT.SupervisorStatusChanged { prevSupervisorStatus, newSupervisorStatus } ->
     fromEv == prevSupervisorStatus && toEv == newSupervisorStatus
   _ -> False
+
+
+data RestartingChildError
+  = RestartingChildError
+  deriving (Show)
+
+instance Exception RestartingChildError
+
+restartingChild :: Int -> IO (IO ())
+restartingChild failCount = do
+  countRef <- newIORef failCount
+  return $ do
+    shouldFail <- atomicModifyIORef' countRef
+                    (\count ->
+                        (pred count, count > 0))
+    when shouldFail $ do
+      throwIO RestartingChildError
 
 testSupervisorWithOptions
   :: [Char]
@@ -163,6 +181,21 @@ tests =
                             supervisor
               threadDelay 1000
           )
+      , testSupervisor "does execute restart on failure"
+        (assertInOrder
+          [ assertEventType SupervisedChildStarted
+          , assertEventType SupervisedChildFailed
+          , assertEventType SupervisedChildRestarted
+          ]
+        )
+        (\supervisor -> do
+              childAction <- restartingChild 1
+              _childId <- SUT.forkChild
+                            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
+                            childAction
+                            supervisor
+              threadDelay 1000
+            )
       ]
     ]
   ]

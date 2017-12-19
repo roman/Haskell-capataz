@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE DuplicateRecordFields    #-}
 {-# LANGUAGE NamedFieldPuns           #-}
 {-# LANGUAGE NoImplicitPrelude        #-}
@@ -28,21 +29,24 @@ appendChildToMap SupervisorEnv { supervisorChildMap } childId child =
                      (\childMap -> (appendChild childMap, ()))
   where appendChild = HashMap.alter (const $ Just child) childId
 
-removeChildFromMap :: SupervisorEnv -> ChildId -> (Child -> IO ()) -> IO ()
+removeChildFromMap :: SupervisorEnv -> ChildId -> (ChildEnv -> IO ()) -> IO ()
 removeChildFromMap SupervisorEnv { supervisorChildMap } childId withChildFn = do
   mChild <- atomicModifyIORef'
     supervisorChildMap
-    ( \childMap -> maybe
-      (childMap, Nothing)
-      (\child -> (HashMap.delete childId childMap, Just child))
-      (HashMap.lookup childId childMap)
+    ( \childMap -> maybe (childMap, Nothing)
+                         (\child -> (HashMap.delete childId childMap, Just child))
+                         (HashMap.lookup childId childMap)
     )
-  maybe (return ()) withChildFn mChild
+  maybe (putText $ "ChildId not found: " <> show childId) (withChildFn . childToEnv) mChild
 
-readSupervisorStatus :: TVar SupervisorStatus -> STM SupervisorStatus
-readSupervisorStatus statusVar = do
+readSupervisorStatusSTM :: TVar SupervisorStatus -> STM SupervisorStatus
+readSupervisorStatusSTM statusVar = do
   status <- readTVar statusVar
   if status == Initializing then retry else return status
+
+readSupervisorStatus :: SupervisorEnv -> IO SupervisorStatus
+readSupervisorStatus SupervisorEnv {supervisorStatusVar} =
+  atomically $ readTVar supervisorStatusVar
 
 writeSupervisorStatus :: SupervisorEnv -> SupervisorStatus -> IO ()
 writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, notifyEvent } newSupervisorStatus
@@ -62,6 +66,30 @@ writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorSt
       , eventTime
       }
 
+resetChildMap :: SupervisorEnv -> IO ChildMap
+resetChildMap (SupervisorEnv {supervisorChildMap}) =
+  atomicModifyIORef' supervisorChildMap (\childMap -> (HashMap.empty, childMap))
+
+sortChildrenByTerminationOrder
+  :: ChildTerminationOrder
+  -> ChildMap
+  -> [Child]
+sortChildrenByTerminationOrder terminationOrder childMap =
+    case terminationOrder of
+      OldestFirst ->
+        children
+      NewestFirst ->
+        reverse children
+  where
+    -- NOTE: dissambiguates childCreationTime field
+    childCreationTime' (Child {childCreationTime}) =
+      childCreationTime
+
+    children =
+      sortBy (comparing childCreationTime')
+             (HashMap.elems childMap)
+
+
 sendControlMsg :: SupervisorEnv -> ControlAction -> IO ()
 sendControlMsg SupervisorEnv { supervisorQueue } ctrlMsg =
   atomically $ writeTQueue supervisorQueue (ControlAction ctrlMsg)
@@ -80,7 +108,7 @@ supervisorToEnv supervisorRuntime@SupervisorRuntime {..} =
 childToEnv :: Child -> ChildEnv
 childToEnv Child {..} =
   let ChildSpec {childAction,
-                 childOnError,
+                 childOnFailure,
                  childOnCompletion,
                  childOnTermination,
                  childRestartStrategy} = childSpec in ChildEnv {..}

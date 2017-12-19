@@ -12,7 +12,7 @@ import Control.Concurrent.Internal.Supervisor.Types as Types
     ( ChildAction
     , ChildOptions (..)
     , ChildRestartStrategy (..)
-    , Supervisor
+    , Supervisor (..)
     , SupervisorEvent (..)
     , SupervisorOptions (..)
     , SupervisorStatus (..)

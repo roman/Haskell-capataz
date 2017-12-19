@@ -123,7 +123,7 @@ execRestartAction childEnv@(ChildEnv {childCreationTime}) restartCount = do
 restartTerminatedChild :: ChildEnv -> IO ()
 restartTerminatedChild childEnv@(ChildEnv {childRestartStrategy, childAsync}) =
   case childRestartStrategy of
-    Temporal ->
+    Temporary ->
       emitChildDropped childEnv
 
     Transient -> do
@@ -148,7 +148,7 @@ restartFailedChild :: ChildEnv -> Int -> IO ()
 restartFailedChild childEnv@(ChildEnv {childRestartStrategy})
                    restartCount =
   case childRestartStrategy of
-    Temporal -> do
+    Temporary -> do
       emitChildDropped childEnv
     _ -> do
       emitChildRestarted childEnv "failed"

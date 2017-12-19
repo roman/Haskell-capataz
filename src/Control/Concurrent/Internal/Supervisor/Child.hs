@@ -14,10 +14,10 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Data.UUID.V4        as UUID
 
 import Control.Concurrent.Internal.Supervisor.Types
-import Control.Concurrent.Internal.Supervisor.Util  (appendChildToMap, removeChildFromMap)
+import Control.Concurrent.Internal.Supervisor.Util  (appendChildToMap, withChildEnv)
 
 childMain :: SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO Child
-childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, childAction, childOnError, childOnCompletion, childOnTermination } childId restartCount
+childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, childAction, childOnFailure, childOnCompletion, childOnTermination } childId restartCount
   = do
     childCreationTime <- getCurrentTime
     childAsync        <- asyncWithUnmask $ \unmask -> do
@@ -25,48 +25,51 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
       monitorEventTime <- getCurrentTime
       resultEvent      <- case eResult of
         Left err -> case fromException err of
-          Just TerminateChildException{} -> do
+          Just TerminateChildException{childTerminationReason} -> do
             eErrResult <- try $ unmask $ childOnTermination
             case eErrResult of
               Left childCallbackError -> return ChildFailed
                 { childName
                 , childId
                 , monitorEventTime
-                , childError        = toException $ ChildCallbackException
-                  { childId
-                  , childCallbackError
-                  , childActionError   = err
-                  }
-                , childRestartCount = succ restartCount
+                , childError =
+                  toException $ ChildCallbackException
+                    { childId
+                    , childCallbackError
+                    , childActionError = Just err
+                    }
+                , childRestartCount = restartCount
                 }
               Right _ -> return ChildTerminated
                 { childId
                 , childName
                 , monitorEventTime
+                , childTerminationReason
                 , childRestartCount = restartCount
                 }
 
           Nothing -> do
-            eErrResult <- try $ unmask $ childOnError err
+            eErrResult <- try $ unmask $ childOnFailure err
             case eErrResult of
               Left childCallbackError -> return ChildFailed
                 { childName
                 , childId
                 , monitorEventTime
+                , childRestartCount = restartCount
                 , childError        = toException $ ChildCallbackException
                   { childId
                   , childCallbackError
-                  , childActionError   = err
+                  , childActionError   = Just err
                   }
-                , childRestartCount = succ restartCount
                 }
-              Right _ -> return ChildFailed
-                { childName
-                , childId
-                , monitorEventTime
-                , childError        = err
-                , childRestartCount = succ restartCount
-                }
+              Right _ ->
+                return ChildFailed
+                  { childName
+                  , childId
+                  , monitorEventTime
+                  , childError        = err
+                  , childRestartCount = restartCount
+                  }
         Right _ -> do
           eCompResult <- try $ unmask childOnCompletion
           case eCompResult of
@@ -74,8 +77,13 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
               { childName
               , childId
               , monitorEventTime
-              , childError        = err
-              , childRestartCount = succ restartCount
+              , childError =
+                toException $ ChildCallbackException
+                  { childId
+                  , childCallbackError = err
+                  , childActionError   = Nothing
+                  }
+              , childRestartCount = restartCount
               }
             Right _ ->
               return ChildCompleted {childName , childId , monitorEventTime }
@@ -94,15 +102,15 @@ notifyChildStarted :: Maybe (ChildId, Int) -> SupervisorEnv -> Child -> IO ()
 notifyChildStarted mRestartInfo SupervisorEnv {supervisorId, supervisorName, notifyEvent} Child {childId, childName, childAsync} = do
   eventTime <- getCurrentTime
   case mRestartInfo of
-    Just (_childId, restartCount) ->
+    Just (_childId, childRestartCount) ->
       notifyEvent SupervisedChildRestarted
         { supervisorId
         , supervisorName
         , childId
         , childName
-        , eventTime
-        , restartCount
+        , childRestartCount
         , childThreadId = asyncThreadId childAsync
+        , eventTime
         }
     Nothing ->
       notifyEvent SupervisedChildStarted
@@ -133,23 +141,23 @@ forkChild env childSpec mRestartInfo = do
   return childId
 
 terminateChild :: Text -> SupervisorEnv -> ChildId -> IO ()
-terminateChild terminationReason env@SupervisorEnv { supervisorName, supervisorId, notifyEvent } childId
-  = removeChildFromMap env childId $ \Child { childName, childAsync } -> do
-    eventTime <- getCurrentTime
-    notifyEvent
-      ( SupervisedChildTerminated
-        { supervisorName
-        , supervisorId
-        , childId
-        , childName
-        , eventTime
-        , terminationReason
-        , childThreadId     = asyncThreadId childAsync
-        }
-      )
-    cancelWith childAsync
-               (TerminateChildException {childId , terminationReason })
-    wait childAsync
+terminateChild childTerminationReason env@SupervisorEnv { supervisorName, supervisorId, notifyEvent } childId
+  = withChildEnv env childId $ \ChildEnv { childName, childAsync } -> do
+      eventTime <- getCurrentTime
+      notifyEvent
+        ( SupervisedChildTerminated
+          { supervisorName
+          , supervisorId
+          , childId
+          , childName
+          , eventTime
+          , terminationReason = childTerminationReason
+          , childThreadId     = asyncThreadId childAsync
+          }
+        )
+      cancelWith childAsync
+                 (TerminateChildException {childId , childTerminationReason})
+      wait childAsync
 
 terminateChildren :: Text -> SupervisorEnv -> IO ()
 terminateChildren terminationReason env@SupervisorEnv { supervisorName, supervisorId, supervisorChildMap, notifyEvent }
@@ -165,7 +173,8 @@ terminateChildren terminationReason env@SupervisorEnv { supervisorName, supervis
         , eventTime
         }
       )
-    forM_ childrenIds $ \childId -> terminateChild terminationReason env childId
+
+    forM_ childrenIds (terminateChild terminationReason env)
 
     notifyEvent
       ( SupervisedChildrenTerminationFinished
@@ -175,7 +184,3 @@ terminateChildren terminationReason env@SupervisorEnv { supervisorName, supervis
         , eventTime
         }
       )
-
-restartChild :: SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO ()
-restartChild supervisorEnv childSpec childId restartCount =
-  void $ forkChild supervisorEnv childSpec (Just (childId, restartCount))

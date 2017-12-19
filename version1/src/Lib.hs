@@ -121,7 +121,7 @@ instance NFData SupervisorFlags
 data ChildRestartStrategy
   = Permanent -- ^ Child thread is always restarted on completion
   | Transient -- ^ Child thread is restarted only if completed with failure
-  | Temporal  -- ^ Child thread is never restarted on completion
+  | Temporary  -- ^ Child thread is never restarted on completion
   deriving (Generic, Show, Eq)
 
 instance NFData ChildRestartStrategy
@@ -520,7 +520,7 @@ _processChildEvent sr@(SupervisorRuntime {..}) ev child = do
 
         ChildFailed {} -> do
             case csRestartStrategy of
-                Temporal -> do
+                Temporary -> do
                     ssNotifyEvent
                       (ChildDropped ssName
                                     srSupervisorId
@@ -534,7 +534,7 @@ _processChildEvent sr@(SupervisorRuntime {..}) ev child = do
 
         ChildKilled {} -> do
             case csRestartStrategy of
-                Temporal ->
+                Temporary ->
                     ssNotifyEvent
                       (ChildDropped ssName
                                     srSupervisorId

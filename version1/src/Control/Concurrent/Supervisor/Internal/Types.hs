@@ -40,8 +40,6 @@ data ChildTerminationPolicy
 instance Default ChildTerminationPolicy where
   def = TimeoutSeconds 3
 
-instance NFData ChildTerminationPolicy
-
 data SupervisorRestartStrategy
   = AllForOne !ChildTerminationOrder -- ^ Terminate all children threads when one fails and restart them all
   | OneForOne -- ^ Only restart child thread that terminated
@@ -134,7 +132,7 @@ data ChildSpec
 data ChildRestartStrategy
   = Permanent -- ^ Child thread is always restarted on completion
   | Transient -- ^ Child thread is restarted only if completed with failure
-  | Temporal  -- ^ Child thread is never restarted on completion
+  | Temporary  -- ^ Child thread is never restarted on completion
   deriving (Generic, Show, Eq)
 
 instance NFData ChildRestartStrategy

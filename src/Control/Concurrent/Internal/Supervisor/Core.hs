@@ -13,19 +13,19 @@ import Control.Concurrent.STM.TQueue (newTQueueIO, readTQueue, writeTQueue)
 import Control.Concurrent.STM.TVar   (newTVarIO)
 import Control.Teardown              (newTeardown)
 import Data.IORef                    (newIORef)
-import Data.Time.Clock               (UTCTime)
 import Data.Time.Clock               (getCurrentTime)
 
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.UUID.V4        as UUID (nextRandom)
 
 import qualified Control.Concurrent.Internal.Supervisor.Child as Child
+import qualified Control.Concurrent.Internal.Supervisor.Restart as Restart
 
 import Control.Concurrent.Internal.Supervisor.Types
 import Control.Concurrent.Internal.Supervisor.Util
     ( childOptionsToSpec
+    , readSupervisorStatusSTM
     , readSupervisorStatus
-    , removeChildFromMap
     , supervisorToEnv
     , sendSyncControlMsg
     , writeSupervisorStatus
@@ -33,65 +33,18 @@ import Control.Concurrent.Internal.Supervisor.Util
 
 --------------------------------------------------------------------------------
 
-handleChildCompleted :: SupervisorEnv -> ChildId -> UTCTime -> IO ()
-handleChildCompleted env@SupervisorEnv { supervisorName, supervisorId, notifyEvent } childId eventTime
-  = do
-    removeChildFromMap env childId
-      $ \Child { childName, childAsync, childSpec } -> do
-          let ChildSpec { childRestartStrategy } = childSpec
-          case childRestartStrategy of
-            Permanent -> do
-              -- NOTE: Completed children should never account as errors happening on
-              -- a supervised thread, ergo, they should be restarted every time.
-
-              -- TODO: Notify a warning around having a childRestartStrategy different
-              -- than Temporal on children that may complete.
-
-              let restartCount = 0
-              Child.restartChild env childSpec childId restartCount
-
-            _ -> notifyEvent SupervisedChildCompleted
-              { supervisorId
-              , supervisorName
-              , childId
-              , childName
-              , eventTime
-              , childThreadId        = asyncThreadId childAsync
-              }
-
-handleChildFailed :: SupervisorEnv -> ChildId -> SomeException -> Int -> IO ()
-handleChildFailed SupervisorEnv {supervisorName, supervisorId, notifyEvent} childId childError restartCount =
-  withChildEnv env
-               childId $ \ChildEnv {childName, childRestartStrategy, childOnError, childAsync, childSpec} -> mask $ \unmask -> do
-    eventTime <- getCurrentTime
-    notifyEvent (SupervisedChildFailed { supervisorName
-                                       , supervisorId
-                                       , childId
-                                       , childName
-                                       , childThreadId = asyncThreadId childAsync
-                                       })
-    unmask $ childOnError childError
-    case childRestartStrategy of
-      Permanent ->
-        Child.restartChild env childSpec childId restartCount
-      Transient ->
-        panic "pending"
-      Temporal ->
-        panic "pending"
-
-
-
-
 handleMonitorEvent :: SupervisorEnv -> MonitorEvent -> IO Bool
 handleMonitorEvent env monitorEv = do
   case monitorEv of
     ChildCompleted { childId, monitorEventTime } ->
-      handleChildCompleted env childId monitorEventTime
-
-    ChildTerminated{} -> panic "pending"
+      Restart.handleChildCompleted env childId monitorEventTime
 
     ChildFailed {childId, childError, childRestartCount} ->
-      handleChildFailed env childId childError childRestartCount
+      Restart.handleChildFailed env childId childError childRestartCount
+
+    ChildTerminated {childId, childRestartCount, childTerminationReason} ->
+      Restart.handleChildTerminated env childId childTerminationReason childRestartCount
+
 
   return True
 
@@ -121,44 +74,64 @@ handleSupervisorMessage env message = case message of
 runSupervisorLoop :: (forall b . IO b -> IO b) -> SupervisorEnv -> IO ()
 runSupervisorLoop unmask env@SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, supervisorQueue, notifyEvent }
   = do
-    (status, message) <-
-      atomically
+    loopResult  <-
+      unmask
+      $ try
+      $ atomically
       $   (,)
-      <$> readSupervisorStatus supervisorStatusVar
+      <$> readSupervisorStatusSTM supervisorStatusVar
       <*> readTQueue supervisorQueue
 
-    case status of
-      Initializing -> do
+    case loopResult of
+      Left supervisorError -> do
         eventTime <- getCurrentTime
-        notifyEvent InvalidSupervisorStatusReached
+        notifyEvent SupervisorFailed
           { supervisorId
           , supervisorName
+          , supervisorError
           , eventTime
           }
-        runSupervisorLoop unmask env
+        Child.terminateChildren "supervisor shutdown" env
+        writeSupervisorStatus env Halted
+        throwIO supervisorError
 
-      Running -> do
-        eContinueLoop <- unmask $ try $ handleSupervisorMessage env message
-        case eContinueLoop of
-          Left supervisorError -> do
+      Right (status, message) ->
+        case status of
+          Initializing -> do
             eventTime <- getCurrentTime
-            notifyEvent SupervisorFailed
+            notifyEvent InvalidSupervisorStatusReached
               { supervisorId
               , supervisorName
-              , supervisorError
               , eventTime
               }
-          Right continueLoop
-            | continueLoop -> runSupervisorLoop unmask env
-            | otherwise -> do
-              eventTime <- getCurrentTime
-              notifyEvent SupervisorTerminated
-                { supervisorId
-                , supervisorName
-                , eventTime
-                }
+            runSupervisorLoop unmask env
 
-      Halted -> panic "pending implementation"
+          Running -> do
+            eContinueLoop <- unmask $ try $ handleSupervisorMessage env message
+            case eContinueLoop of
+              Left supervisorError -> do
+                eventTime <- getCurrentTime
+                notifyEvent SupervisorFailed
+                  { supervisorId
+                  , supervisorName
+                  , supervisorError
+                  , eventTime
+                  }
+                Child.terminateChildren "supervisor shutdown" env
+                writeSupervisorStatus env Halted
+                throwIO supervisorError
+
+              Right continueLoop
+                | continueLoop -> runSupervisorLoop unmask env
+                | otherwise -> do
+                  eventTime <- getCurrentTime
+                  notifyEvent SupervisorTerminated
+                    { supervisorId
+                    , supervisorName
+                    , eventTime
+                    }
+
+          Halted -> panic "pending implementation"
 
 buildSupervisorRuntime :: SupervisorOptions -> IO SupervisorRuntime
 buildSupervisorRuntime supervisorOptions = do
@@ -181,7 +154,12 @@ forkSupervisor supervisorOptions@SupervisorOptions { supervisorName } = do
 
   supervisorTeardown <- newTeardown
     ("supervisor[" <> supervisorName <> "]")
-    (sendSyncControlMsg supervisorEnv TerminateSupervisor)
+    (do status <- readSupervisorStatus supervisorEnv
+        case status of
+          Halted ->
+            return ()
+          _ -> do
+            sendSyncControlMsg supervisorEnv TerminateSupervisor)
 
   return Supervisor {..}
 
@@ -195,7 +173,6 @@ forkChild childOptions childAction Supervisor { supervisorEnv } = do
     supervisorQueue
     ( ControlAction ForkChild
       { childSpec
-      , childRestartCount = 0
       , returnChildId     = putMVar childIdVar
       }
     )
@@ -207,5 +184,8 @@ terminateChild terminationReason childId Supervisor { supervisorEnv } =
   sendSyncControlMsg
     supervisorEnv
     ( \notifyChildTermination ->
-      TerminateChild {terminationReason , childId , notifyChildTermination }
+      TerminateChild { terminationReason
+                     , childId
+                     , notifyChildTermination
+                     }
     )

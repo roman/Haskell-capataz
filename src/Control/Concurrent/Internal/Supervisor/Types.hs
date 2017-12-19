@@ -13,7 +13,7 @@ import Control.Teardown              (ITeardown (..), Teardown)
 import Data.Default                  (Default (..))
 import Data.HashMap.Strict           (HashMap)
 import Data.IORef                    (IORef)
-import Data.Time.Clock               (UTCTime)
+import Data.Time.Clock               (UTCTime, NominalDiffTime)
 import Data.UUID                     (UUID)
 
 type SupervisorId = UUID
@@ -61,7 +61,7 @@ data SupervisorEvent
   , childThreadId        :: !ChildThreadId
   , childId              :: !ChildId
   , childName            :: !ChildName
-  , restartCount         :: !Int
+  , childRestartCount    :: !Int
   , eventTime            :: !UTCTime
   }
   | SupervisedChildCompleted {
@@ -78,7 +78,6 @@ data SupervisorEvent
   , childThreadId        :: !ChildThreadId
   , childId              :: !ChildId
   , childName            :: !ChildName
-  , childRestartStrategy :: !ChildRestartStrategy
   , childError           :: !SomeException
   , eventTime            :: !UTCTime
   }
@@ -117,10 +116,43 @@ instance Default ChildTerminationPolicy where
 
 instance NFData ChildTerminationPolicy
 
+data ChildRestartAction
+  = ResetRestartCount
+  | IncreaseRestartCount
+  | HaltSupervisor
+  deriving (Generic, Show, Eq)
+
+instance NFData ChildRestartAction
+
+data ChildTerminationOrder
+  = NewestFirst -- ^ Terminate child threads from most recent to oldest
+  | OldestFirst -- ^ Terminate child threads from oldest to most recent
+  deriving (Generic, Show, Eq, Ord)
+
+instance Default ChildTerminationOrder where
+  def = OldestFirst
+
+instance NFData ChildTerminationOrder
+
+data SupervisorRestartStrategy
+  = AllForOne !ChildTerminationOrder
+    -- ^ Terminate all children threads when one fails and restart them all
+  | OneForOne
+    -- ^ Only restart child thread that terminated
+  deriving (Generic, Show, Eq, Ord)
+
+instance Default SupervisorRestartStrategy where
+  def = OneForOne
+
+instance NFData SupervisorRestartStrategy
+
 data SupervisorOptions
   = SupervisorOptions {
     supervisorName                   :: Text
-  -- , supervisorIntensity :: !Int
+  , supervisorIntensity              :: !Int
+    -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
+  , supervisorPeriodSeconds          :: !NominalDiffTime
+  , supervisorRestartStrategy        :: !SupervisorRestartStrategy
   , supervisorChildTerminationPolicy :: !ChildTerminationPolicy
   , notifyEvent                      :: !(SupervisorEvent -> IO ())
   }
@@ -128,7 +160,7 @@ data SupervisorOptions
 data ChildOptions
   = ChildOptions {
     childName            :: !ChildName
-  , childOnError         :: !(SomeException -> IO ())
+  , childOnFailure         :: !(SomeException -> IO ())
   , childOnCompletion    :: !(IO ())
   , childOnTermination   :: !(IO ())
   , childRestartStrategy :: !ChildRestartStrategy
@@ -140,7 +172,7 @@ data ChildRestartStrategy
   -- ^ Child thread is always restarted on completion
   | Transient
   -- ^ Child thread is restarted only if completed with failure
-  | Temporal
+  | Temporary
   -- ^ Child thread is never restarted on completion
   deriving (Generic, Show, Eq)
 
@@ -150,9 +182,11 @@ instance Default ChildRestartStrategy where
 
 data ChildSpec
   = ChildSpec {
-    childName            :: !ChildName
-  , childAction          :: !ChildAction
-  , childOnError         :: !(SomeException -> IO ())
+    childAction          :: ChildAction
+    -- ^ ChildAction is lazy by default because we want to eval
+    -- in on a child thread, not on the supervisor thread
+  , childName            :: !ChildName
+  , childOnFailure         :: !(SomeException -> IO ())
   , childOnCompletion    :: !(IO ())
   , childOnTermination   :: !(IO ())
   , childRestartStrategy :: !ChildRestartStrategy
@@ -170,12 +204,15 @@ data Child
 
 data ChildEnv
   = ChildEnv {
-    childId           :: !ChildId
+    childAction          :: ChildAction
+    -- ^ ChildAction is lazy by default because we want to eval
+    -- in on a child thread, not on the supervisor thread
+  , childId           :: !ChildId
   , childAsync        :: !(Async ())
   , childCreationTime :: !UTCTime
   , childName         :: !ChildName
-  , childAction          :: !ChildAction
-  , childOnError         :: !(SomeException -> IO ())
+  , childSpec            :: !ChildSpec
+  , childOnFailure         :: !(SomeException -> IO ())
   , childOnCompletion    :: !(IO ())
   , childOnTermination   :: !(IO ())
   , childRestartStrategy :: !ChildRestartStrategy
@@ -184,7 +221,6 @@ data ChildEnv
 data ControlAction
   = ForkChild {
     childSpec         :: !ChildSpec
-  , childRestartCount :: !RestartCount
   , returnChildId     :: !(ChildId -> IO ())
   }
   | TerminateChild {
@@ -202,7 +238,7 @@ data ControlAction
 data SupervisorException
   = TerminateChildException {
       childId           :: !ChildId
-    , terminationReason :: !Text
+    , childTerminationReason :: !Text
     }
     deriving (Generic, Show)
 
@@ -212,7 +248,7 @@ instance NFData SupervisorException
 data ChildException
   = ChildCallbackException {
       childId            :: !ChildId
-    , childActionError   :: !SomeException
+    , childActionError   :: !(Maybe SomeException)
     , childCallbackError :: !SomeException
     }
     deriving (Generic, Show)
@@ -224,6 +260,7 @@ data MonitorEvent
     childId           :: !ChildId
   , childName         :: !ChildName
   , childRestartCount :: !RestartCount
+  , childTerminationReason :: !Text
   , monitorEventTime  :: !UTCTime
   }
   | ChildFailed {
@@ -283,6 +320,11 @@ data SupervisorEnv
   , supervisorStatusVar :: !(TVar SupervisorStatus)
   , supervisorOptions   :: !SupervisorOptions
   , supervisorRuntime   :: !SupervisorRuntime
+  , supervisorIntensity              :: !Int
+    -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
+  , supervisorPeriodSeconds          :: !NominalDiffTime
+  , supervisorRestartStrategy        :: !SupervisorRestartStrategy
+  , supervisorChildTerminationPolicy :: !ChildTerminationPolicy
   , notifyEvent         :: !(SupervisorEvent -> IO ())
   }
 
@@ -291,10 +333,10 @@ defSupervisorOptions = SupervisorOptions
   { supervisorName                   = "default-supervisor"
 
   -- One (1) restart every five (5) seconds
-  -- , supervisorIntensity                   = 1
-  -- , supervisorPeriodSeconds               = 5
+  , supervisorIntensity              = 1
+  , supervisorPeriodSeconds          = 5
 
-  -- , supervisorRestartStrategy             = def
+  , supervisorRestartStrategy        = def
   , supervisorChildTerminationPolicy = def
   , notifyEvent                      = const $ return ()
   }
@@ -302,7 +344,7 @@ defSupervisorOptions = SupervisorOptions
 defChildOptions :: ChildOptions
 defChildOptions = ChildOptions
   { childName            = "default-child"
-  , childOnError         = const $ return ()
+  , childOnFailure         = const $ return ()
   , childOnCompletion    = return ()
   , childOnTermination   = return ()
   , childRestartStrategy = def

@@ -33,7 +33,7 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
                 , childId
                 , monitorEventTime
                 , childError =
-                  toException $ ChildCallbackException
+                  toException $ ChildCallbackFailed
                     { childId
                     , childCallbackError
                     , childActionError = Just err
@@ -56,7 +56,7 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
                 , childId
                 , monitorEventTime
                 , childRestartCount = restartCount
-                , childError        = toException $ ChildCallbackException
+                , childError        = toException $ ChildCallbackFailed
                   { childId
                   , childCallbackError
                   , childActionError   = Just err
@@ -78,7 +78,7 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
               , childId
               , monitorEventTime
               , childError =
-                toException $ ChildCallbackException
+                toException $ ChildCallbackFailed
                   { childId
                   , childCallbackError = err
                   , childActionError   = Nothing

@@ -235,25 +235,36 @@ data ControlAction
   deriving (Generic)
 
 
-data SupervisorException
+data SupervisorSignal
   = TerminateChildException {
       childId           :: !ChildId
     , childTerminationReason :: !Text
     }
     deriving (Generic, Show)
 
-instance Exception SupervisorException
-instance NFData SupervisorException
+instance Exception SupervisorSignal
+instance NFData SupervisorSignal
 
-data ChildException
-  = ChildCallbackException {
+data SupervisorError
+  = SupervisorIntensityReached {
+    childId :: !ChildId
+  , childName :: !ChildName
+  , childRestartCount :: !Int
+  }
+  deriving (Generic, Show)
+
+instance Exception SupervisorError
+instance NFData SupervisorError
+
+data ChildError
+  = ChildCallbackFailed {
       childId            :: !ChildId
     , childActionError   :: !(Maybe SomeException)
     , childCallbackError :: !SomeException
     }
     deriving (Generic, Show)
 
-instance Exception ChildException
+instance Exception ChildError
 
 data MonitorEvent
   = ChildTerminated {

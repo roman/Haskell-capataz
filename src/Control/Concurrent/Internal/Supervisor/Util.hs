@@ -113,6 +113,10 @@ childToEnv Child {..} =
                  childOnTermination,
                  childRestartStrategy} = childSpec in ChildEnv {..}
 
+envToChild :: ChildEnv -> Child
+envToChild ChildEnv {..} =
+  Child {..}
+
 childOptionsToSpec :: ChildOptions -> IO () -> ChildSpec
 childOptionsToSpec ChildOptions {..} childAction =
   ChildSpec {..}

@@ -9,9 +9,8 @@ import Data.Time.Clock (UTCTime, NominalDiffTime, getCurrentTime, diffUTCTime)
 import Protolude
 
 import qualified Control.Concurrent.Internal.Supervisor.Child as Child
-import Control.Concurrent.Internal.Supervisor.Util (resetChildMap, removeChildFromMap, sortChildrenByTerminationOrder)
+import Control.Concurrent.Internal.Supervisor.Util (resetChildMap, envToChild, removeChildFromMap, sortChildrenByTerminationOrder, appendChildToMap)
 import Control.Concurrent.Internal.Supervisor.Types
-
 
 --------------------------------------------------------------------------------
 
@@ -38,32 +37,33 @@ calcRestartAction SupervisorEnv { supervisorIntensity, supervisorPeriodSeconds }
 execSupervisorRestartStrategy :: SupervisorEnv -> ChildEnv -> Int -> IO ()
 execSupervisorRestartStrategy
   supervisorEnv@(SupervisorEnv {supervisorRestartStrategy})
-  ChildEnv { childId
-           , childSpec }
-  restartCount =
+  childEnv@ChildEnv { childId
+                    , childSpec }
+  childRestartCount =
 
   case supervisorRestartStrategy of
-    AllForOne childTerminationOrder ->
-      restartChildren supervisorEnv childTerminationOrder restartCount
+    AllForOne childTerminationOrder -> do
+      appendChildToMap supervisorEnv childId (envToChild childEnv)
+      restartChildren supervisorEnv childTerminationOrder childRestartCount
 
     OneForOne ->
-      restartChild supervisorEnv childSpec childId restartCount
+      restartChild supervisorEnv childSpec childId childRestartCount
 
 execRestartAction :: SupervisorEnv -> ChildEnv -> Int -> IO ()
-execRestartAction supervisorEnv childEnv@(ChildEnv {childCreationTime}) restartCount = do
+execRestartAction supervisorEnv childEnv@ChildEnv {childId, childName, childCreationTime} childRestartCount = do
   restartAction <-
-    calcRestartAction supervisorEnv restartCount
+    calcRestartAction supervisorEnv childRestartCount
         <$> calcDiffSeconds childCreationTime
 
   case restartAction of
     HaltSupervisor ->
-      panic "halt supervisor"
+      throwIO $ SupervisorIntensityReached {childId, childName, childRestartCount}
 
     ResetRestartCount ->
       execSupervisorRestartStrategy supervisorEnv childEnv 0
 
     IncreaseRestartCount ->
-      execSupervisorRestartStrategy supervisorEnv childEnv (succ restartCount)
+      execSupervisorRestartStrategy supervisorEnv childEnv (succ childRestartCount)
 
 --------------------------------------------------------------------------------
 
@@ -79,8 +79,11 @@ restartChildren supervisorEnv childTerminationOrder restartCount = do
     children =
       sortChildrenByTerminationOrder childTerminationOrder childMap
 
-  forM_ children $ \(Child {childId, childSpec}) ->
-    restartChild supervisorEnv childSpec childId restartCount
+  forM_ children $ \(Child {childId, childSpec}) -> do
+    let ChildSpec {childRestartStrategy} = childSpec
+    case childRestartStrategy of
+      Temporary -> return ()
+      _ -> restartChild supervisorEnv childSpec childId restartCount
 
 
 restartChild :: SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO ()

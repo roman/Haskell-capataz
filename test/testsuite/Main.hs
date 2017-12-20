@@ -15,7 +15,7 @@ import Test.Tasty.HUnit             (assertFailure, testCase, assertBool)
 import Test.Tasty.Ingredients.Rerun (rerunningTests)
 import Test.Tasty.Runners           (consoleTestReporter, listingTests)
 
-import Text.Show.Pretty (pPrint)
+-- import Text.Show.Pretty (pPrint)
 
 import qualified Data.Text as T
 

@@ -407,86 +407,81 @@ tests =
                  threadDelay 100
             )
         ]
-
-      -- , testSupervisor "does call onTerminated callback when sub-routine is terminated"
-      -- , testSupervisor "does not call onTerminated callback when sub-routine is completed"
-      -- , testSupervisor "does not call onTerminated callback when sub-routine failes"
-      -- , testSupervisor "treats as sub-routine failed if callback fails"
       ]
 
       , testGroup "with transient strategy"
-      [
-        testSupervisor "does not restart on completion"
-          (combineAssertions
-          [
-            assertInOrder
-            [ assertEventType SupervisedChildStarted
-            , assertEventType SupervisedChildCompleted
-            , assertEventType SupervisorTerminated
+        [
+          testSupervisor "does not restart on completion"
+            (combineAssertions
+            [
+              assertInOrder
+              [ assertEventType SupervisedChildStarted
+              , assertEventType SupervisedChildCompleted
+              , assertEventType SupervisorTerminated
+              ]
+            , assertAll
+              ( not . assertEventType SupervisedChildRestarted )
             ]
-          , assertAll
-            ( not . assertEventType SupervisedChildRestarted )
-          ]
-          )
-          (\supervisor -> do
-              _childId <- SUT.forkChild
-                            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
-                            (return ())
-                            supervisor
-              threadDelay 100
-          )
-
-      , testSupervisor "does not restart on termination"
-          (combineAssertions
-          [
-            assertInOrder
-            [ assertEventType SupervisedChildTerminated
-            , assertEventType SupervisorTerminated
-            ]
-          , assertAll
-            ( not . assertEventType SupervisedChildRestarted )
-          ]
-          )
-          (\supervisor -> do
-              childId <- SUT.forkChild
-                            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
-                            (forever $ threadDelay 1000100)
-                            supervisor
-              SUT.terminateChild "termination test (1)" childId supervisor
-              threadDelay 500
-          )
-
-      , testSupervisor "does restart on failure"
-          (assertInOrder
-            [ assertEventType SupervisedChildStarted
-            , assertEventType SupervisedChildFailed
-            , andP [assertEventType SupervisedChildRestarted, assertRestartCount (== 1) ]
-            ]
-          )
-          (\supervisor -> do
-                childAction <- failingChild 1
+            )
+            (\supervisor -> do
                 _childId <- SUT.forkChild
                               SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
-                              childAction
+                              (return ())
                               supervisor
                 threadDelay 100
-          )
+            )
 
-      , testSupervisor "does increase restart count on multiple failures"
-          (assertInOrder
-            [ andP [assertEventType SupervisedChildRestarted, assertRestartCount (== 1) ]
-            , andP [assertEventType SupervisedChildRestarted, assertRestartCount (== 2) ]
+        , testSupervisor "does not restart on termination"
+            (combineAssertions
+            [
+              assertInOrder
+              [ assertEventType SupervisedChildTerminated
+              , assertEventType SupervisorTerminated
+              ]
+            , assertAll
+              ( not . assertEventType SupervisedChildRestarted )
             ]
-          )
-          (\supervisor -> do
-                childAction <- failingChild 2
-                _childId <- SUT.forkChild
+            )
+            (\supervisor -> do
+                childId <- SUT.forkChild
                               SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
-                              childAction
+                              (forever $ threadDelay 1000100)
                               supervisor
-                threadDelay 100
-          )
-      ]
+                SUT.terminateChild "termination test (1)" childId supervisor
+                threadDelay 500
+            )
+
+        , testSupervisor "does restart on failure"
+            (assertInOrder
+              [ assertEventType SupervisedChildStarted
+              , assertEventType SupervisedChildFailed
+              , andP [assertEventType SupervisedChildRestarted, assertRestartCount (== 1) ]
+              ]
+            )
+            (\supervisor -> do
+                  childAction <- failingChild 1
+                  _childId <- SUT.forkChild
+                                SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
+                                childAction
+                                supervisor
+                  threadDelay 100
+            )
+
+        , testSupervisor "does increase restart count on multiple failures"
+            (assertInOrder
+              [ andP [assertEventType SupervisedChildRestarted, assertRestartCount (== 1) ]
+              , andP [assertEventType SupervisedChildRestarted, assertRestartCount (== 2) ]
+              ]
+            )
+            (\supervisor -> do
+                  childAction <- failingChild 2
+                  _childId <- SUT.forkChild
+                                SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
+                                childAction
+                                supervisor
+                  threadDelay 100
+            )
+        ]
     , testGroup "with permanent strategy"
       [
         testSupervisor "does restart on completion"

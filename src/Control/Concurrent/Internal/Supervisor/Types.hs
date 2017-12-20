@@ -13,7 +13,7 @@ import Control.Teardown              (ITeardown (..), Teardown)
 import Data.Default                  (Default (..))
 import Data.HashMap.Strict           (HashMap)
 import Data.IORef                    (IORef)
-import Data.Time.Clock               (UTCTime, NominalDiffTime)
+import Data.Time.Clock               (NominalDiffTime, UTCTime)
 import Data.UUID                     (UUID)
 
 type SupervisorId = UUID
@@ -48,38 +48,38 @@ data SupervisorEvent
   , eventTime         :: !UTCTime
   }
   | SupervisedChildStarted {
-    supervisorName       :: !SupervisorName
-  , supervisorId         :: !SupervisorId
-  , childThreadId        :: !ChildThreadId
-  , childId              :: !ChildId
-  , childName            :: !ChildName
-  , eventTime            :: !UTCTime
+    supervisorName :: !SupervisorName
+  , supervisorId   :: !SupervisorId
+  , childThreadId  :: !ChildThreadId
+  , childId        :: !ChildId
+  , childName      :: !ChildName
+  , eventTime      :: !UTCTime
   }
   | SupervisedChildRestarted {
-    supervisorName       :: !SupervisorName
-  , supervisorId         :: !SupervisorId
-  , childThreadId        :: !ChildThreadId
-  , childId              :: !ChildId
-  , childName            :: !ChildName
-  , childRestartCount    :: !Int
-  , eventTime            :: !UTCTime
+    supervisorName    :: !SupervisorName
+  , supervisorId      :: !SupervisorId
+  , childThreadId     :: !ChildThreadId
+  , childId           :: !ChildId
+  , childName         :: !ChildName
+  , childRestartCount :: !Int
+  , eventTime         :: !UTCTime
   }
   | SupervisedChildCompleted {
-    supervisorName       :: !SupervisorName
-  , supervisorId         :: !SupervisorId
-  , childThreadId        :: !ChildThreadId
-  , childId              :: !ChildId
-  , childName            :: !ChildName
-  , eventTime            :: !UTCTime
+    supervisorName :: !SupervisorName
+  , supervisorId   :: !SupervisorId
+  , childThreadId  :: !ChildThreadId
+  , childId        :: !ChildId
+  , childName      :: !ChildName
+  , eventTime      :: !UTCTime
   }
   | SupervisedChildFailed {
-    supervisorName       :: !SupervisorName
-  , supervisorId         :: !SupervisorId
-  , childThreadId        :: !ChildThreadId
-  , childId              :: !ChildId
-  , childName            :: !ChildName
-  , childError           :: !SomeException
-  , eventTime            :: !UTCTime
+    supervisorName :: !SupervisorName
+  , supervisorId   :: !SupervisorId
+  , childThreadId  :: !ChildThreadId
+  , childId        :: !ChildId
+  , childName      :: !ChildName
+  , childError     :: !SomeException
+  , eventTime      :: !UTCTime
   }
   | SupervisedChildrenTerminationStarted {
     supervisorName    :: !SupervisorName
@@ -160,7 +160,7 @@ data SupervisorOptions
 data ChildOptions
   = ChildOptions {
     childName            :: !ChildName
-  , childOnFailure         :: !(SomeException -> IO ())
+  , childOnFailure       :: !(SomeException -> IO ())
   , childOnCompletion    :: !(IO ())
   , childOnTermination   :: !(IO ())
   , childRestartStrategy :: !ChildRestartStrategy
@@ -186,7 +186,7 @@ data ChildSpec
     -- ^ ChildAction is lazy by default because we want to eval
     -- in on a child thread, not on the supervisor thread
   , childName            :: !ChildName
-  , childOnFailure         :: !(SomeException -> IO ())
+  , childOnFailure       :: !(SomeException -> IO ())
   , childOnCompletion    :: !(IO ())
   , childOnTermination   :: !(IO ())
   , childRestartStrategy :: !ChildRestartStrategy
@@ -207,12 +207,12 @@ data ChildEnv
     childAction          :: ChildAction
     -- ^ ChildAction is lazy by default because we want to eval
     -- in on a child thread, not on the supervisor thread
-  , childId           :: !ChildId
-  , childAsync        :: !(Async ())
-  , childCreationTime :: !UTCTime
-  , childName         :: !ChildName
+  , childId              :: !ChildId
+  , childAsync           :: !(Async ())
+  , childCreationTime    :: !UTCTime
+  , childName            :: !ChildName
   , childSpec            :: !ChildSpec
-  , childOnFailure         :: !(SomeException -> IO ())
+  , childOnFailure       :: !(SomeException -> IO ())
   , childOnCompletion    :: !(IO ())
   , childOnTermination   :: !(IO ())
   , childRestartStrategy :: !ChildRestartStrategy
@@ -220,8 +220,8 @@ data ChildEnv
 
 data ControlAction
   = ForkChild {
-    childSpec         :: !ChildSpec
-  , returnChildId     :: !(ChildId -> IO ())
+    childSpec     :: !ChildSpec
+  , returnChildId :: !(ChildId -> IO ())
   }
   | TerminateChild {
     childId                :: !ChildId
@@ -237,7 +237,7 @@ data ControlAction
 
 data SupervisorSignal
   = TerminateChildException {
-      childId           :: !ChildId
+      childId                :: !ChildId
     , childTerminationReason :: !Text
     }
     deriving (Generic, Show)
@@ -247,8 +247,8 @@ instance NFData SupervisorSignal
 
 data SupervisorError
   = SupervisorIntensityReached {
-    childId :: !ChildId
-  , childName :: !ChildName
+    childId           :: !ChildId
+  , childName         :: !ChildName
   , childRestartCount :: !Int
   }
   deriving (Generic, Show)
@@ -268,11 +268,11 @@ instance Exception ChildError
 
 data MonitorEvent
   = ChildTerminated {
-    childId           :: !ChildId
-  , childName         :: !ChildName
-  , childRestartCount :: !RestartCount
+    childId                :: !ChildId
+  , childName              :: !ChildName
+  , childRestartCount      :: !RestartCount
   , childTerminationReason :: !Text
-  , monitorEventTime  :: !UTCTime
+  , monitorEventTime       :: !UTCTime
   }
   | ChildFailed {
     childId           :: !ChildId
@@ -324,19 +324,19 @@ data SupervisorRuntime
 
 data SupervisorEnv
   = SupervisorEnv {
-    supervisorId        :: !SupervisorId
-  , supervisorName      :: !SupervisorName
-  , supervisorQueue     :: !(TQueue SupervisorMessage)
-  , supervisorChildMap  :: !(IORef (HashMap ChildId Child))
-  , supervisorStatusVar :: !(TVar SupervisorStatus)
-  , supervisorOptions   :: !SupervisorOptions
-  , supervisorRuntime   :: !SupervisorRuntime
+    supervisorId                     :: !SupervisorId
+  , supervisorName                   :: !SupervisorName
+  , supervisorQueue                  :: !(TQueue SupervisorMessage)
+  , supervisorChildMap               :: !(IORef (HashMap ChildId Child))
+  , supervisorStatusVar              :: !(TVar SupervisorStatus)
+  , supervisorOptions                :: !SupervisorOptions
+  , supervisorRuntime                :: !SupervisorRuntime
   , supervisorIntensity              :: !Int
     -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
   , supervisorPeriodSeconds          :: !NominalDiffTime
   , supervisorRestartStrategy        :: !SupervisorRestartStrategy
   , supervisorChildTerminationPolicy :: !ChildTerminationPolicy
-  , notifyEvent         :: !(SupervisorEvent -> IO ())
+  , notifyEvent                      :: !(SupervisorEvent -> IO ())
   }
 
 defSupervisorOptions :: SupervisorOptions
@@ -346,7 +346,6 @@ defSupervisorOptions = SupervisorOptions
   -- One (1) restart every five (5) seconds
   , supervisorIntensity              = 1
   , supervisorPeriodSeconds          = 5
-
   , supervisorRestartStrategy        = def
   , supervisorChildTerminationPolicy = def
   , notifyEvent                      = const $ return ()
@@ -355,7 +354,7 @@ defSupervisorOptions = SupervisorOptions
 defChildOptions :: ChildOptions
 defChildOptions = ChildOptions
   { childName            = "default-child"
-  , childOnFailure         = const $ return ()
+  , childOnFailure       = const $ return ()
   , childOnCompletion    = return ()
   , childOnTermination   = return ()
   , childRestartStrategy = def

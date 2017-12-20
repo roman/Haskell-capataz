@@ -1,8 +1,8 @@
-{-# LANGUAGE OverloadedStrings    #-}
-{-# LANGUAGE DuplicateRecordFields    #-}
-{-# LANGUAGE NamedFieldPuns           #-}
-{-# LANGUAGE NoImplicitPrelude        #-}
-{-# LANGUAGE RecordWildCards          #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
 module Control.Concurrent.Internal.Supervisor.Util where
 
 import Protolude
@@ -30,14 +30,18 @@ appendChildToMap SupervisorEnv { supervisorChildMap } childId child =
   where appendChild = HashMap.alter (const $ Just child) childId
 
 removeChildFromMap :: SupervisorEnv -> ChildId -> (ChildEnv -> IO ()) -> IO ()
-removeChildFromMap SupervisorEnv { supervisorChildMap } childId withChildFn = do
-  mChild <- atomicModifyIORef'
-    supervisorChildMap
-    ( \childMap -> maybe (childMap, Nothing)
-                         (\child -> (HashMap.delete childId childMap, Just child))
-                         (HashMap.lookup childId childMap)
-    )
-  maybe (putText $ "ChildId not found: " <> show childId) (withChildFn . childToEnv) mChild
+removeChildFromMap SupervisorEnv { supervisorChildMap } childId withChildFn =
+  do
+    mChild <- atomicModifyIORef'
+      supervisorChildMap
+      ( \childMap -> maybe
+        (childMap, Nothing)
+        (\child -> (HashMap.delete childId childMap, Just child))
+        (HashMap.lookup childId childMap)
+      )
+    maybe (putText $ "ChildId not found: " <> show childId)
+          (withChildFn . childToEnv)
+          mChild
 
 readSupervisorStatusSTM :: TVar SupervisorStatus -> STM SupervisorStatus
 readSupervisorStatusSTM statusVar = do
@@ -45,7 +49,7 @@ readSupervisorStatusSTM statusVar = do
   if status == Initializing then retry else return status
 
 readSupervisorStatus :: SupervisorEnv -> IO SupervisorStatus
-readSupervisorStatus SupervisorEnv {supervisorStatusVar} =
+readSupervisorStatus SupervisorEnv { supervisorStatusVar } =
   atomically $ readTVar supervisorStatusVar
 
 writeSupervisorStatus :: SupervisorEnv -> SupervisorStatus -> IO ()
@@ -67,27 +71,19 @@ writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorSt
       }
 
 resetChildMap :: SupervisorEnv -> IO ChildMap
-resetChildMap (SupervisorEnv {supervisorChildMap}) =
+resetChildMap (SupervisorEnv { supervisorChildMap }) =
   atomicModifyIORef' supervisorChildMap (\childMap -> (HashMap.empty, childMap))
 
-sortChildrenByTerminationOrder
-  :: ChildTerminationOrder
-  -> ChildMap
-  -> [Child]
+sortChildrenByTerminationOrder :: ChildTerminationOrder -> ChildMap -> [Child]
 sortChildrenByTerminationOrder terminationOrder childMap =
-    case terminationOrder of
-      OldestFirst ->
-        children
-      NewestFirst ->
-        reverse children
-  where
+  case terminationOrder of
+    OldestFirst -> children
+    NewestFirst -> reverse children
+ where
     -- NOTE: dissambiguates childCreationTime field
-    childCreationTime' (Child {childCreationTime}) =
-      childCreationTime
+  childCreationTime' (Child { childCreationTime }) = childCreationTime
 
-    children =
-      sortBy (comparing childCreationTime')
-             (HashMap.elems childMap)
+  children = sortBy (comparing childCreationTime') (HashMap.elems childMap)
 
 
 sendControlMsg :: SupervisorEnv -> ControlAction -> IO ()
@@ -107,16 +103,14 @@ supervisorToEnv supervisorRuntime@SupervisorRuntime {..} =
 
 childToEnv :: Child -> ChildEnv
 childToEnv Child {..} =
-  let ChildSpec {childAction,
-                 childOnFailure,
-                 childOnCompletion,
-                 childOnTermination,
-                 childRestartStrategy} = childSpec in ChildEnv {..}
+  let
+    ChildSpec { childAction, childOnFailure, childOnCompletion, childOnTermination, childRestartStrategy }
+      = childSpec
+  in
+    ChildEnv {..}
 
 envToChild :: ChildEnv -> Child
-envToChild ChildEnv {..} =
-  Child {..}
+envToChild ChildEnv {..} = Child {..}
 
 childOptionsToSpec :: ChildOptions -> IO () -> ChildSpec
-childOptionsToSpec ChildOptions {..} childAction =
-  ChildSpec {..}
+childOptionsToSpec ChildOptions {..} childAction = ChildSpec {..}

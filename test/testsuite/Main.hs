@@ -210,7 +210,7 @@ tests =
     [
       testGroup "callbacks"
       [
-        testGroup "onCompletion"
+        testGroup "childOnCompletion"
         [
           testSupervisor "does execute callback when sub-routine is completed"
             (assertInOrder [ assertEventType SupervisedChildCompleted ])
@@ -276,13 +276,142 @@ tests =
 
         ]
 
-      -- , testSupervisor "does call onError callback when sub-routine fails"
-      -- , testSupervisor "does not call onError callback when sub-routine is completed"
-      -- , testSupervisor "does not call onError callback when sub-routine is terminated"
+      , testGroup "childOnFailure"
+        [
+          testSupervisor "does execute callback when sub-routine fails"
+            (assertInOrder [ assertEventType SupervisedChildFailed ])
+            (\supervisor -> do
+               callbackVar <- newEmptyMVar
+               _childId <- SUT.forkChild
+                             (SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary
+                                                  , SUT.childOnFailure = const $ putMVar callbackVar ()
+                                                  })
+                             (throwIO RestartingChildError)
+                             supervisor
+               race_ (threadDelay 100 >> throwIO TimeoutError) (takeMVar callbackVar)
+            )
+
+        , testSupervisor "does not execute callback when sub-routine is completed"
+            (assertInOrder [ assertEventType SupervisedChildCompleted ])
+            (\supervisor -> do
+               callbackVar <- newMVar ()
+               _childId <- SUT.forkChild
+                             (SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary
+                                                  , SUT.childOnFailure = const $ takeMVar callbackVar
+                                                  })
+                             (return ())
+                             supervisor
+
+               threadDelay 100
+               wasEmpty <- isEmptyMVar callbackVar
+               assertBool "Expecting childOnFailure to not get called, but it was" (not wasEmpty)
+            )
+
+        , testSupervisor "does not execute callback when sub-routine is terminated"
+            (assertInOrder [ assertEventType SupervisedChildTerminated ])
+            (\supervisor -> do
+               callbackVar <- newMVar ()
+               childId <- SUT.forkChild
+                             (SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary
+                                                  , SUT.childOnFailure = const $ takeMVar callbackVar
+                                                  })
+                             (forever $ threadDelay 1000100)
+                             supervisor
+
+               SUT.terminateChild "testing onFailure callback" childId supervisor
+               threadDelay 100
+
+               wasEmpty <- isEmptyMVar callbackVar
+               assertBool "Expecting childOnFailure to not get called, but it was" (not wasEmpty)
+            )
+
+        , testSupervisor "treats as sub-routine failed if callback fails"
+            (assertInOrder [ andP [ assertEventType SupervisedChildFailed
+                                  , assertErrorType "ChildCallbackException"
+                                  ]
+                           ])
+            (\supervisor -> do
+                 _childId <- SUT.forkChild
+                               (SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary
+                                                    , SUT.childOnFailure = const $ throwIO RestartingChildError
+                                                    })
+                               (throwIO (ErrorCall "surprise"))
+                               supervisor
+                 threadDelay 100
+            )
+        ]
+
+      , testGroup "childOnTermination"
+        [
+          testSupervisor "does execute callback when sub-routine is terminated"
+            (assertInOrder [ assertEventType SupervisedChildTerminated ])
+            (\supervisor -> do
+               callbackVar <- newEmptyMVar
+               childId <- SUT.forkChild
+                             (SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary
+                                                  , SUT.childOnTermination = putMVar callbackVar ()
+                                                  })
+                             (forever $ threadDelay 1000100)
+                             supervisor
+
+               SUT.terminateChild "testing childOnTermination callback" childId supervisor
+               race_ (threadDelay 100 >> throwIO TimeoutError) (takeMVar callbackVar)
+            )
+
+        , testSupervisor "does not execute callback when sub-routine is completed"
+            (assertInOrder [ assertEventType SupervisedChildCompleted ])
+            (\supervisor -> do
+               callbackVar <- newMVar ()
+               _childId <- SUT.forkChild
+                             (SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary
+                                                  , SUT.childOnTermination = takeMVar callbackVar
+                                                  })
+                             (return ())
+                             supervisor
+
+               threadDelay 100
+               wasEmpty <- isEmptyMVar callbackVar
+               assertBool "Expecting childOnTermination to not get called, but it was" (not wasEmpty)
+            )
+
+        , testSupervisor "does not execute callback when sub-routine fails"
+            (assertInOrder [ assertEventType SupervisedChildFailed ])
+            (\supervisor -> do
+               callbackVar <- newMVar ()
+               _childId <- SUT.forkChild
+                             (SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary
+                                                  , SUT.childOnTermination = takeMVar callbackVar
+                                                  })
+                             (throwIO (ErrorCall "surprise!"))
+                             supervisor
+
+               threadDelay 100
+               wasEmpty <- isEmptyMVar callbackVar
+               assertBool "Expecting childOnTermination to not get called, but it was" (not wasEmpty)
+            )
+
+        , testSupervisor "treats as sub-routine failed if callback fails"
+            (assertInOrder [ andP [ assertEventType SupervisedChildFailed
+                                  , assertErrorType "ChildCallbackException"
+                                  ]
+                           ])
+            (\supervisor -> do
+                 childId <- SUT.forkChild
+                               (SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary
+                                                    , SUT.childOnTermination = throwIO RestartingChildError
+                                                    })
+                               (forever $ threadDelay 10001000)
+                               supervisor
+
+                 SUT.terminateChild "testing childOnTermination callback" childId supervisor
+                 threadDelay 100
+            )
+        ]
 
       -- , testSupervisor "does call onTerminated callback when sub-routine is terminated"
       -- , testSupervisor "does not call onTerminated callback when sub-routine is completed"
       -- , testSupervisor "does not call onTerminated callback when sub-routine failes"
+      -- , testSupervisor "treats as sub-routine failed if callback fails"
       ]
 
       , testGroup "with transient strategy"

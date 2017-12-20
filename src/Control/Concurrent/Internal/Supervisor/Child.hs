@@ -1,7 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
-{-# LANGUAGE OverloadedStrings     #-}
 module Control.Concurrent.Internal.Supervisor.Child where
 
 import Protolude
@@ -26,13 +25,13 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
       resultEvent      <- case eResult of
         Left err -> case fromException err of
           Just TerminateChildException { childTerminationReason } -> do
-            eErrResult <- try $ unmask $ childOnTermination
+            eErrResult <- try $ unmask childOnTermination
             case eErrResult of
               Left childCallbackError -> return ChildFailed
                 { childName
                 , childId
                 , monitorEventTime
-                , childError        = toException $ ChildCallbackFailed
+                , childError        = toException ChildCallbackFailed
                   { childId
                   , childCallbackError
                   , childActionError   = Just err
@@ -55,7 +54,7 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
                 , childId
                 , monitorEventTime
                 , childRestartCount = restartCount
-                , childError        = toException $ ChildCallbackFailed
+                , childError        = toException ChildCallbackFailed
                   { childId
                   , childCallbackError
                   , childActionError   = Just err
@@ -75,7 +74,7 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
               { childName
               , childId
               , monitorEventTime
-              , childError        = toException $ ChildCallbackFailed
+              , childError        = toException ChildCallbackFailed
                 { childId
                 , childCallbackError = err
                 , childActionError   = Nothing
@@ -124,7 +123,7 @@ forkChild
 forkChild env childSpec mRestartInfo = do
   (childId, restartCount) <- case mRestartInfo of
     Just (childId, restartCount) -> pure (childId, restartCount)
-    Nothing                      -> ((,) <$> UUID.nextRandom <*> pure 0)
+    Nothing                      -> (,) <$> UUID.nextRandom <*> pure 0
 
   child <- childMain env childSpec childId restartCount
   appendChildToMap   env          childId child
@@ -136,7 +135,7 @@ terminateChild childTerminationReason env@SupervisorEnv { supervisorName, superv
   = withChildEnv env childId $ \ChildEnv { childName, childAsync } -> do
     eventTime <- getCurrentTime
     notifyEvent
-      ( SupervisedChildTerminated
+      SupervisedChildTerminated
         { supervisorName
         , supervisorId
         , childId
@@ -145,9 +144,8 @@ terminateChild childTerminationReason env@SupervisorEnv { supervisorName, superv
         , terminationReason = childTerminationReason
         , childThreadId     = asyncThreadId childAsync
         }
-      )
     cancelWith childAsync
-               (TerminateChildException {childId , childTerminationReason })
+               TerminateChildException {childId , childTerminationReason }
     wait childAsync
 
 terminateChildren :: Text -> SupervisorEnv -> IO ()
@@ -157,21 +155,19 @@ terminateChildren terminationReason env@SupervisorEnv { supervisorName, supervis
     childrenIds <- HashMap.keys <$> readIORef supervisorChildMap
 
     notifyEvent
-      ( SupervisedChildrenTerminationStarted
+      SupervisedChildrenTerminationStarted
         { supervisorName
         , supervisorId
         , terminationReason
         , eventTime
         }
-      )
 
     forM_ childrenIds (terminateChild terminationReason env)
 
     notifyEvent
-      ( SupervisedChildrenTerminationFinished
+      SupervisedChildrenTerminationFinished
         { supervisorName
         , supervisorId
         , terminationReason
         , eventTime
         }
-      )

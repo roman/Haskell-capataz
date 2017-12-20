@@ -32,11 +32,11 @@ main = defaultMainWithIngredients
 fetchRecordName :: Show a => a -> Text
 fetchRecordName = T.takeWhile (/= ' ') . show
 
-andP :: [(a -> Bool)] -> a -> Bool
-andP predList a = and $ map ($ a) predList
+andP :: [a -> Bool] -> a -> Bool
+andP predList a = all ($ a) predList
 
-orP :: [(a -> Bool)] -> a -> Bool
-orP predList a = or $ map ($ a) predList
+orP :: [a -> Bool] -> a -> Bool
+orP predList a = any ($ a) predList
 
 --------------------------------------------------------------------------------
 -- Assertions and Testers
@@ -55,11 +55,11 @@ assertInOrder assertions0 events0 =
           | otherwise         -> loop assertions events'
         (assertions', []) -> assertFailure
           (  "Expected all assertions to match, but didn't ("
-          <> (show $ length assertions')
+          <> show (length assertions')
           <> " assertions remaining, "
-          <> (show $ length events0)
+          <> show (length events0)
           <> " events tried)\n"
-          <> (ppShow $ zip ([0 ..] :: [Int]) events0)
+          <> ppShow (zip ([0 ..] :: [Int]) events0)
           )
   in  loop assertions0 events0
 
@@ -68,9 +68,9 @@ assertAll predFn events = if all predFn events
   then return ()
   else assertFailure
     (  "Expected all events to match predicate, but didn't ("
-    <> (show $ length events)
+    <> show (length events)
     <> " events tried)\n"
-    <> (ppShow $ zip ([0 ..] :: [Int]) events)
+    <> ppShow (zip ([0 ..] :: [Int]) events)
     )
 
 data EventType
@@ -159,7 +159,7 @@ testSupervisorWithOptions
 testSupervisorWithOptions testCaseStr assertionsFn optionModFn setupFn =
   testCase testCaseStr $ do
     accRef     <- newIORef []
-    supervisor <- SUT.forkSupervisor $ (optionModFn $ SUT.defSupervisorOptions)
+    supervisor <- SUT.forkSupervisor $ (optionModFn SUT.defSupervisorOptions)
       { SUT.notifyEvent = trackEvent accRef
       }
     result :: Either SomeException () <- try
@@ -177,8 +177,8 @@ testSupervisor
   -> ([SUT.SupervisorEvent] -> IO ())
   -> (SUT.Supervisor -> IO ())
   -> TestTree
-testSupervisor testCaseStr assertionsFn setupFn =
-  testSupervisorWithOptions testCaseStr assertionsFn identity setupFn
+testSupervisor testCaseStr assertionsFn =
+  testSupervisorWithOptions testCaseStr assertionsFn identity
 
 --------------------------------------------------------------------------------
 -- Actual Tests

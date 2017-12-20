@@ -160,7 +160,7 @@ forkSupervisor supervisorOptions@SupervisorOptions { supervisorName } = do
       status <- readSupervisorStatus supervisorEnv
       case status of
         Halted -> return ()
-        _      -> do
+        _      ->
           sendSyncControlMsg supervisorEnv TerminateSupervisor
     )
 
@@ -175,13 +175,12 @@ forkChild childOptions childAction Supervisor { supervisorEnv } = do
   atomically $ writeTQueue
     supervisorQueue
     (ControlAction ForkChild {childSpec , returnChildId = putMVar childIdVar})
-  childId <- takeMVar childIdVar
-  return childId
+  takeMVar childIdVar
 
 terminateChild :: Text -> ChildId -> Supervisor -> IO ()
 terminateChild terminationReason childId Supervisor { supervisorEnv } =
   sendSyncControlMsg
     supervisorEnv
     ( \notifyChildTermination ->
-      TerminateChild {terminationReason , childId , notifyChildTermination }
+      TerminateChild {terminationReason , childId , notifyChildTermination}
     )

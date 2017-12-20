@@ -1,7 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
-{-# LANGUAGE OverloadedStrings     #-}
 module Control.Concurrent.Internal.Supervisor.Restart where
 
 import Data.Time.Clock (NominalDiffTime, UTCTime, diffUTCTime, getCurrentTime)
@@ -41,7 +40,7 @@ calcRestartAction SupervisorEnv { supervisorIntensity, supervisorPeriodSeconds }
       -> IncreaseRestartCount
 
 execSupervisorRestartStrategy :: SupervisorEnv -> ChildEnv -> Int -> IO ()
-execSupervisorRestartStrategy supervisorEnv@(SupervisorEnv { supervisorRestartStrategy }) childEnv@ChildEnv { childId, childSpec } childRestartCount
+execSupervisorRestartStrategy supervisorEnv@SupervisorEnv { supervisorRestartStrategy } childEnv@ChildEnv { childId, childSpec } childRestartCount
   = case supervisorRestartStrategy of
     AllForOne childTerminationOrder -> do
       appendChildToMap supervisorEnv childId               (envToChild childEnv)
@@ -56,7 +55,7 @@ execRestartAction supervisorEnv childEnv@ChildEnv { childId, childName, childCre
       <$> calcDiffSeconds childCreationTime
 
     case restartAction of
-      HaltSupervisor -> throwIO $ SupervisorIntensityReached
+      HaltSupervisor -> throwIO SupervisorIntensityReached
         { childId
         , childName
         , childRestartCount
@@ -79,7 +78,7 @@ restartChildren supervisorEnv childTerminationOrder restartCount = do
 
   let children = sortChildrenByTerminationOrder childTerminationOrder childMap
 
-  forM_ children $ \(Child { childId, childSpec }) -> do
+  forM_ children $ \Child { childId, childSpec } -> do
     let ChildSpec { childRestartStrategy } = childSpec
     case childRestartStrategy of
       Temporary -> return ()
@@ -94,7 +93,7 @@ restartChild supervisorEnv childSpec childId restartCount =
 
 handleChildCompleted :: SupervisorEnv -> ChildId -> UTCTime -> IO ()
 handleChildCompleted env@SupervisorEnv { supervisorName, supervisorId, notifyEvent } childId eventTime
-  = do
+  =
     removeChildFromMap env childId
       $ \childEnv@ChildEnv { childName, childAsync, childRestartStrategy } -> do
           notifyEvent SupervisedChildCompleted
@@ -123,7 +122,7 @@ handleChildFailed env@SupervisorEnv { supervisorName, supervisorId, notifyEvent 
     $ \childEnv@ChildEnv { childName, childRestartStrategy, childAsync } -> do
         eventTime <- getCurrentTime
         notifyEvent
-          ( SupervisedChildFailed
+          SupervisedChildFailed
             { supervisorName
             , supervisorId
             , childId
@@ -132,7 +131,6 @@ handleChildFailed env@SupervisorEnv { supervisorName, supervisorId, notifyEvent 
             , childThreadId  = asyncThreadId childAsync
             , eventTime
             }
-          )
         case childRestartStrategy of
           Temporary -> return ()
           _         -> execRestartAction env childEnv restartCount

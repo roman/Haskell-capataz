@@ -71,7 +71,7 @@ writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorSt
       }
 
 resetChildMap :: SupervisorEnv -> IO ChildMap
-resetChildMap (SupervisorEnv { supervisorChildMap }) =
+resetChildMap SupervisorEnv { supervisorChildMap } =
   atomicModifyIORef' supervisorChildMap (\childMap -> (HashMap.empty, childMap))
 
 sortChildrenByTerminationOrder :: ChildTerminationOrder -> ChildMap -> [Child]
@@ -81,7 +81,7 @@ sortChildrenByTerminationOrder terminationOrder childMap =
     NewestFirst -> reverse children
  where
     -- NOTE: dissambiguates childCreationTime field
-  childCreationTime' (Child { childCreationTime }) = childCreationTime
+  childCreationTime' Child { childCreationTime } = childCreationTime
 
   children = sortBy (comparing childCreationTime') (HashMap.elems childMap)
 

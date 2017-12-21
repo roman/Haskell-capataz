@@ -140,15 +140,19 @@ failingChild failCount = do
                                      (\count -> (pred count, count > 0))
     if shouldFail then throwIO RestartingChildError else threadDelay 1000100
 
-completingChild :: Int -> Int -> IO (IO ())
+completingChild :: Int -> Int -> IO (IO (), IO ())
 completingChild execCount delayMicros = do
+  lockVar  <- newEmptyMVar
   countRef <- newIORef execCount
-  return $ do
-    shouldComplete <- atomicModifyIORef' countRef
-                                         (\count -> (pred count, count > 0))
-    if shouldComplete
-      then threadDelay delayMicros
-      else forever $ threadDelay 1000100
+  let childAction :: IO ()
+      childAction = do
+        shouldComplete <- atomicModifyIORef' countRef
+                                             (\count -> (pred count, count > 0))
+        if shouldComplete
+          then threadDelay delayMicros
+          else putMVar lockVar () >> forever (threadDelay 10001000)
+  return (childAction, takeMVar lockVar)
+
 
 testSupervisorWithOptions
   :: [Char]
@@ -447,7 +451,8 @@ tests
           ]
         , testGroup
           "childOnTermination"
-          [ testSupervisor
+          [ -- TODO "it brutally kills child after TimeoutSeconds are passed"
+            testSupervisor
             "does execute callback when sub-routine is terminated"
             (assertInOrder [assertEventType SupervisedChildTerminated])
             ( \supervisor -> do
@@ -624,12 +629,12 @@ tests
             ]
           )
           ( \supervisor -> do
-            childAction <- completingChild 1 1
+            (childAction, waitCompletion) <- completingChild 1 1
             _childId    <- SUT.forkChild
               SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
               childAction
               supervisor
-            threadDelay 100
+            waitCompletion
           )
         , testSupervisor
           "does not increase restart count on multiple completions"
@@ -645,12 +650,12 @@ tests
             ]
           )
           ( \supervisor -> do
-            childAction <- completingChild 2 1
+            (childAction, waitCompletion) <- completingChild 2 1
             _childId    <- SUT.forkChild
               SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
               childAction
               supervisor
-            threadDelay 500
+            waitCompletion
           )
         , testSupervisor
           "does restart on termination"

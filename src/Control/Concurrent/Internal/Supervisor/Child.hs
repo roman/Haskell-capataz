@@ -45,8 +45,17 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
                 , childName
                 , monitorEventTime
                 , childTerminationReason
-                , childRestartCount      = restartCount
+                , childRestartCount = restartCount
                 }
+
+          Just (BrutallyTerminateChildException {childTerminationReason}) -> return ChildTerminated
+                { childId
+                , childName
+                , monitorEventTime
+                , childTerminationReason
+                , childRestartCount = restartCount
+                }
+
 
           Nothing -> do
             eErrResult <- try $ unmask $ childOnFailure err
@@ -133,7 +142,7 @@ forkChild env childSpec mRestartInfo = do
   return childId
 
 terminateChild :: Text -> SupervisorEnv -> Child -> IO ()
-terminateChild childTerminationReason SupervisorEnv { supervisorName, supervisorId, notifyEvent } Child {childId, childName, childAsync}
+terminateChild childTerminationReason SupervisorEnv { supervisorName, supervisorId, supervisorChildTerminationPolicy, notifyEvent } Child {childId, childName, childAsync}
   = do
     eventTime <- getCurrentTime
     notifyEvent
@@ -146,9 +155,15 @@ terminateChild childTerminationReason SupervisorEnv { supervisorName, supervisor
         , terminationReason = childTerminationReason
         , childThreadId     = asyncThreadId childAsync
         }
-    cancelWith childAsync
-               TerminateChildException {childId , childTerminationReason }
-    wait childAsync
+
+    case supervisorChildTerminationPolicy of
+      BrutalTermination ->
+        cancelWith childAsync
+                   BrutallyTerminateChildException {childId , childTerminationReason }
+      TimeoutSeconds n -> do
+        cancelWith childAsync
+                   TerminateChildException {childId , childTerminationReason }
+        race_ (threadDelay (n * 1000000)) (wait childAsync)
 
 terminateChildren :: Text -> SupervisorEnv -> IO ()
 terminateChildren terminationReason env@SupervisorEnv { supervisorName, supervisorId, supervisorChildTerminationOrder, notifyEvent }

@@ -242,6 +242,10 @@ data SupervisorSignal
       childId                :: !ChildId
     , childTerminationReason :: !Text
     }
+  | BrutallyTerminateChildException {
+      childId                :: !ChildId
+    , childTerminationReason :: !Text
+    }
     deriving (Generic, Show)
 
 instance Exception SupervisorSignal

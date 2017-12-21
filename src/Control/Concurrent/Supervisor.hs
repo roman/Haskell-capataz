@@ -10,6 +10,7 @@ import Control.Concurrent.Internal.Supervisor.Core  as Core
     (forkChild, forkSupervisor, terminateChild)
 import Control.Concurrent.Internal.Supervisor.Types as Types
     ( ChildAction
+    , ChildSpec (..)
     , ChildOptions (..)
     , ChildRestartStrategy (..)
     , ChildTerminationOrder (..)
@@ -19,6 +20,7 @@ import Control.Concurrent.Internal.Supervisor.Types as Types
     , SupervisorRestartStrategy (..)
     , SupervisorStatus (..)
     , defChildOptions
+    , defChildSpec
     , defSupervisorOptions
     )
 import Control.Teardown                             as Teardown (teardown)

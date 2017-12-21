@@ -135,7 +135,7 @@ instance Default ChildTerminationOrder where
 instance NFData ChildTerminationOrder
 
 data SupervisorRestartStrategy
-  = AllForOne !ChildTerminationOrder
+  = AllForOne
     -- ^ Terminate all children threads when one fails and restart them all
   | OneForOne
     -- ^ Only restart child thread that terminated
@@ -154,6 +154,8 @@ data SupervisorOptions
   , supervisorPeriodSeconds          :: !NominalDiffTime
   , supervisorRestartStrategy        :: !SupervisorRestartStrategy
   , supervisorChildTerminationPolicy :: !ChildTerminationPolicy
+  , supervisorChildSpecList          :: ![ChildSpec]
+  , supervisorChildTerminationOrder  :: !ChildTerminationOrder
   , notifyEvent                      :: !(SupervisorEvent -> IO ())
   }
 
@@ -336,6 +338,7 @@ data SupervisorEnv
   , supervisorPeriodSeconds          :: !NominalDiffTime
   , supervisorRestartStrategy        :: !SupervisorRestartStrategy
   , supervisorChildTerminationPolicy :: !ChildTerminationPolicy
+  , supervisorChildTerminationOrder  :: !ChildTerminationOrder
   , notifyEvent                      :: !(SupervisorEvent -> IO ())
   }
 
@@ -348,12 +351,24 @@ defSupervisorOptions = SupervisorOptions
   , supervisorPeriodSeconds          = 5
   , supervisorRestartStrategy        = def
   , supervisorChildTerminationPolicy = def
+  , supervisorChildSpecList          = []
+  , supervisorChildTerminationOrder  = OldestFirst
   , notifyEvent                      = const $ return ()
   }
 
 defChildOptions :: ChildOptions
 defChildOptions = ChildOptions
   { childName            = "default-child"
+  , childOnFailure       = const $ return ()
+  , childOnCompletion    = return ()
+  , childOnTermination   = return ()
+  , childRestartStrategy = def
+  }
+
+defChildSpec :: ChildSpec
+defChildSpec = ChildSpec
+  { childName            = "default-child"
+  , childAction          = return ()
   , childOnFailure       = const $ return ()
   , childOnCompletion    = return ()
   , childOnTermination   = return ()

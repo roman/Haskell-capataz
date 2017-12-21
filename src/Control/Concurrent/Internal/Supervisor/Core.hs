@@ -29,6 +29,7 @@ import Control.Concurrent.Internal.Supervisor.Util
     , sendSyncControlMsg
     , supervisorToEnv
     , writeSupervisorStatus
+    , withChild
     )
 
 --------------------------------------------------------------------------------
@@ -59,8 +60,9 @@ handleControlAction env controlAction = case controlAction of
     return True
 
   TerminateChild { terminationReason, childId, notifyChildTermination } -> do
-    Child.terminateChild terminationReason env childId
-    notifyChildTermination
+    withChild env childId $ \child -> do
+      Child.terminateChild terminationReason env child
+      notifyChildTermination
     return True
 
   TerminateSupervisor { notifySupervisorTermination } -> do
@@ -144,13 +146,16 @@ buildSupervisorRuntime supervisorOptions = do
   return SupervisorRuntime {..}
 
 forkSupervisor :: SupervisorOptions -> IO Supervisor
-forkSupervisor supervisorOptions@SupervisorOptions { supervisorName } = do
+forkSupervisor supervisorOptions@SupervisorOptions { supervisorName, supervisorChildSpecList } = do
   supervisorRuntime <- buildSupervisorRuntime supervisorOptions
 
   let supervisorEnv = supervisorToEnv supervisorRuntime
 
   supervisorAsync <- asyncWithUnmask
     $ \unmask -> runSupervisorLoop unmask supervisorEnv
+
+  forM_ supervisorChildSpecList
+    (\childSpec -> Child.forkChild supervisorEnv childSpec Nothing)
 
   writeSupervisorStatus supervisorEnv Running
 

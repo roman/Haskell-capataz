@@ -6,14 +6,16 @@ module Control.Concurrent.Internal.Supervisor.Child where
 import Protolude
 
 import Control.Concurrent.STM.TQueue (writeTQueue)
-import Data.IORef                    (readIORef)
 import Data.Time.Clock               (getCurrentTime)
 
-import qualified Data.HashMap.Strict as HashMap
 import qualified Data.UUID.V4        as UUID
 
 import Control.Concurrent.Internal.Supervisor.Types
-import Control.Concurrent.Internal.Supervisor.Util  (appendChildToMap, withChildEnv)
+import Control.Concurrent.Internal.Supervisor.Util  (
+      appendChildToMap
+    , resetChildMap
+    , sortChildrenByTerminationOrder
+    )
 
 childMain :: SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO Child
 childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, childAction, childOnFailure, childOnCompletion, childOnTermination } childId restartCount
@@ -130,9 +132,9 @@ forkChild env childSpec mRestartInfo = do
   notifyChildStarted mRestartInfo env     child
   return childId
 
-terminateChild :: Text -> SupervisorEnv -> ChildId -> IO ()
-terminateChild childTerminationReason env@SupervisorEnv { supervisorName, supervisorId, notifyEvent } childId
-  = withChildEnv env childId $ \ChildEnv { childName, childAsync } -> do
+terminateChild :: Text -> SupervisorEnv -> Child -> IO ()
+terminateChild childTerminationReason SupervisorEnv { supervisorName, supervisorId, notifyEvent } Child {childId, childName, childAsync}
+  = do
     eventTime <- getCurrentTime
     notifyEvent
       SupervisedChildTerminated
@@ -149,10 +151,11 @@ terminateChild childTerminationReason env@SupervisorEnv { supervisorName, superv
     wait childAsync
 
 terminateChildren :: Text -> SupervisorEnv -> IO ()
-terminateChildren terminationReason env@SupervisorEnv { supervisorName, supervisorId, supervisorChildMap, notifyEvent }
+terminateChildren terminationReason env@SupervisorEnv { supervisorName, supervisorId, supervisorChildTerminationOrder, notifyEvent }
   = do
-    eventTime   <- getCurrentTime
-    childrenIds <- HashMap.keys <$> readIORef supervisorChildMap
+    eventTime <- getCurrentTime
+    childMap <- resetChildMap env
+    let children = sortChildrenByTerminationOrder supervisorChildTerminationOrder childMap
 
     notifyEvent
       SupervisedChildrenTerminationStarted
@@ -162,7 +165,7 @@ terminateChildren terminationReason env@SupervisorEnv { supervisorName, supervis
         , eventTime
         }
 
-    forM_ childrenIds (terminateChild terminationReason env)
+    forM_ children (terminateChild terminationReason env)
 
     notifyEvent
       SupervisedChildrenTerminationFinished

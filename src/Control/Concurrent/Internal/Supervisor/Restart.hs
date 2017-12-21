@@ -42,9 +42,9 @@ calcRestartAction SupervisorEnv { supervisorIntensity, supervisorPeriodSeconds }
 execSupervisorRestartStrategy :: SupervisorEnv -> ChildEnv -> Int -> IO ()
 execSupervisorRestartStrategy supervisorEnv@SupervisorEnv { supervisorRestartStrategy } childEnv@ChildEnv { childId, childSpec } childRestartCount
   = case supervisorRestartStrategy of
-    AllForOne childTerminationOrder -> do
-      appendChildToMap supervisorEnv childId               (envToChild childEnv)
-      restartChildren  supervisorEnv childTerminationOrder childRestartCount
+    AllForOne -> do
+      appendChildToMap supervisorEnv childId (envToChild childEnv)
+      restartChildren  supervisorEnv childRestartCount
 
     OneForOne -> restartChild supervisorEnv childSpec childId childRestartCount
 
@@ -72,11 +72,11 @@ execRestartAction supervisorEnv childEnv@ChildEnv { childId, childName, childCre
 --------------------------------------------------------------------------------
 
 restartChildren
-  :: SupervisorEnv -> ChildTerminationOrder -> RestartCount -> IO ()
-restartChildren supervisorEnv childTerminationOrder restartCount = do
+  :: SupervisorEnv -> RestartCount -> IO ()
+restartChildren supervisorEnv@SupervisorEnv {supervisorChildTerminationOrder} restartCount = do
   childMap <- resetChildMap supervisorEnv
 
-  let children = sortChildrenByTerminationOrder childTerminationOrder childMap
+  let children = sortChildrenByTerminationOrder supervisorChildTerminationOrder childMap
 
   forM_ children $ \Child { childId, childSpec } -> do
     let ChildSpec { childRestartStrategy } = childSpec

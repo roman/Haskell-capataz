@@ -185,29 +185,83 @@ testSupervisor testCaseStr assertionsFn =
 
 tests :: [TestTree]
 tests
-  = [ testSupervisor
-      "basic initialize and teardown work as expected"
-      ( assertInOrder
-        [ andP
-          [ assertEventType SupervisorStatusChanged
-          , assertSupervisorStatusChanged SUT.Initializing SUT.Running
+  = [
+      testGroup "supervisor without childSpecList"
+      [
+        testSupervisor
+        "initialize and teardown works as expected"
+        ( assertInOrder
+          [ andP
+            [ assertEventType SupervisorStatusChanged
+            , assertSupervisorStatusChanged SUT.Initializing SUT.Running
+            ]
+          , andP
+            [ assertEventType SupervisorStatusChanged
+            , assertSupervisorStatusChanged SUT.Running SUT.Halted
+            ]
           ]
-        , andP
-          [ assertEventType SupervisorStatusChanged
-          , assertSupervisorStatusChanged SUT.Running SUT.Halted
+        )
+        (\_supervisor -> threadDelay 500)
+      ]
+    , testGroup "supervisor with childSpecList"
+      [
+        testSupervisorWithOptions
+        "initialize and teardown works as expected"
+        ( assertInOrder
+          [ andP
+            [
+              assertEventType SupervisedChildStarted
+            , assertChildName "A"
+            ]
+          , andP
+            [
+              assertEventType SupervisedChildStarted
+            , assertChildName "B"
+            ]
+          , andP
+            [ assertEventType SupervisorStatusChanged
+            , assertSupervisorStatusChanged SUT.Initializing SUT.Running
+            ]
+          , assertEventType SupervisedChildrenTerminationStarted
+          , andP
+            [
+              assertEventType SupervisedChildTerminated
+            , assertChildName "A"
+            ]
+          , andP
+            [
+              assertEventType SupervisedChildTerminated
+            , assertChildName "B"
+            ]
+          , assertEventType SupervisedChildrenTerminationFinished
+          , andP
+            [ assertEventType SupervisorStatusChanged
+            , assertSupervisorStatusChanged SUT.Running SUT.Halted
+            ]
           ]
-        ]
-      )
-      (\_supervisor -> threadDelay 500)
+        )
+        (\supOptions ->
+           supOptions {
+            SUT.supervisorChildSpecList =
+                [ SUT.defChildSpec
+                  { SUT.childName = "A"
+                  , SUT.childAction = (forever $ threadDelay 1000100) }
+                , SUT.defChildSpec
+                  { SUT.childName = "B"
+                  , SUT.childAction = (forever $ threadDelay 1000100) }
+                ]
+            })
+        (\_supervisor -> threadDelay 500)
+      ]
     , testSupervisor
-      "reports an error when supervisor thread fails"
+      "reports supervisor error when supervisor thread receives async exception"
       (assertInOrder [assertEventType SupervisorFailed])
       ( \SUT.Supervisor { supervisorAsync } -> do
         threadDelay 100
         cancelWith supervisorAsync (ErrorCall "async exception")
       )
     , testSupervisor
-      "reports an error when child retries violate restart intesity"
+      "reports supervisor error when child retries violate restart intesity"
       ( assertInOrder
         [ assertEventType SupervisedChildFailed
         , assertEventType SupervisedChildFailed
@@ -830,7 +884,8 @@ tests
             ]
           )
           ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy = SUT.AllForOne SUT.OldestFirst
+            { SUT.supervisorRestartStrategy = SUT.AllForOne
+            , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
             }
           )
           ( \supervisor -> do
@@ -863,7 +918,8 @@ tests
             ]
           )
           ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy = SUT.AllForOne SUT.NewestFirst
+            { SUT.supervisorRestartStrategy = SUT.AllForOne
+            , SUT.supervisorChildTerminationOrder = SUT.NewestFirst
             }
           )
           ( \supervisor -> do
@@ -908,7 +964,8 @@ tests
             ]
           )
           ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy = SUT.AllForOne SUT.OldestFirst
+            { SUT.supervisorRestartStrategy = SUT.AllForOne
+            , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
             }
           )
           ( \supervisor -> do
@@ -941,7 +998,8 @@ tests
             ]
           )
           ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy = SUT.AllForOne SUT.OldestFirst
+            { SUT.supervisorRestartStrategy = SUT.AllForOne
+            , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
             }
           )
           ( \supervisor -> do

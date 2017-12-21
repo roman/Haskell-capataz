@@ -22,6 +22,11 @@ withChildEnv SupervisorEnv { supervisorChildMap } childId withChildFn = do
   childMap <- readIORef supervisorChildMap
   maybe (return ()) (withChildFn . childToEnv) (HashMap.lookup childId childMap)
 
+withChild :: SupervisorEnv -> ChildId -> (Child -> IO ()) -> IO ()
+withChild SupervisorEnv { supervisorChildMap } childId withChildFn = do
+  childMap <- readIORef supervisorChildMap
+  maybe (return ()) withChildFn (HashMap.lookup childId childMap)
+
 
 appendChildToMap :: SupervisorEnv -> ChildId -> Child -> IO ()
 appendChildToMap SupervisorEnv { supervisorChildMap } childId child =

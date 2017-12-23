@@ -44,7 +44,7 @@ execSupervisorRestartStrategy supervisorEnv@SupervisorEnv { supervisorRestartStr
   = case supervisorRestartStrategy of
     AllForOne -> do
       appendChildToMap supervisorEnv childId (envToChild childEnv)
-      restartChildren  supervisorEnv childRestartCount
+      restartChildren supervisorEnv childRestartCount
 
     OneForOne -> restartChild supervisorEnv childSpec childId childRestartCount
 
@@ -71,18 +71,20 @@ execRestartAction supervisorEnv childEnv@ChildEnv { childId, childName, childCre
 
 --------------------------------------------------------------------------------
 
-restartChildren
-  :: SupervisorEnv -> RestartCount -> IO ()
-restartChildren supervisorEnv@SupervisorEnv {supervisorChildTerminationOrder} restartCount = do
-  childMap <- resetChildMap supervisorEnv
+restartChildren :: SupervisorEnv -> RestartCount -> IO ()
+restartChildren supervisorEnv@SupervisorEnv { supervisorChildTerminationOrder } restartCount
+  = do
+    childMap <- resetChildMap supervisorEnv
 
-  let children = sortChildrenByTerminationOrder supervisorChildTerminationOrder childMap
+    let children = sortChildrenByTerminationOrder
+          supervisorChildTerminationOrder
+          childMap
 
-  forM_ children $ \Child { childId, childSpec } -> do
-    let ChildSpec { childRestartStrategy } = childSpec
-    case childRestartStrategy of
-      Temporary -> return ()
-      _         -> restartChild supervisorEnv childSpec childId restartCount
+    forM_ children $ \Child { childId, childSpec } -> do
+      let ChildSpec { childRestartStrategy } = childSpec
+      case childRestartStrategy of
+        Temporary -> return ()
+        _         -> restartChild supervisorEnv childSpec childId restartCount
 
 
 restartChild :: SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO ()
@@ -93,44 +95,42 @@ restartChild supervisorEnv childSpec childId restartCount =
 
 handleChildCompleted :: SupervisorEnv -> ChildId -> UTCTime -> IO ()
 handleChildCompleted env@SupervisorEnv { supervisorName, supervisorId, notifyEvent } childId eventTime
-  =
-    removeChildFromMap env childId
-      $ \childEnv@ChildEnv { childName, childAsync, childRestartStrategy } -> do
-          notifyEvent SupervisedChildCompleted
-            { supervisorId
-            , supervisorName
-            , childId
-            , childName
-            , eventTime
-            , childThreadId  = asyncThreadId childAsync
-            }
-          case childRestartStrategy of
-            Permanent -> do
-              -- NOTE: Completed children should never account as errors happening on
-              -- a supervised thread, ergo, they should be restarted every time.
+  = removeChildFromMap env childId
+    $ \childEnv@ChildEnv { childName, childAsync, childRestartStrategy } -> do
+        notifyEvent SupervisedChildCompleted
+          { supervisorId
+          , supervisorName
+          , childId
+          , childName
+          , eventTime
+          , childThreadId  = asyncThreadId childAsync
+          }
+        case childRestartStrategy of
+          Permanent -> do
+            -- NOTE: Completed children should never account as errors happening on
+            -- a supervised thread, ergo, they should be restarted every time.
 
-              -- TODO: Notify a warning around having a childRestartStrategy different
-              -- than Temporary on children that may complete.
-              let restartCount = 0
-              execRestartAction env childEnv restartCount
+            -- TODO: Notify a warning around having a childRestartStrategy different
+            -- than Temporary on children that may complete.
+            let restartCount = 0
+            execRestartAction env childEnv restartCount
 
-            _ -> return ()
+          _ -> return ()
 
 handleChildFailed :: SupervisorEnv -> ChildId -> SomeException -> Int -> IO ()
 handleChildFailed env@SupervisorEnv { supervisorName, supervisorId, notifyEvent } childId childError restartCount
   = removeChildFromMap env childId
     $ \childEnv@ChildEnv { childName, childRestartStrategy, childAsync } -> do
         eventTime <- getCurrentTime
-        notifyEvent
-          SupervisedChildFailed
-            { supervisorName
-            , supervisorId
-            , childId
-            , childName
-            , childError
-            , childThreadId  = asyncThreadId childAsync
-            , eventTime
-            }
+        notifyEvent SupervisedChildFailed
+          { supervisorName
+          , supervisorId
+          , childId
+          , childName
+          , childError
+          , childThreadId  = asyncThreadId childAsync
+          , eventTime
+          }
         case childRestartStrategy of
           Temporary -> return ()
           _         -> execRestartAction env childEnv restartCount

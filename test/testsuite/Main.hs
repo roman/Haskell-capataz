@@ -146,8 +146,9 @@ completingChild execCount delayMicros = do
   countRef <- newIORef execCount
   let childAction :: IO ()
       childAction = do
-        shouldComplete <- atomicModifyIORef' countRef
-                                             (\count -> (pred count, count > 0))
+        shouldComplete <- atomicModifyIORef'
+          countRef
+          (\count -> (pred count, count > 0))
         if shouldComplete
           then threadDelay delayMicros
           else putMVar lockVar () >> forever (threadDelay 10001000)
@@ -189,73 +190,65 @@ testSupervisor testCaseStr assertionsFn =
 
 tests :: [TestTree]
 tests
-  = [
-      testGroup "supervisor without childSpecList"
-      [
-        testSupervisor
-        "initialize and teardown works as expected"
-        ( assertInOrder
-          [ andP
-            [ assertEventType SupervisorStatusChanged
-            , assertSupervisorStatusChanged SUT.Initializing SUT.Running
+  = [ testGroup
+      "supervisor without childSpecList"
+      [ testSupervisor
+          "initialize and teardown works as expected"
+          ( assertInOrder
+            [ andP
+              [ assertEventType SupervisorStatusChanged
+              , assertSupervisorStatusChanged SUT.Initializing SUT.Running
+              ]
+            , andP
+              [ assertEventType SupervisorStatusChanged
+              , assertSupervisorStatusChanged SUT.Running SUT.Halted
+              ]
             ]
-          , andP
-            [ assertEventType SupervisorStatusChanged
-            , assertSupervisorStatusChanged SUT.Running SUT.Halted
-            ]
-          ]
-        )
-        (\_supervisor -> threadDelay 500)
+          )
+          (\_supervisor -> threadDelay 500)
       ]
-    , testGroup "supervisor with childSpecList"
-      [
-        testSupervisorWithOptions
-        "initialize and teardown works as expected"
-        ( assertInOrder
-          [ andP
-            [
-              assertEventType SupervisedChildStarted
-            , assertChildName "A"
+    , testGroup
+      "supervisor with childSpecList"
+      [ testSupervisorWithOptions
+          "initialize and teardown works as expected"
+          ( assertInOrder
+            [ andP [assertEventType SupervisedChildStarted, assertChildName "A"]
+            , andP [assertEventType SupervisedChildStarted, assertChildName "B"]
+            , andP
+              [ assertEventType SupervisorStatusChanged
+              , assertSupervisorStatusChanged SUT.Initializing SUT.Running
+              ]
+            , assertEventType SupervisedChildrenTerminationStarted
+            , andP
+              [assertEventType SupervisedChildTerminated, assertChildName "A"]
+            , andP
+              [assertEventType SupervisedChildTerminated, assertChildName "B"]
+            , assertEventType SupervisedChildrenTerminationFinished
+            , andP
+              [ assertEventType SupervisorStatusChanged
+              , assertSupervisorStatusChanged SUT.Running SUT.Halted
+              ]
             ]
-          , andP
-            [
-              assertEventType SupervisedChildStarted
-            , assertChildName "B"
-            ]
-          , andP
-            [ assertEventType SupervisorStatusChanged
-            , assertSupervisorStatusChanged SUT.Initializing SUT.Running
-            ]
-          , assertEventType SupervisedChildrenTerminationStarted
-          , andP
-            [
-              assertEventType SupervisedChildTerminated
-            , assertChildName "A"
-            ]
-          , andP
-            [
-              assertEventType SupervisedChildTerminated
-            , assertChildName "B"
-            ]
-          , assertEventType SupervisedChildrenTerminationFinished
-          , andP
-            [ assertEventType SupervisorStatusChanged
-            , assertSupervisorStatusChanged SUT.Running SUT.Halted
-            ]
-          ]
-        )
-        (\supOptions ->
-           supOptions {
-            SUT.supervisorChildSpecList =
-                [ SUT.defChildSpec
-                  { SUT.childName = "A"
-                  , SUT.childAction = (forever $ threadDelay 1000100) }
-                , SUT.defChildSpec
-                  { SUT.childName = "B"
-                  , SUT.childAction = (forever $ threadDelay 1000100) }
-                ]
-            })
-        (\_supervisor -> threadDelay 500)
+          )
+          ( \supOptions -> supOptions
+            { SUT.supervisorChildSpecList = [ SUT.defChildSpec
+                                              { SUT.childName   = "A"
+                                              , SUT.childAction = ( forever
+                                                                  $ threadDelay
+                                                                      1000100
+                                                                  )
+                                              }
+                                            , SUT.defChildSpec
+                                              { SUT.childName   = "B"
+                                              , SUT.childAction = ( forever
+                                                                  $ threadDelay
+                                                                      1000100
+                                                                  )
+                                              }
+                                            ]
+            }
+          )
+          (\_supervisor -> threadDelay 500)
       ]
     , testSupervisor
       "reports supervisor error when supervisor thread receives async exception"
@@ -630,7 +623,7 @@ tests
           )
           ( \supervisor -> do
             (childAction, waitCompletion) <- completingChild 1 1
-            _childId    <- SUT.forkChild
+            _childId                      <- SUT.forkChild
               SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
               childAction
               supervisor
@@ -651,7 +644,7 @@ tests
           )
           ( \supervisor -> do
             (childAction, waitCompletion) <- completingChild 2 1
-            _childId    <- SUT.forkChild
+            _childId                      <- SUT.forkChild
               SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
               childAction
               supervisor
@@ -889,7 +882,7 @@ tests
             ]
           )
           ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy = SUT.AllForOne
+            { SUT.supervisorRestartStrategy       = SUT.AllForOne
             , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
             }
           )
@@ -923,7 +916,7 @@ tests
             ]
           )
           ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy = SUT.AllForOne
+            { SUT.supervisorRestartStrategy       = SUT.AllForOne
             , SUT.supervisorChildTerminationOrder = SUT.NewestFirst
             }
           )
@@ -969,7 +962,7 @@ tests
             ]
           )
           ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy = SUT.AllForOne
+            { SUT.supervisorRestartStrategy       = SUT.AllForOne
             , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
             }
           )
@@ -1003,7 +996,7 @@ tests
             ]
           )
           ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy = SUT.AllForOne
+            { SUT.supervisorRestartStrategy       = SUT.AllForOne
             , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
             }
           )

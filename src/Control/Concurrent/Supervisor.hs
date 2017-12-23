@@ -10,9 +10,9 @@ import Control.Concurrent.Internal.Supervisor.Core  as Core
     (forkChild, forkSupervisor, terminateChild)
 import Control.Concurrent.Internal.Supervisor.Types as Types
     ( ChildAction
-    , ChildSpec (..)
     , ChildOptions (..)
     , ChildRestartStrategy (..)
+    , ChildSpec (..)
     , ChildTerminationOrder (..)
     , Supervisor (..)
     , SupervisorEvent (..)

@@ -28,8 +28,8 @@ import Control.Concurrent.Internal.Supervisor.Util
     , readSupervisorStatusSTM
     , sendSyncControlMsg
     , supervisorToEnv
-    , writeSupervisorStatus
     , withChild
+    , writeSupervisorStatus
     )
 
 --------------------------------------------------------------------------------
@@ -146,30 +146,30 @@ buildSupervisorRuntime supervisorOptions = do
   return SupervisorRuntime {..}
 
 forkSupervisor :: SupervisorOptions -> IO Supervisor
-forkSupervisor supervisorOptions@SupervisorOptions { supervisorName, supervisorChildSpecList } = do
-  supervisorRuntime <- buildSupervisorRuntime supervisorOptions
+forkSupervisor supervisorOptions@SupervisorOptions { supervisorName, supervisorChildSpecList }
+  = do
+    supervisorRuntime <- buildSupervisorRuntime supervisorOptions
 
-  let supervisorEnv = supervisorToEnv supervisorRuntime
+    let supervisorEnv = supervisorToEnv supervisorRuntime
 
-  supervisorAsync <- asyncWithUnmask
-    $ \unmask -> runSupervisorLoop unmask supervisorEnv
+    supervisorAsync <- asyncWithUnmask
+      $ \unmask -> runSupervisorLoop unmask supervisorEnv
 
-  forM_ supervisorChildSpecList
-    (\childSpec -> Child.forkChild supervisorEnv childSpec Nothing)
+    forM_ supervisorChildSpecList
+          (\childSpec -> Child.forkChild supervisorEnv childSpec Nothing)
 
-  writeSupervisorStatus supervisorEnv Running
+    writeSupervisorStatus supervisorEnv Running
 
-  supervisorTeardown <- newTeardown
-    ("supervisor[" <> supervisorName <> "]")
-    ( do
-      status <- readSupervisorStatus supervisorEnv
-      case status of
-        Halted -> return ()
-        _      ->
-          sendSyncControlMsg supervisorEnv TerminateSupervisor
-    )
+    supervisorTeardown <- newTeardown
+      ("supervisor[" <> supervisorName <> "]")
+      ( do
+        status <- readSupervisorStatus supervisorEnv
+        case status of
+          Halted -> return ()
+          _      -> sendSyncControlMsg supervisorEnv TerminateSupervisor
+      )
 
-  return Supervisor {..}
+    return Supervisor {..}
 
 forkChild :: ChildOptions -> IO () -> Supervisor -> IO ChildId
 forkChild childOptions childAction Supervisor { supervisorEnv } = do
@@ -187,5 +187,5 @@ terminateChild terminationReason childId Supervisor { supervisorEnv } =
   sendSyncControlMsg
     supervisorEnv
     ( \notifyChildTermination ->
-      TerminateChild {terminationReason , childId , notifyChildTermination}
+      TerminateChild {terminationReason , childId , notifyChildTermination }
     )

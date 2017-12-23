@@ -8,14 +8,11 @@ import Protolude
 import Control.Concurrent.STM.TQueue (writeTQueue)
 import Data.Time.Clock               (getCurrentTime)
 
-import qualified Data.UUID.V4        as UUID
+import qualified Data.UUID.V4 as UUID
 
 import Control.Concurrent.Internal.Supervisor.Types
-import Control.Concurrent.Internal.Supervisor.Util  (
-      appendChildToMap
-    , resetChildMap
-    , sortChildrenByTerminationOrder
-    )
+import Control.Concurrent.Internal.Supervisor.Util
+    (appendChildToMap, resetChildMap, sortChildrenByTerminationOrder)
 
 childMain :: SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO Child
 childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, childAction, childOnFailure, childOnCompletion, childOnTermination } childId restartCount
@@ -45,16 +42,17 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
                 , childName
                 , monitorEventTime
                 , childTerminationReason
-                , childRestartCount = restartCount
+                , childRestartCount      = restartCount
                 }
 
-          Just (BrutallyTerminateChildException {childTerminationReason}) -> return ChildTerminated
-                { childId
-                , childName
-                , monitorEventTime
-                , childTerminationReason
-                , childRestartCount = restartCount
-                }
+          Just (BrutallyTerminateChildException { childTerminationReason }) ->
+            return ChildTerminated
+              { childId
+              , childName
+              , monitorEventTime
+              , childTerminationReason
+              , childRestartCount      = restartCount
+              }
 
 
           Nothing -> do
@@ -142,24 +140,23 @@ forkChild env childSpec mRestartInfo = do
   return childId
 
 terminateChild :: Text -> SupervisorEnv -> Child -> IO ()
-terminateChild childTerminationReason SupervisorEnv { supervisorName, supervisorId, supervisorChildTerminationPolicy, notifyEvent } Child {childId, childName, childAsync}
+terminateChild childTerminationReason SupervisorEnv { supervisorName, supervisorId, supervisorChildTerminationPolicy, notifyEvent } Child { childId, childName, childAsync }
   = do
     eventTime <- getCurrentTime
-    notifyEvent
-      SupervisedChildTerminated
-        { supervisorName
-        , supervisorId
-        , childId
-        , childName
-        , eventTime
-        , terminationReason = childTerminationReason
-        , childThreadId     = asyncThreadId childAsync
-        }
+    notifyEvent SupervisedChildTerminated
+      { supervisorName
+      , supervisorId
+      , childId
+      , childName
+      , eventTime
+      , terminationReason = childTerminationReason
+      , childThreadId     = asyncThreadId childAsync
+      }
 
     case supervisorChildTerminationPolicy of
-      BrutalTermination ->
-        cancelWith childAsync
-                   BrutallyTerminateChildException {childId , childTerminationReason }
+      BrutalTermination -> cancelWith
+        childAsync
+        BrutallyTerminateChildException {childId , childTerminationReason }
       TimeoutSeconds n -> do
         cancelWith childAsync
                    TerminateChildException {childId , childTerminationReason }
@@ -169,23 +166,23 @@ terminateChildren :: Text -> SupervisorEnv -> IO ()
 terminateChildren terminationReason env@SupervisorEnv { supervisorName, supervisorId, supervisorChildTerminationOrder, notifyEvent }
   = do
     eventTime <- getCurrentTime
-    childMap <- resetChildMap env
-    let children = sortChildrenByTerminationOrder supervisorChildTerminationOrder childMap
+    childMap  <- resetChildMap env
+    let children = sortChildrenByTerminationOrder
+          supervisorChildTerminationOrder
+          childMap
 
-    notifyEvent
-      SupervisedChildrenTerminationStarted
-        { supervisorName
-        , supervisorId
-        , terminationReason
-        , eventTime
-        }
+    notifyEvent SupervisedChildrenTerminationStarted
+      { supervisorName
+      , supervisorId
+      , terminationReason
+      , eventTime
+      }
 
     forM_ children (terminateChild terminationReason env)
 
-    notifyEvent
-      SupervisedChildrenTerminationFinished
-        { supervisorName
-        , supervisorId
-        , terminationReason
-        , eventTime
-        }
+    notifyEvent SupervisedChildrenTerminationFinished
+      { supervisorName
+      , supervisorId
+      , terminationReason
+      , eventTime
+      }

@@ -1,10 +1,10 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 module Main where
 
+import Protolude
 import Criterion
 import Criterion.Main
-import Protolude
 
 import Lib (inc)
 

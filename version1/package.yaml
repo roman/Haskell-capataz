@@ -27,7 +27,6 @@ dependencies:
 - text
 - bytestring
 - time
-- teardown
 - uuid
 - unordered-containers
 - vector
@@ -37,7 +36,7 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - Control.Concurrent.Supervisor
+  - Lib
 
 tests:
   supervisor-test:
@@ -53,7 +52,6 @@ tests:
     - tasty-hunit
     - tasty-smallcheck
     - tasty-rerun
-    - pretty-show
     - supervisor
 
   supervisor-doctest:

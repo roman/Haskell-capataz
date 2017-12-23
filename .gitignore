@@ -6,3 +6,4 @@ target/*
 **/.stack-work/*
 *.cabal
 /tutorial.md
+.dir-locals.el

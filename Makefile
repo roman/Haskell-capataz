@@ -75,10 +75,6 @@ test_sdist: untar_sdist
 	cd tmp/$(SDIST_FOLDER) && $(TEST) supervisor:supervisor-doctest
 .PHONY: test_sdist
 
-# pretty: bin/stylish-haskell ## Normalize style of source files
-#		find $(SOURCES) -name "*.hs" -exec $(STYLISH) && git diff --exit-code
-# .PHONY: pretty
-
 format: $(BRITTANY_BIN) $(STYLISH_BIN) ## Normalize style of source files
 	find $(SOURCES) -name "*.hs" -exec $(BRITTANY) -exec $(STYLISH) && git diff --exit-code
 .PHONY: format

@@ -10,11 +10,14 @@ where
 import Control.Concurrent.Internal.Supervisor.Core  as Core
     (forkChild, forkSupervisor, terminateChild)
 import Control.Concurrent.Internal.Supervisor.Types as Types
-    ( ChildAction
+    ( CallbackType (..)
+    , ChildAction
+    , ChildError (..)
     , ChildOptions (..)
     , ChildRestartStrategy (..)
     , ChildSpec (..)
     , ChildTerminationOrder (..)
+    , ChildTerminationPolicy (..)
     , Supervisor (..)
     , SupervisorEvent (..)
     , SupervisorOptions (..)
@@ -24,6 +27,5 @@ import Control.Concurrent.Internal.Supervisor.Types as Types
     , defChildSpec
     , defSupervisorOptions
     )
-import Control.Concurrent.Internal.Supervisor.Util as Util
-  ( supervisorToAsync )
+import Control.Concurrent.Internal.Supervisor.Util  as Util (supervisorToAsync)
 import Control.Teardown                             as Teardown (teardown)

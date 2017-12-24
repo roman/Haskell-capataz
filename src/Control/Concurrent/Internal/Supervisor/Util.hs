@@ -1,59 +1,72 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
-{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
 module Control.Concurrent.Internal.Supervisor.Util where
 
 import Protolude
 
-import qualified Data.Text as T
-import Control.Concurrent.STM        (STM, atomically, retry)
-import Control.Concurrent.STM.TQueue (writeTQueue)
-import Control.Concurrent.STM.TVar   (TVar, readTVar, writeTVar)
-import Data.IORef                    (atomicModifyIORef', readIORef)
-import Data.Time.Clock               (getCurrentTime)
+import           Control.Concurrent.STM        (STM, atomically, retry)
+import           Control.Concurrent.STM.TQueue (writeTQueue)
+import           Control.Concurrent.STM.TVar   (TVar, readTVar, writeTVar)
+import           Data.IORef                    (atomicModifyIORef', readIORef)
+import qualified Data.Text                     as T
+import           Data.Time.Clock               (getCurrentTime)
 
 import qualified Data.HashMap.Strict as HashMap
 
 import Control.Concurrent.Internal.Supervisor.Types
 
 getTidNumber :: ThreadId -> Maybe Text
-getTidNumber tid =
-  case T.words $ show tid of
-    (_:tidNumber:_) -> Just tidNumber
-    _ -> Nothing
+getTidNumber tid = case T.words $ show tid of
+  (_:tidNumber:_) -> Just tidNumber
+  _               -> Nothing
 
-withChildEnv :: SupervisorEnv -> ChildId -> (ChildEnv -> IO ()) -> IO ()
-withChildEnv SupervisorEnv { supervisorChildMap } childId withChildFn = do
-  childMap <- readIORef supervisorChildMap
-  maybe (return ()) (withChildFn . childToEnv) (HashMap.lookup childId childMap)
+--------------------------------------------------------------------------------
 
-withChild :: SupervisorEnv -> ChildId -> (Child -> IO ()) -> IO ()
-withChild SupervisorEnv { supervisorChildMap } childId withChildFn = do
-  childMap <- readIORef supervisorChildMap
-  maybe (return ()) withChildFn (HashMap.lookup childId childMap)
+fetchChild :: SupervisorEnv -> ChildId -> IO (Maybe Child)
+fetchChild SupervisorEnv { supervisorChildMap } childId =
+  HashMap.lookup childId <$> readIORef supervisorChildMap
 
+fetchChildEnv :: SupervisorEnv -> ChildId -> IO (Maybe ChildEnv)
+fetchChildEnv SupervisorEnv { supervisorChildMap } childId =
+  ((childToEnv <$>) . HashMap.lookup childId) <$> readIORef supervisorChildMap
 
-appendChildToMap :: SupervisorEnv -> ChildId -> Child -> IO ()
-appendChildToMap SupervisorEnv { supervisorChildMap } childId child =
+appendChildToMap :: SupervisorEnv -> Child -> IO ()
+appendChildToMap SupervisorEnv { supervisorChildMap } child@Child { childId } =
   atomicModifyIORef' supervisorChildMap
                      (\childMap -> (appendChild childMap, ()))
   where appendChild = HashMap.alter (const $ Just child) childId
 
-removeChildFromMap :: SupervisorEnv -> ChildId -> (ChildEnv -> IO ()) -> IO ()
-removeChildFromMap SupervisorEnv { supervisorChildMap } childId withChildFn =
-  do
-    mChild <- atomicModifyIORef'
-      supervisorChildMap
-      ( \childMap -> maybe
-        (childMap, Nothing)
-        (\child -> (HashMap.delete childId childMap, Just child))
-        (HashMap.lookup childId childMap)
-      )
-    maybe (putText $ "ChildId not found: " <> show childId)
-          (withChildFn . childToEnv)
-          mChild
+removeChildFromMap :: SupervisorEnv -> ChildId -> IO ()
+removeChildFromMap SupervisorEnv { supervisorChildMap } childId =
+  atomicModifyIORef'
+    supervisorChildMap
+    ( \childMap -> maybe (childMap, ())
+                         (const (HashMap.delete childId childMap, ()))
+                         (HashMap.lookup childId childMap)
+    )
+
+resetChildMap :: SupervisorEnv -> (ChildMap -> ChildMap) -> IO ()
+resetChildMap SupervisorEnv { supervisorChildMap } childMapFn =
+  atomicModifyIORef' supervisorChildMap (\childMap -> (childMapFn childMap, ()))
+
+readChildMap :: SupervisorEnv -> IO ChildMap
+readChildMap SupervisorEnv { supervisorChildMap } =
+  readIORef supervisorChildMap
+
+sortChildrenByTerminationOrder :: ChildTerminationOrder -> ChildMap -> [Child]
+sortChildrenByTerminationOrder terminationOrder childMap =
+  case terminationOrder of
+    OldestFirst -> children
+    NewestFirst -> reverse children
+ where
+    -- NOTE: dissambiguates childCreationTime field
+  childCreationTime' Child { childCreationTime } = childCreationTime
+
+  children = sortBy (comparing childCreationTime') (HashMap.elems childMap)
+
+--------------------------------------------------------------------------------
 
 readSupervisorStatusSTM :: TVar SupervisorStatus -> STM SupervisorStatus
 readSupervisorStatusSTM statusVar = do
@@ -81,21 +94,6 @@ writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorSt
       , newSupervisorStatus
       , eventTime
       }
-
-resetChildMap :: SupervisorEnv -> IO ChildMap
-resetChildMap SupervisorEnv { supervisorChildMap } =
-  atomicModifyIORef' supervisorChildMap (\childMap -> (HashMap.empty, childMap))
-
-sortChildrenByTerminationOrder :: ChildTerminationOrder -> ChildMap -> [Child]
-sortChildrenByTerminationOrder terminationOrder childMap =
-  case terminationOrder of
-    OldestFirst -> children
-    NewestFirst -> reverse children
- where
-    -- NOTE: dissambiguates childCreationTime field
-  childCreationTime' Child { childCreationTime } = childCreationTime
-
-  children = sortBy (comparing childCreationTime') (HashMap.elems childMap)
 
 
 sendControlMsg :: SupervisorEnv -> ControlAction -> IO ()

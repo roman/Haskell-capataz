@@ -107,12 +107,13 @@ data SupervisorEvent
   deriving (Generic, Show)
 
 data ChildTerminationPolicy
-  = BrutalTermination
-  | TimeoutSeconds !Int
+  = Infinity
+  | BrutalTermination
+  | TimeoutMillis !Int
   deriving (Generic, Show, Eq, Ord)
 
 instance Default ChildTerminationPolicy where
-  def = TimeoutSeconds 3
+  def = TimeoutMillis 3000
 
 instance NFData ChildTerminationPolicy
 
@@ -148,24 +149,24 @@ instance NFData SupervisorRestartStrategy
 
 data SupervisorOptions
   = SupervisorOptions {
-    supervisorName                   :: Text
-  , supervisorIntensity              :: !Int
+    supervisorName                  :: Text
+  , supervisorIntensity             :: !Int
     -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
-  , supervisorPeriodSeconds          :: !NominalDiffTime
-  , supervisorRestartStrategy        :: !SupervisorRestartStrategy
-  , supervisorChildTerminationPolicy :: !ChildTerminationPolicy
-  , supervisorChildSpecList          :: ![ChildSpec]
-  , supervisorChildTerminationOrder  :: !ChildTerminationOrder
-  , notifyEvent                      :: !(SupervisorEvent -> IO ())
+  , supervisorPeriodSeconds         :: !NominalDiffTime
+  , supervisorRestartStrategy       :: !SupervisorRestartStrategy
+  , supervisorChildSpecList         :: ![ChildSpec]
+  , supervisorChildTerminationOrder :: !ChildTerminationOrder
+  , notifyEvent                     :: !(SupervisorEvent -> IO ())
   }
 
 data ChildOptions
   = ChildOptions {
-    childName            :: !ChildName
-  , childOnFailure       :: !(SomeException -> IO ())
-  , childOnCompletion    :: !(IO ())
-  , childOnTermination   :: !(IO ())
-  , childRestartStrategy :: !ChildRestartStrategy
+    childName              :: !ChildName
+  , childOnFailure         :: !(SomeException -> IO ())
+  , childOnCompletion      :: !(IO ())
+  , childOnTermination     :: !(IO ())
+  , childTerminationPolicy :: !ChildTerminationPolicy
+  , childRestartStrategy   :: !ChildRestartStrategy
   }
   deriving (Generic)
 
@@ -184,14 +185,15 @@ instance Default ChildRestartStrategy where
 
 data ChildSpec
   = ChildSpec {
-    childAction          :: ChildAction
+    childAction            :: ChildAction
     -- ^ ChildAction is lazy by default because we want to eval
     -- in on a child thread, not on the supervisor thread
-  , childName            :: !ChildName
-  , childOnFailure       :: !(SomeException -> IO ())
-  , childOnCompletion    :: !(IO ())
-  , childOnTermination   :: !(IO ())
-  , childRestartStrategy :: !ChildRestartStrategy
+  , childName              :: !ChildName
+  , childOnFailure         :: !(SomeException -> IO ())
+  , childOnCompletion      :: !(IO ())
+  , childOnTermination     :: !(IO ())
+  , childTerminationPolicy :: !ChildTerminationPolicy
+  , childRestartStrategy   :: !ChildRestartStrategy
   }
   deriving (Generic)
 
@@ -262,10 +264,17 @@ data SupervisorError
 instance Exception SupervisorError
 instance NFData SupervisorError
 
+data CallbackType
+  = OnCompletion
+  | OnFailure
+  | OnTermination
+  deriving (Generic, Show, Eq)
+
 data ChildError
   = ChildCallbackFailed {
       childId            :: !ChildId
     , childActionError   :: !(Maybe SomeException)
+    , callbackType       :: !CallbackType
     , childCallbackError :: !SomeException
     }
     deriving (Generic, Show)
@@ -330,51 +339,51 @@ data SupervisorRuntime
 
 data SupervisorEnv
   = SupervisorEnv {
-    supervisorId                     :: !SupervisorId
-  , supervisorName                   :: !SupervisorName
-  , supervisorQueue                  :: !(TQueue SupervisorMessage)
-  , supervisorChildMap               :: !(IORef (HashMap ChildId Child))
-  , supervisorStatusVar              :: !(TVar SupervisorStatus)
-  , supervisorOptions                :: !SupervisorOptions
-  , supervisorRuntime                :: !SupervisorRuntime
-  , supervisorIntensity              :: !Int
+    supervisorId                    :: !SupervisorId
+  , supervisorName                  :: !SupervisorName
+  , supervisorQueue                 :: !(TQueue SupervisorMessage)
+  , supervisorChildMap              :: !(IORef (HashMap ChildId Child))
+  , supervisorStatusVar             :: !(TVar SupervisorStatus)
+  , supervisorOptions               :: !SupervisorOptions
+  , supervisorRuntime               :: !SupervisorRuntime
+  , supervisorIntensity             :: !Int
     -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
-  , supervisorPeriodSeconds          :: !NominalDiffTime
-  , supervisorRestartStrategy        :: !SupervisorRestartStrategy
-  , supervisorChildTerminationPolicy :: !ChildTerminationPolicy
-  , supervisorChildTerminationOrder  :: !ChildTerminationOrder
-  , notifyEvent                      :: !(SupervisorEvent -> IO ())
+  , supervisorPeriodSeconds         :: !NominalDiffTime
+  , supervisorRestartStrategy       :: !SupervisorRestartStrategy
+  , supervisorChildTerminationOrder :: !ChildTerminationOrder
+  , notifyEvent                     :: !(SupervisorEvent -> IO ())
   }
 
 defSupervisorOptions :: SupervisorOptions
 defSupervisorOptions = SupervisorOptions
-  { supervisorName                   = "default-supervisor"
+  { supervisorName                  = "default-supervisor"
 
   -- One (1) restart every five (5) seconds
-  , supervisorIntensity              = 1
-  , supervisorPeriodSeconds          = 5
-  , supervisorRestartStrategy        = def
-  , supervisorChildTerminationPolicy = def
-  , supervisorChildSpecList          = []
-  , supervisorChildTerminationOrder  = OldestFirst
-  , notifyEvent                      = const $ return ()
+  , supervisorIntensity             = 1
+  , supervisorPeriodSeconds         = 5
+  , supervisorRestartStrategy       = def
+  , supervisorChildSpecList         = []
+  , supervisorChildTerminationOrder = OldestFirst
+  , notifyEvent                     = const $ return ()
   }
 
 defChildOptions :: ChildOptions
 defChildOptions = ChildOptions
-  { childName            = "default-child"
-  , childOnFailure       = const $ return ()
-  , childOnCompletion    = return ()
-  , childOnTermination   = return ()
-  , childRestartStrategy = def
+  { childName              = "default-child"
+  , childOnFailure         = const $ return ()
+  , childOnCompletion      = return ()
+  , childOnTermination     = return ()
+  , childTerminationPolicy = def
+  , childRestartStrategy   = def
   }
 
 defChildSpec :: ChildSpec
 defChildSpec = ChildSpec
-  { childName            = "default-child"
-  , childAction          = return ()
-  , childOnFailure       = const $ return ()
-  , childOnCompletion    = return ()
-  , childOnTermination   = return ()
-  , childRestartStrategy = def
+  { childName              = "default-child"
+  , childAction            = return ()
+  , childOnFailure         = const $ return ()
+  , childOnCompletion      = return ()
+  , childOnTermination     = return ()
+  , childTerminationPolicy = def
+  , childRestartStrategy   = def
   }

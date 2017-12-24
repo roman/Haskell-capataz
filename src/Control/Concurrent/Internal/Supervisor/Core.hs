@@ -24,12 +24,14 @@ import qualified Control.Concurrent.Internal.Supervisor.Restart as Restart
 
 import Control.Concurrent.Internal.Supervisor.Types
 import Control.Concurrent.Internal.Supervisor.Util
-    ( childOptionsToSpec
+    ( appendChildToMap
+    , childOptionsToSpec
+    , fetchChild
     , readSupervisorStatus
     , readSupervisorStatusSTM
+    , resetChildMap
     , sendSyncControlMsg
     , supervisorToEnv
-    , withChild
     , writeSupervisorStatus
     )
 
@@ -56,26 +58,46 @@ handleMonitorEvent env monitorEv = do
 handleControlAction :: SupervisorEnv -> ControlAction -> IO Bool
 handleControlAction env controlAction = case controlAction of
   ForkChild { childSpec, returnChildId } -> do
-    childId <- Child.forkChild env childSpec Nothing
+    child@Child { childId } <- Child.forkChild env childSpec Nothing
+    appendChildToMap env child
     returnChildId childId
     return True
 
   TerminateChild { terminationReason, childId, notifyChildTermination } -> do
-    withChild env childId $ \child -> do
-      Child.terminateChild terminationReason env child
-      notifyChildTermination
-    return True
+    mChild <- fetchChild env childId
+    case mChild of
+      Nothing    -> return True
+      Just child -> do
+        Child.terminateChild terminationReason env child
+        -- removeChildFromMap env childId
+        notifyChildTermination
+        return True
 
   TerminateSupervisor { notifySupervisorTermination } -> do
     Child.terminateChildren "supervisor shutdown" env
+    writeSupervisorStatus   env                   Halted
     notifySupervisorTermination
-    writeSupervisorStatus env Halted
     return False
 
 handleSupervisorMessage :: SupervisorEnv -> SupervisorMessage -> IO Bool
 handleSupervisorMessage env message = case message of
   ControlAction controlAction -> handleControlAction env controlAction
   MonitorEvent  monitorEvent  -> handleMonitorEvent env monitorEvent
+
+handleSupervisorException :: SupervisorEnv -> SomeException -> IO ()
+handleSupervisorException env@SupervisorEnv { supervisorId, supervisorName, notifyEvent } supervisorError
+  = do
+    eventTime <- getCurrentTime
+    notifyEvent SupervisorFailed
+      { supervisorId
+      , supervisorName
+      , supervisorError
+      , eventTime
+      }
+    Child.terminateChildren "supervisor shutdown" env
+    resetChildMap           env                   (const HashMap.empty)
+    writeSupervisorStatus   env                   Halted
+    throwIO supervisorError
 
 runSupervisorLoop :: (forall b . IO b -> IO b) -> SupervisorEnv -> IO ()
 runSupervisorLoop unmask env@SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, supervisorQueue, notifyEvent }
@@ -89,17 +111,7 @@ runSupervisorLoop unmask env@SupervisorEnv { supervisorId, supervisorName, super
       <*> readTQueue supervisorQueue
 
     case loopResult of
-      Left supervisorError -> do
-        eventTime <- getCurrentTime
-        notifyEvent SupervisorFailed
-          { supervisorId
-          , supervisorName
-          , supervisorError
-          , eventTime
-          }
-        Child.terminateChildren "supervisor shutdown" env
-        writeSupervisorStatus   env                   Halted
-        throwIO supervisorError
+      Left  supervisorError   -> handleSupervisorException env supervisorError
 
       Right (status, message) -> case status of
         Initializing -> do
@@ -114,17 +126,8 @@ runSupervisorLoop unmask env@SupervisorEnv { supervisorId, supervisorName, super
         Running -> do
           eContinueLoop <- unmask $ try $ handleSupervisorMessage env message
           case eContinueLoop of
-            Left supervisorError -> do
-              eventTime <- getCurrentTime
-              notifyEvent SupervisorFailed
-                { supervisorId
-                , supervisorName
-                , supervisorError
-                , eventTime
-                }
-              Child.terminateChildren "supervisor shutdown" env
-              writeSupervisorStatus   env                   Halted
-              throwIO supervisorError
+            Left supervisorError ->
+              handleSupervisorException env supervisorError
 
             Right continueLoop
               | continueLoop -> runSupervisorLoop unmask env
@@ -136,7 +139,7 @@ runSupervisorLoop unmask env@SupervisorEnv { supervisorId, supervisorName, super
                   , eventTime
                   }
 
-        Halted -> panic "pending implementation"
+        Halted -> panic "TODO: Pending halted state"
 
 buildSupervisorRuntime :: SupervisorOptions -> IO SupervisorRuntime
 buildSupervisorRuntime supervisorOptions = do
@@ -156,8 +159,12 @@ forkSupervisor supervisorOptions@SupervisorOptions { supervisorName, supervisorC
     supervisorAsync <- asyncWithUnmask
       $ \unmask -> runSupervisorLoop unmask supervisorEnv
 
-    forM_ supervisorChildSpecList
-          (\childSpec -> Child.forkChild supervisorEnv childSpec Nothing)
+    forM_
+      supervisorChildSpecList
+      ( \childSpec -> do
+        child <- Child.forkChild supervisorEnv childSpec Nothing
+        appendChildToMap supervisorEnv child
+      )
 
     writeSupervisorStatus supervisorEnv Running
 

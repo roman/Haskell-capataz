@@ -8,10 +8,33 @@ license: MIT
 github: roman/Haskell-supervisor
 extra-source-files:
 - README.md
+dependencies:
+- bytestring
+- optparse-generic
+- process
+- text
+library:
+  exposed-modules:
+  source-dirs: src/lib
+  exposed-modules:
+  - Lib
 executables:
-  supervisor-example:
+  example1:
     main: Main.hs
-    source-dirs: src
+    source-dirs: src/example1
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    - -O2
+    dependencies:
+    - async
+    - base
+    - protolude
+    - supervisor-example
+  example2:
+    main: Main.hs
+    source-dirs: src/example2
     ghc-options:
     - -threaded
     - -rtsopts
@@ -21,3 +44,4 @@ executables:
     - base
     - protolude
     - supervisor
+    - supervisor-example

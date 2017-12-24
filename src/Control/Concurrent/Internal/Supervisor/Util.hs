@@ -7,6 +7,7 @@ module Control.Concurrent.Internal.Supervisor.Util where
 
 import Protolude
 
+import qualified Data.Text as T
 import Control.Concurrent.STM        (STM, atomically, retry)
 import Control.Concurrent.STM.TQueue (writeTQueue)
 import Control.Concurrent.STM.TVar   (TVar, readTVar, writeTVar)
@@ -16,6 +17,12 @@ import Data.Time.Clock               (getCurrentTime)
 import qualified Data.HashMap.Strict as HashMap
 
 import Control.Concurrent.Internal.Supervisor.Types
+
+getTidNumber :: ThreadId -> Maybe Text
+getTidNumber tid =
+  case T.words $ show tid of
+    (_:tidNumber:_) -> Just tidNumber
+    _ -> Nothing
 
 withChildEnv :: SupervisorEnv -> ChildId -> (ChildEnv -> IO ()) -> IO ()
 withChildEnv SupervisorEnv { supervisorChildMap } childId withChildFn = do

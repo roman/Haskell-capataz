@@ -5,21 +5,37 @@ module Control.Concurrent.Internal.Supervisor.Child where
 
 import Protolude
 
+import GHC.Conc (labelThread)
 import Control.Concurrent.STM.TQueue (writeTQueue)
 import Data.Time.Clock               (getCurrentTime)
 
+import qualified Data.Text as T
 import qualified Data.UUID.V4 as UUID
 
 import Control.Concurrent.Internal.Supervisor.Types
 import Control.Concurrent.Internal.Supervisor.Util
-    (appendChildToMap, resetChildMap, sortChildrenByTerminationOrder)
+    (appendChildToMap, resetChildMap, sortChildrenByTerminationOrder, getTidNumber)
+
+setChildThreadName :: ChildId -> ChildName -> IO ()
+setChildThreadName childId childName = do
+  tid <- myThreadId
+  let childIdentifier =
+          T.unpack childName
+          <> "_"
+          <> show childId
+          <> "_"
+          <> maybe "" T.unpack (getTidNumber tid)
+  labelThread tid childIdentifier
 
 childMain :: SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO Child
 childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, childAction, childOnFailure, childOnCompletion, childOnTermination } childId restartCount
   = do
     childCreationTime <- getCurrentTime
     childAsync        <- asyncWithUnmask $ \unmask -> do
-      eResult          <- try $ unmask childAction
+      eResult          <- try $ do
+        setChildThreadName childId childName
+        unmask childAction
+
       monitorEventTime <- getCurrentTime
       resultEvent      <- case eResult of
         Left err -> case fromException err of

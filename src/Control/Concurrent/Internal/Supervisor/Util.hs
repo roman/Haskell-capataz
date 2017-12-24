@@ -119,3 +119,6 @@ envToChild ChildEnv {..} = Child {..}
 
 childOptionsToSpec :: ChildOptions -> IO () -> ChildSpec
 childOptionsToSpec ChildOptions {..} childAction = ChildSpec {..}
+
+supervisorToAsync :: Supervisor -> Async ()
+supervisorToAsync = supervisorAsync

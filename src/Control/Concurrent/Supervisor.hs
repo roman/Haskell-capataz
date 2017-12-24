@@ -2,6 +2,7 @@
 module Control.Concurrent.Supervisor
 ( module Types
 , module Core
+, module Util
 , module Teardown
 )
 where
@@ -23,4 +24,6 @@ import Control.Concurrent.Internal.Supervisor.Types as Types
     , defChildSpec
     , defSupervisorOptions
     )
+import Control.Concurrent.Internal.Supervisor.Util as Util
+  ( supervisorToAsync )
 import Control.Teardown                             as Teardown (teardown)

@@ -22,7 +22,7 @@ ghc-options:
 dependencies:
 - base
 - protolude
-- flow
+- async
 - safe-exceptions
 - text
 - bytestring

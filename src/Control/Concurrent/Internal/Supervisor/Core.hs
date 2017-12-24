@@ -7,6 +7,7 @@ module Control.Concurrent.Internal.Supervisor.Core where
 
 import Protolude
 
+import Control.Concurrent.Async      (asyncWithUnmask)
 import Control.Concurrent.MVar       (newEmptyMVar, takeMVar)
 import Control.Concurrent.STM        (atomically)
 import Control.Concurrent.STM.TQueue (newTQueueIO, readTQueue, writeTQueue)

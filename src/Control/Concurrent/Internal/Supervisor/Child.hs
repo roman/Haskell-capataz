@@ -6,6 +6,7 @@ module Control.Concurrent.Internal.Supervisor.Child where
 import Protolude
 
 import GHC.Conc (labelThread)
+import Control.Concurrent.Async (asyncWithUnmask)
 import Control.Concurrent.STM.TQueue (writeTQueue)
 import Data.Time.Clock               (getCurrentTime)
 

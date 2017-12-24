@@ -80,7 +80,7 @@ format: $(BRITTANY_BIN) $(STYLISH_BIN) ## Normalize style of source files
 .PHONY: format
 
 lint: $(HLINT_BIN) ## Execute linter
-	hlint $(SOURCES)
+	$(HLINT_BIN) $(SOURCES)
 .PHONY: lint
 
 repl: $(INTERO_BIN) ## Start project's repl

@@ -62,17 +62,17 @@ readNumbers writeNumber = do
       ["-c", "COUNTER=1; while [ $COUNTER -gt 0 ]; do echo $COUNTER; sleep 1; let COUNTER=COUNTER+1; done"]
 
   let loop = do
-      eInput <- ((readMaybe . BS.unpack) <$>) <$> readStdOut proc'
-      case eInput of
-        Left exitCode ->
-          if exitCode == ExitSuccess then
-            return ()
-          else throwIO exitCode
-        Right Nothing -> do
-          putText "didn't get a number?"
-          loop
-        Right (Just number) -> do
-          writeNumber number
-          loop
+        eInput <- ((readMaybe . BS.unpack) <$>) <$> readStdOut proc'
+        case eInput of
+          Left exitCode ->
+            if exitCode == ExitSuccess then
+              return ()
+            else throwIO exitCode
+          Right Nothing -> do
+            putText "didn't get a number?"
+            loop
+          Right (Just number) -> do
+            writeNumber number
+            loop
 
   loop `finally` terminateProcess proc'

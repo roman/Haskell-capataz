@@ -9,6 +9,9 @@ github: roman/Haskell-supervisor
 extra-source-files:
 - README.md
 dependencies:
+- base
+- protolude
+- pretty-show
 - bytestring
 - optparse-generic
 - process
@@ -29,8 +32,6 @@ executables:
     - -O2
     dependencies:
     - async
-    - base
-    - protolude
     - supervisor-example
   example2:
     main: Main.hs
@@ -41,7 +42,5 @@ executables:
     - -with-rtsopts=-N
     - -O2
     dependencies:
-    - base
-    - protolude
     - supervisor
     - supervisor-example

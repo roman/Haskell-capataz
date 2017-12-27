@@ -21,13 +21,15 @@ import Control.Concurrent.Supervisor
   , teardown
   )
 import Lib (Cli(..), readNumbers)
+import Text.Show.Pretty (pPrint)
 
 main :: IO ()
 main = do
   n <- getRecord "Counter spawner"
-  supervisor <- forkSupervisor defSupervisorOptions { supervisorName = "Example Supervisor"
-                                                    , supervisorRestartStrategy = AllForOne
-                                                    , notifyEvent = print }
+  supervisor <-
+    forkSupervisor defSupervisorOptions { supervisorName = "Example Supervisor"
+                                        , supervisorRestartStrategy = AllForOne
+                                        , notifyEvent = pPrint }
 
   _childIdList <- forM [1..procNumber n] $ \i ->
     forkChild defChildOptions { childName = "Worker (" <> show i <> ")"

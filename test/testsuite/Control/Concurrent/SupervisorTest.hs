@@ -27,8 +27,8 @@ fetchRecordName = T.takeWhile (/= ' ') . show
 andP :: [a -> Bool] -> a -> Bool
 andP predList a = all ($ a) predList
 
-orP :: [a -> Bool] -> a -> Bool
-orP predList a = any ($ a) predList
+-- orP :: [a -> Bool] -> a -> Bool
+-- orP predList a = any ($ a) predList
 
 --------------------------------------------------------------------------------
 -- Assertions and Testers
@@ -165,20 +165,58 @@ mkFailingSubRoutine failCount = do
 
   return (subRoutine, waitForErrors)
 
-mkCompletingSubRoutine :: Int -> Int -> IO (IO (), IO ())
-mkCompletingSubRoutine execCount delayMicros = do
+mkCompletingSubRoutine :: IO (IO (), IO ())
+mkCompletingSubRoutine = do
   lockVar  <- newEmptyMVar
-  countRef <- newIORef execCount
+  return (putMVar lockVar (), takeMVar lockVar)
+
+-- | Returns two values:
+--
+-- * A sub-routine that will complete for `initCount` amount of
+--   times
+-- * A sub-routine that will release a lock every time it is restarted
+--
+-- This function works great when testing `Permanent` strategies, as you would
+-- like to assert restart events once (if it keeps completing it will fill up the
+-- log with restart events)
+--
+mkCompletingBeforeNRestartsSubRoutine :: Int -> IO (IO (), IO ())
+mkCompletingBeforeNRestartsSubRoutine initCount = do
+  lockVar <- newEmptyMVar
+  countRef <- newIORef initCount
+  let subRoutine = do
+        count <- readIORef countRef
+        putText $ show ("DEBUG", count)
+        shouldStop <- atomicModifyIORef' countRef (\count -> (pred count, count > 0))
+        putText $ show ("DEBUG-1", shouldStop)
+        if shouldStop then do
+          putMVar lockVar ()
+          return ()
+        else
+          forever $ threadDelay 1000100
+  return (subRoutine, takeMVar lockVar)
+
+-- | Returns two values:
+--
+-- * A sub-routine that will complete once
+--
+-- * A sub-routine that will release execution once the sub-routine is finished
+--
+-- This function works great when testing `Permanent` strategies, as you would
+-- like to assert restart events once (if it keeps completing it will fill up the
+-- log with restart events)
+--
+mkCompletingOnceSubRoutine :: IO (IO (), IO ())
+mkCompletingOnceSubRoutine = mkCompletingBeforeNRestartsSubRoutine 1
+
+mkNonCompletingSubRoutine :: IO (IO (), IO ())
+mkNonCompletingSubRoutine = do
+  lockVar  <- newEmptyMVar
   let subRoutineAction :: IO ()
       subRoutineAction = do
-        shouldComplete <- atomicModifyIORef'
-          countRef
-          (\count -> (pred count, count > 0))
-        if shouldComplete
-          then threadDelay delayMicros
-          else putMVar lockVar () >> forever (threadDelay 10001000)
+         putMVar lockVar ()
+         forever (threadDelay 10001000)
   return (subRoutineAction, takeMVar lockVar)
-
 
 testSupervisorWithOptions
   :: [Char]
@@ -343,6 +381,7 @@ tests
             "does not execute callback when sub-routine is terminated"
             (assertInOrder [assertEventType SupervisedChildTerminated])
             ( \supervisor -> do
+              (subRoutine, waitTillIsCalled) <- mkNonCompletingSubRoutine
               callbackVar <- newMVar ()
               childId     <- SUT.forkChild
                 ( SUT.defChildOptions
@@ -350,18 +389,19 @@ tests
                   , SUT.childOnCompletion    = takeMVar callbackVar
                   }
                 )
-                (forever $ threadDelay 1000100)
+                subRoutine
                 supervisor
 
               SUT.terminateChild "testing onCompletion callback"
                                  childId
                                  supervisor
-              threadDelay 100
+              waitTillIsCalled
 
               wasEmpty <- isEmptyMVar callbackVar
               assertBool
                 "Expecting childOnCompletion to not get called, but it was"
                 (not wasEmpty)
+
             )
 
           , testSupervisor
@@ -374,15 +414,16 @@ tests
               ]
             )
             ( \supervisor -> do
+              (subRoutine, waitCompletion) <- mkCompletingSubRoutine
               _childId <- SUT.forkChild
                 ( SUT.defChildOptions
                   { SUT.childRestartStrategy = SUT.Temporary
                   , SUT.childOnCompletion    = throwIO RestartingChildError
                   }
                 )
-                (return ())
+                subRoutine
                 supervisor
-              threadDelay 100
+              waitCompletion
             )
           ]
         , testGroup
@@ -594,11 +635,12 @@ tests
             ]
           )
           ( \supervisor -> do
+            (subRoutineAction, waitCompletion) <- mkCompletingSubRoutine
             _childId <- SUT.forkChild
               SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
-              (return ())
+              subRoutineAction
               supervisor
-            threadDelay 100
+            waitCompletion
           )
         , testSupervisor
           "does not restart on termination"
@@ -671,7 +713,7 @@ tests
             ]
           )
           ( \supervisor -> do
-            (subRoutineAction, waitCompletion) <- mkCompletingSubRoutine 1 1
+            (subRoutineAction, waitCompletion) <- mkCompletingOnceSubRoutine
             _childId                           <- SUT.forkChild
               SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
               subRoutineAction
@@ -692,11 +734,14 @@ tests
             ]
           )
           ( \supervisor -> do
-            (subRoutineAction, waitCompletion) <- mkCompletingSubRoutine 2 1
+            -- Note the number is two (2) given the assertion list has two `SupervisedChildRestarted` assertions
+            let expectedRestartCount = 2
+            (subRoutineAction, waitCompletion) <- mkCompletingBeforeNRestartsSubRoutine expectedRestartCount
             _childId                           <- SUT.forkChild
               SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
               subRoutineAction
               supervisor
+            waitCompletion
             waitCompletion
           )
         , testSupervisor
@@ -917,19 +962,17 @@ tests
           ( combineAssertions
             [ assertInOrder
                 [ andP
+                  [assertEventType SupervisedChildStarted, assertChildName "A"]
+                , andP
+                  [assertEventType SupervisedChildStarted, assertChildName "B"]
+                , andP
                   [assertEventType SupervisedChildFailed, assertChildName "A"]
                 , andP
-                  [ assertEventType SupervisedChildTerminated
-                  , assertChildName "A"
-                  ]
+                  [assertEventType SupervisedChildRestarted, assertChildName "A"]
                 , andP
-                  [ assertEventType SupervisedChildTerminated
-                  , assertChildName "B"
-                  ]
+                  [assertEventType SupervisedChildTerminated, assertChildName "B"]
                 , andP
-                  [ assertEventType SupervisedChildRestarted
-                  , assertChildName "A"
-                  ]
+                  [assertEventType SupervisedChildRestarted, assertChildName "B"]
                 ]
             ]
           )
@@ -963,13 +1006,15 @@ tests
           ( combineAssertions
             [ assertInOrder
               [ andP
+                [assertEventType SupervisedChildStarted, assertChildName "A"]
+              , andP
+                [assertEventType SupervisedChildStarted, assertChildName "B"]
+              , andP
                 [assertEventType SupervisedChildFailed, assertChildName "A"]
               , andP
-                [assertEventType SupervisedChildTerminated, assertChildName "A"]
+                [assertEventType SupervisedChildRestarted, assertChildName "A"]
               , andP
                 [assertEventType SupervisedChildTerminated, assertChildName "B"]
-              , andP
-                [assertEventType SupervisedChildRestarted, assertChildName "A"]
               ]
             , assertAll
               ( not

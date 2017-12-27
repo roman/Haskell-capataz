@@ -46,8 +46,7 @@ execSupervisorRestartStrategy :: SupervisorEnv -> ChildEnv -> Int -> IO ()
 execSupervisorRestartStrategy supervisorEnv@SupervisorEnv { supervisorRestartStrategy } ChildEnv { childId, childSpec } childRestartCount
   = case supervisorRestartStrategy of
     AllForOne -> do
-      Child.terminateChildren "AllForOne restart" supervisorEnv
-      newChildren <- restartChildren supervisorEnv childRestartCount
+      newChildren <- restartChildren supervisorEnv childId childRestartCount
       let newChildrenMap =
             newChildren
               & fmap (\child@Child { childId = cid } -> (cid, child))
@@ -82,8 +81,8 @@ execRestartAction supervisorEnv childEnv@ChildEnv { childId, childName, childCre
 
 --------------------------------------------------------------------------------
 
-restartChildren :: SupervisorEnv -> RestartCount -> IO [Child]
-restartChildren supervisorEnv@SupervisorEnv { supervisorChildTerminationOrder } restartCount
+restartChildren :: SupervisorEnv -> ChildId -> RestartCount -> IO [Child]
+restartChildren supervisorEnv@SupervisorEnv { supervisorChildTerminationOrder } failingChildId restartCount
   = do
     childMap <- readChildMap supervisorEnv
 
@@ -91,7 +90,9 @@ restartChildren supervisorEnv@SupervisorEnv { supervisorChildTerminationOrder } 
           supervisorChildTerminationOrder
           childMap
 
-    newChildren <- forM children $ \Child { childId, childSpec } -> do
+    newChildren <- forM children $ \child@Child { childId, childSpec } -> do
+      unless (failingChildId == childId) $ forceRestartChild supervisorEnv child
+
       let ChildSpec { childRestartStrategy } = childSpec
       case childRestartStrategy of
         Temporary -> return Nothing
@@ -99,6 +100,20 @@ restartChildren supervisorEnv@SupervisorEnv { supervisorChildTerminationOrder } 
 
     return $ catMaybes newChildren
 
+forceRestartChild :: SupervisorEnv -> Child -> IO ()
+forceRestartChild SupervisorEnv { supervisorName, supervisorId, notifyEvent } Child { childId, childName, childAsync }
+  = do
+    eventTime <- getCurrentTime
+    notifyEvent SupervisedChildTerminated
+      { supervisorName
+      , supervisorId
+      , childId
+      , childName
+      , eventTime
+      , childThreadId     = asyncThreadId childAsync
+      , terminationReason = "forced restart"
+      }
+    cancelWith childAsync RestartChildException
 
 restartChild
   :: SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO Child

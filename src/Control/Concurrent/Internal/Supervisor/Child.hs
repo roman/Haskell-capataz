@@ -1,6 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
 module Control.Concurrent.Internal.Supervisor.Child where
 
 import Protolude
@@ -38,6 +39,9 @@ handleChildException unmask ChildSpec { childName, childOnFailure, childOnTermin
   = do
     monitorEventTime <- getCurrentTime
     case fromException err of
+      Just RestartChildException ->
+        return ChildForcedRestart {childId , childName , monitorEventTime }
+
       Just TerminateChildException { childTerminationReason } -> do
         eErrResult <- try $ unmask childOnTermination
         case eErrResult of

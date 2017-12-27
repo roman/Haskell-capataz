@@ -240,7 +240,8 @@ data ControlAction
 
 
 data SupervisorSignal
-  = TerminateChildException {
+  = RestartChildException
+  | TerminateChildException {
       childId                :: !ChildId
     , childTerminationReason :: !Text
     }
@@ -297,6 +298,11 @@ data MonitorEvent
   , monitorEventTime  :: !UTCTime
   }
   | ChildCompleted {
+    childId          :: !ChildId
+  , childName        :: !ChildName
+  , monitorEventTime :: !UTCTime
+  }
+  | ChildForcedRestart {
     childId          :: !ChildId
   , childName        :: !ChildName
   , monitorEventTime :: !UTCTime

@@ -40,6 +40,11 @@ import Control.Concurrent.Internal.Supervisor.Util
 handleMonitorEvent :: SupervisorEnv -> MonitorEvent -> IO Bool
 handleMonitorEvent env monitorEv = do
   case monitorEv of
+    ChildForcedRestart{} ->
+      -- We do nothing, as restart is being handled on restartChildren
+      -- sub-routine
+      return ()
+
     ChildCompleted { childId, monitorEventTime } ->
       Restart.handleChildCompleted env childId monitorEventTime
 

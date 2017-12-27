@@ -1,4 +1,3 @@
-{-# ANN module "HLint: ignore Reduce duplication" #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE NamedFieldPuns        #-}
@@ -185,10 +184,7 @@ mkCompletingBeforeNRestartsSubRoutine initCount = do
   lockVar <- newEmptyMVar
   countRef <- newIORef initCount
   let subRoutine = do
-        count <- readIORef countRef
-        putText $ show ("DEBUG", count)
         shouldStop <- atomicModifyIORef' countRef (\count -> (pred count, count > 0))
-        putText $ show ("DEBUG-1", shouldStop)
         if shouldStop then do
           putMVar lockVar ()
           return ()
@@ -208,6 +204,22 @@ mkCompletingBeforeNRestartsSubRoutine initCount = do
 --
 mkCompletingOnceSubRoutine :: IO (IO (), IO ())
 mkCompletingOnceSubRoutine = mkCompletingBeforeNRestartsSubRoutine 1
+
+-- TODO: Add onSupervisorIntensityReached on SupervisorOptions
+mkLockAfterNRestartsSubRoutine :: Int -> IO () -> IO (IO (), IO ())
+mkLockAfterNRestartsSubRoutine restartCount failingSubRoutine = do
+  lockVar <- newEmptyMVar
+  countRef <- newIORef 0
+  let subRoutine = do
+        shouldStop <- atomicModifyIORef' countRef (\count -> (succ count, succ count == restartCount))
+        if shouldStop then do
+          putMVar lockVar ()
+          return ()
+        else
+          failingSubRoutine
+
+
+  return (subRoutine, takeMVar lockVar)
 
 mkNonCompletingSubRoutine :: IO (IO (), IO ())
 mkNonCompletingSubRoutine = do

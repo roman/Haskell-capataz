@@ -37,6 +37,13 @@ import Control.Concurrent.Internal.Supervisor.Util
 
 --------------------------------------------------------------------------------
 
+haltSupervisor :: SupervisorEnv -> IO ()
+haltSupervisor env = do
+  writeSupervisorStatus env Halting
+  Child.terminateChildren "supervisor shutdown" env
+  resetChildMap           env                   (const HashMap.empty)
+  writeSupervisorStatus   env                   Halted
+
 handleMonitorEvent :: SupervisorEnv -> MonitorEvent -> IO Bool
 handleMonitorEvent env monitorEv = do
   case monitorEv of
@@ -79,8 +86,7 @@ handleControlAction env controlAction = case controlAction of
         return True
 
   TerminateSupervisor { notifySupervisorTermination } -> do
-    Child.terminateChildren "supervisor shutdown" env
-    writeSupervisorStatus   env                   Halted
+    haltSupervisor env
     notifySupervisorTermination
     return False
 
@@ -99,9 +105,7 @@ handleSupervisorException env@SupervisorEnv { supervisorId, supervisorName, noti
       , supervisorError
       , eventTime
       }
-    Child.terminateChildren "supervisor shutdown" env
-    resetChildMap           env                   (const HashMap.empty)
-    writeSupervisorStatus   env                   Halted
+    haltSupervisor env
     throwIO supervisorError
 
 runSupervisorLoop :: (forall b . IO b -> IO b) -> SupervisorEnv -> IO ()
@@ -129,7 +133,7 @@ runSupervisorLoop unmask env@SupervisorEnv { supervisorId, supervisorName, super
           runSupervisorLoop unmask env
 
         Running -> do
-          eContinueLoop <- unmask $ try $ handleSupervisorMessage env message
+          eContinueLoop <- try $ unmask $ handleSupervisorMessage env message
           case eContinueLoop of
             Left supervisorError ->
               handleSupervisorException env supervisorError
@@ -144,7 +148,12 @@ runSupervisorLoop unmask env@SupervisorEnv { supervisorId, supervisorName, super
                   , eventTime
                   }
 
-        Halted -> panic "TODO: Pending halted state"
+        Halting ->
+          -- Discard messages when halting
+          return ()
+
+        Halted ->
+          panic "TODO: Pending halted state"
 
 buildSupervisorRuntime :: SupervisorOptions -> IO SupervisorRuntime
 buildSupervisorRuntime supervisorOptions = do
@@ -155,11 +164,11 @@ buildSupervisorRuntime supervisorOptions = do
   return SupervisorRuntime {..}
 
 forkSupervisor :: SupervisorOptions -> IO Supervisor
-forkSupervisor supervisorOptions@SupervisorOptions { supervisorName, supervisorChildSpecList }
+forkSupervisor supervisorOptions@SupervisorOptions { supervisorName, supervisorChildSpecList, notifyEvent }
   = do
     supervisorRuntime <- buildSupervisorRuntime supervisorOptions
 
-    let supervisorEnv = supervisorToEnv supervisorRuntime
+    let supervisorEnv@SupervisorEnv {supervisorId} = supervisorToEnv supervisorRuntime
 
     supervisorAsync <- asyncWithUnmask
       $ \unmask -> runSupervisorLoop unmask supervisorEnv
@@ -179,7 +188,15 @@ forkSupervisor supervisorOptions@SupervisorOptions { supervisorName, supervisorC
         status <- readSupervisorStatus supervisorEnv
         case status of
           Halted -> return ()
-          _      -> sendSyncControlMsg supervisorEnv TerminateSupervisor
+          Halting -> return ()
+          _      -> do
+            eventTime <- getCurrentTime
+            notifyEvent SupervisorShutdownInvoked {
+                supervisorId
+              , supervisorName
+              , eventTime
+              }
+            sendSyncControlMsg supervisorEnv TerminateSupervisor
       )
 
     return Supervisor {..}

@@ -81,6 +81,16 @@ data SupervisorEvent
   , childError     :: !SomeException
   , eventTime      :: !UTCTime
   }
+  | SupervisedChildCallbackExecuted {
+    supervisorName     :: !SupervisorName
+  , supervisorId       :: !SupervisorId
+  , childThreadId      :: !ChildThreadId
+  , childId            :: !ChildId
+  , childName          :: !ChildName
+  , childCallbackError :: !(Maybe SomeException)
+  , callbackType       :: !CallbackType
+  , eventTime          :: !UTCTime
+  }
   | SupervisedChildrenTerminationStarted {
     supervisorName    :: !SupervisorName
   , supervisorId      :: !SupervisorId
@@ -100,6 +110,11 @@ data SupervisorEvent
   , eventTime       :: !UTCTime
   }
   | SupervisorTerminated {
+    supervisorName :: !SupervisorName
+  , supervisorId   :: !SupervisorId
+  , eventTime      :: !UTCTime
+  }
+  | SupervisorShutdownInvoked {
     supervisorName :: !SupervisorName
   , supervisorId   :: !SupervisorId
   , eventTime      :: !UTCTime
@@ -156,6 +171,7 @@ data SupervisorOptions
   , supervisorRestartStrategy       :: !SupervisorRestartStrategy
   , supervisorChildSpecList         :: ![ChildSpec]
   , supervisorChildTerminationOrder :: !ChildTerminationOrder
+  , onSupervisorIntensityReached    :: !(IO ())
   , notifyEvent                     :: !(SupervisorEvent -> IO ())
   }
 
@@ -312,6 +328,7 @@ data MonitorEvent
 data SupervisorStatus
   = Initializing
   | Running
+  | Halting
   | Halted
   deriving (Generic, Show, Eq)
 
@@ -357,6 +374,7 @@ data SupervisorEnv
   , supervisorPeriodSeconds         :: !NominalDiffTime
   , supervisorRestartStrategy       :: !SupervisorRestartStrategy
   , supervisorChildTerminationOrder :: !ChildTerminationOrder
+  , onSupervisorIntensityReached    :: !(IO ())
   , notifyEvent                     :: !(SupervisorEvent -> IO ())
   }
 
@@ -370,6 +388,7 @@ defSupervisorOptions = SupervisorOptions
   , supervisorRestartStrategy       = def
   , supervisorChildSpecList         = []
   , supervisorChildTerminationOrder = OldestFirst
+  , onSupervisorIntensityReached    = return ()
   , notifyEvent                     = const $ return ()
   }
 

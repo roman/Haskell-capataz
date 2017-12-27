@@ -30,13 +30,15 @@ setChildThreadName childId childName = do
 
 handleChildException
   :: (IO () -> IO a)
+  -> SupervisorEnv
   -> ChildSpec
   -> ChildId
   -> RestartCount
   -> SomeException
   -> IO MonitorEvent
-handleChildException unmask ChildSpec { childName, childOnFailure, childOnTermination } childId restartCount err
+handleChildException unmask SupervisorEnv {supervisorId, supervisorName, notifyEvent} ChildSpec {childName, childOnFailure, childOnTermination} childId restartCount err
   = do
+    childThreadId <- myThreadId
     monitorEventTime <- getCurrentTime
     case fromException err of
       Just RestartChildException ->
@@ -44,8 +46,21 @@ handleChildException unmask ChildSpec { childName, childOnFailure, childOnTermin
 
       Just TerminateChildException { childTerminationReason } -> do
         eErrResult <- try $ unmask childOnTermination
+
+        notifyEvent SupervisedChildCallbackExecuted
+          { supervisorId
+          , supervisorName
+          , childId
+          , childName
+          , childThreadId
+          , childCallbackError = either Just (const Nothing) eErrResult
+          , callbackType = OnTermination
+          , eventTime = monitorEventTime
+          }
+
         case eErrResult of
-          Left childCallbackError -> return ChildFailed
+          Left childCallbackError ->
+            return ChildFailed
             { childName
             , childId
             , monitorEventTime
@@ -77,6 +92,19 @@ handleChildException unmask ChildSpec { childName, childOnFailure, childOnTermin
       -- This exception was an error from the given sub-routine
       Nothing -> do
         eErrResult <- try $ unmask $ childOnFailure err
+
+        notifyEvent SupervisedChildCallbackExecuted
+          {
+            supervisorId
+          , supervisorName
+          , childId
+          , childName
+          , childThreadId
+          , childCallbackError = either Just (const Nothing) eErrResult
+          , callbackType = OnFailure
+          , eventTime = monitorEventTime
+          }
+
         case eErrResult of
           Left childCallbackError -> return ChildFailed
             { childName
@@ -99,11 +127,24 @@ handleChildException unmask ChildSpec { childName, childOnFailure, childOnTermin
             }
 
 handleChildCompletion
-  :: (IO () -> IO a) -> ChildSpec -> ChildId -> RestartCount -> IO MonitorEvent
-handleChildCompletion unmask ChildSpec { childName, childOnCompletion } childId restartCount
+  :: (IO () -> IO a) -> SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO MonitorEvent
+handleChildCompletion unmask SupervisorEnv {supervisorId, supervisorName, notifyEvent} ChildSpec { childName, childOnCompletion } childId restartCount
   = do
+    childThreadId <- myThreadId
     monitorEventTime <- getCurrentTime
     eCompResult      <- try $ unmask childOnCompletion
+
+    notifyEvent SupervisedChildCallbackExecuted
+      { supervisorId
+      , supervisorName
+      , childId
+      , childName
+      , childThreadId
+      , childCallbackError = either Just (const Nothing) eCompResult
+      , callbackType = OnCompletion
+      , eventTime = monitorEventTime
+      }
+
     case eCompResult of
       Left err -> return ChildFailed
         { childName
@@ -121,7 +162,7 @@ handleChildCompletion unmask ChildSpec { childName, childOnCompletion } childId 
         return ChildCompleted {childName , childId , monitorEventTime }
 
 childMain :: SupervisorEnv -> ChildSpec -> ChildId -> RestartCount -> IO Child
-childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, childAction } childId restartCount
+childMain env@SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, childAction } childId restartCount
   = do
     childCreationTime <- getCurrentTime
     childAsync        <- asyncWithUnmask $ \unmask -> do
@@ -132,8 +173,9 @@ childMain SupervisorEnv { supervisorQueue } childSpec@ChildSpec { childName, chi
 
       resultEvent <- case eResult of
         Left err ->
-          handleChildException unmask childSpec childId restartCount err
-        Right _ -> handleChildCompletion unmask childSpec childId restartCount
+          handleChildException unmask env childSpec childId restartCount err
+        Right _ ->
+          handleChildCompletion unmask env childSpec childId restartCount
 
       atomically $ writeTQueue supervisorQueue (MonitorEvent resultEvent)
 

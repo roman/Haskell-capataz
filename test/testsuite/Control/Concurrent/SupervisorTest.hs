@@ -1,19 +1,22 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE NamedFieldPuns        #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module Control.Concurrent.SupervisorTest (tests) where
 
 import Protolude
 
 import qualified Data.Text as T
 
-import Data.IORef       (atomicModifyIORef', newIORef, readIORef)
+import Data.IORef       (atomicModifyIORef', newIORef, readIORef, writeIORef)
 import Text.Show.Pretty (ppShow)
 
-import Test.Tasty                   (TestTree, testGroup)
-import Test.Tasty.HUnit             (assertBool, assertFailure, testCase)
+import Test.Tasty       (TestTree, testGroup)
+import Test.Tasty.HUnit (assertBool, assertFailure, testCase)
+
+import Control.Concurrent.STM.TVar (newTVarIO, modifyTVar', readTVar)
+import Control.Concurrent.STM.TQueue (newTQueueIO, readTQueue, writeTQueue)
 
 import qualified Control.Concurrent.Supervisor as SUT
 
@@ -32,38 +35,6 @@ andP predList a = all ($ a) predList
 --------------------------------------------------------------------------------
 -- Assertions and Testers
 
-combineAssertions
-  :: [[SUT.SupervisorEvent] -> IO ()] -> [SUT.SupervisorEvent] -> IO ()
-combineAssertions assertions events =
-  mapM_ (\assertFn -> assertFn events) assertions
-
-assertInOrder :: [SUT.SupervisorEvent -> Bool] -> [SUT.SupervisorEvent] -> IO ()
-assertInOrder assertions0 events0 =
-  let loop assertions events = case (assertions, events) of
-        ([], _) -> return ()
-        (assertionFn:assertions', event:events')
-          | assertionFn event -> loop assertions' events'
-          | otherwise         -> loop assertions events'
-        (assertions', []) -> assertFailure
-          (  "Expected all assertions to match, but didn't ("
-          <> show (length assertions')
-          <> " assertions remaining, "
-          <> show (length events0)
-          <> " events tried)\n"
-          <> ppShow (zip ([0 ..] :: [Int]) events0)
-          )
-  in  loop assertions0 events0
-
-assertAll :: (SUT.SupervisorEvent -> Bool) -> [SUT.SupervisorEvent] -> IO ()
-assertAll predFn events = if all predFn events
-  then return ()
-  else assertFailure
-    (  "Expected all events to match predicate, but didn't ("
-    <> show (length events)
-    <> " events tried)\n"
-    <> ppShow (zip ([0 ..] :: [Int]) events)
-    )
-
 data EventType
   = InvalidSupervisorStatusReached
   | SupervisorStatusChanged
@@ -72,6 +43,7 @@ data EventType
   | SupervisedChildRestarted
   | SupervisedChildCompleted
   | SupervisedChildFailed
+  | SupervisedChildCallbackExecuted
   | SupervisedChildrenTerminationStarted
   | SupervisedChildrenTerminationFinished
   | SupervisorFailed
@@ -95,13 +67,18 @@ assertErrorType errType ev = case ev of
     fetchRecordName childError == errType
   SUT.SupervisorFailed { supervisorError } ->
     fetchRecordName supervisorError == errType
+  SUT.SupervisedChildCallbackExecuted { childCallbackError } ->
+    case childCallbackError of
+      Nothing -> False
+      Just originalError -> fetchRecordName originalError == errType
   _ -> False
 
 assertCallbackType :: SUT.CallbackType -> SUT.SupervisorEvent -> Bool
 assertCallbackType cbType ev = case ev of
   SUT.SupervisedChildFailed { childError } -> case fromException childError of
     Just SUT.ChildCallbackFailed { callbackType } -> cbType == callbackType
-    _                                               -> False
+    _                                             -> False
+  SUT.SupervisedChildCallbackExecuted { callbackType } -> cbType == callbackType
   _ -> False
 
 assertRestartCount :: (Int -> Bool) -> SUT.SupervisorEvent -> Bool
@@ -119,21 +96,15 @@ assertSupervisorStatusChanged fromEv toEv ev = case ev of
 
 assertChildStarted :: Text -> SUT.SupervisorEvent -> Bool
 assertChildStarted childName =
-  andP [ assertEventType SupervisedChildStarted
-       , assertChildName childName
-       ]
+  andP [assertEventType SupervisedChildStarted, assertChildName childName]
 
 assertChildTerminated :: Text -> SUT.SupervisorEvent -> Bool
 assertChildTerminated childName =
-  andP [ assertEventType SupervisedChildTerminated
-       , assertChildName childName
-       ]
+  andP [assertEventType SupervisedChildTerminated, assertChildName childName]
 
 assertSupervisorFailedWith :: Text -> SUT.SupervisorEvent -> Bool
 assertSupervisorFailedWith errorName =
-  andP [ assertEventType SupervisorFailed
-       , assertErrorType errorName
-       ]
+  andP [assertEventType SupervisorFailed, assertErrorType errorName]
 
 --------------------------------------------------------------------------------
 
@@ -149,25 +120,17 @@ data TimeoutError
 
 instance Exception TimeoutError
 
-mkFailingSubRoutine :: Int -> IO (IO (), IO ())
+mkFailingSubRoutine :: Int -> IO (IO ())
 mkFailingSubRoutine failCount = do
-  errorsDoneLock <- newEmptyMVar
   countRef       <- newIORef failCount
   let subRoutine = do
         shouldFail <- atomicModifyIORef' countRef
                                          (\count -> (pred count, count > 0))
         if shouldFail
           then throwIO RestartingChildError
-          else putMVar errorsDoneLock ()
+          else return ()
 
-      waitForErrors = takeMVar errorsDoneLock
-
-  return (subRoutine, waitForErrors)
-
-mkCompletingSubRoutine :: IO (IO (), IO ())
-mkCompletingSubRoutine = do
-  lockVar  <- newEmptyMVar
-  return (putMVar lockVar (), takeMVar lockVar)
+  return subRoutine
 
 -- | Returns two values:
 --
@@ -179,1003 +142,1032 @@ mkCompletingSubRoutine = do
 -- like to assert restart events once (if it keeps completing it will fill up the
 -- log with restart events)
 --
-mkCompletingBeforeNRestartsSubRoutine :: Int -> IO (IO (), IO ())
+mkCompletingBeforeNRestartsSubRoutine :: Int -> IO (IO ())
 mkCompletingBeforeNRestartsSubRoutine initCount = do
-  lockVar <- newEmptyMVar
   countRef <- newIORef initCount
   let subRoutine = do
-        shouldStop <- atomicModifyIORef' countRef (\count -> (pred count, count > 0))
-        if shouldStop then do
-          putMVar lockVar ()
+        shouldStop <- atomicModifyIORef' countRef
+                                         (\count -> (pred count, count > 0))
+        if shouldStop then
           return ()
         else
           forever $ threadDelay 1000100
-  return (subRoutine, takeMVar lockVar)
+  return subRoutine
 
 -- | Returns two values:
 --
 -- * A sub-routine that will complete once
 --
--- * A sub-routine that will release execution once the sub-routine is finished
---
 -- This function works great when testing `Permanent` strategies, as you would
 -- like to assert restart events once (if it keeps completing it will fill up the
 -- log with restart events)
 --
-mkCompletingOnceSubRoutine :: IO (IO (), IO ())
+mkCompletingOnceSubRoutine :: IO (IO ())
 mkCompletingOnceSubRoutine = mkCompletingBeforeNRestartsSubRoutine 1
 
--- TODO: Add onSupervisorIntensityReached on SupervisorOptions
-mkLockAfterNRestartsSubRoutine :: Int -> IO () -> IO (IO (), IO ())
-mkLockAfterNRestartsSubRoutine restartCount failingSubRoutine = do
-  lockVar <- newEmptyMVar
-  countRef <- newIORef 0
-  let subRoutine = do
-        shouldStop <- atomicModifyIORef' countRef (\count -> (succ count, succ count == restartCount))
-        if shouldStop then do
-          putMVar lockVar ()
-          return ()
-        else
-          failingSubRoutine
-
-
-  return (subRoutine, takeMVar lockVar)
-
-mkNonCompletingSubRoutine :: IO (IO (), IO ())
-mkNonCompletingSubRoutine = do
-  lockVar  <- newEmptyMVar
-  let subRoutineAction :: IO ()
-      subRoutineAction = do
-         putMVar lockVar ()
-         forever (threadDelay 10001000)
-  return (subRoutineAction, takeMVar lockVar)
-
-testSupervisorWithOptions
-  :: [Char]
-  -> ([SUT.SupervisorEvent] -> IO ())
+testSupervisorStreamWithOptions
+  :: [SUT.SupervisorEvent -> Bool]
   -> (SUT.SupervisorOptions -> SUT.SupervisorOptions)
   -> (SUT.Supervisor -> IO ())
-  -> TestTree
-testSupervisorWithOptions testCaseStr assertionsFn optionModFn setupFn =
-  testCase testCaseStr $ do
-    accRef     <- newIORef []
-    supervisor <- SUT.forkSupervisor $ (optionModFn SUT.defSupervisorOptions)
-      { SUT.notifyEvent = trackEvent accRef
-      }
-    result :: Either SomeException () <- try
-      (setupFn supervisor `finally` SUT.teardown supervisor)
-    case result of
-      Left  err -> assertFailure (show err)
-      Right _   -> do
-        events <- readIORef accRef
-        assertionsFn (reverse events)
- where
-  trackEvent accRef ev = atomicModifyIORef' accRef (\old -> (ev : old, ()))
+  -> [SUT.SupervisorEvent -> Bool]
+  -> [SUT.SupervisorEvent -> Bool]
+  -> Maybe (SUT.SupervisorEvent -> Bool)
+  -> IO ()
+testSupervisorStreamWithOptions
+  preSetupAssertion optionModFn setupFn postSetupAssertions postTeardownAssertions mAllEventsAssertion = do
 
-testSupervisor
-  :: [Char]
-  -> ([SUT.SupervisorEvent] -> IO ())
+    eventStream <- newTQueueIO
+    accRef      <- newIORef []
+    pendingCountVar <- newIORef (sum $ map length [ preSetupAssertion
+                                                  , postSetupAssertions
+                                                  , postTeardownAssertions
+                                                  ])
+
+    supervisor <- SUT.forkSupervisor $ (optionModFn SUT.defSupervisorOptions)
+      { SUT.notifyEvent = trackEvent accRef eventStream }
+
+    runAssertions (eventStream, accRef) pendingCountVar preSetupAssertion supervisor
+    setupResult <- try (setupFn supervisor)
+
+    case setupResult of
+      Left err -> assertFailure (show (err :: SomeException))
+      Right _ -> do
+        runAssertions (eventStream, accRef) pendingCountVar postSetupAssertions supervisor
+
+        void $ SUT.teardown supervisor
+        runAssertions (eventStream, accRef) pendingCountVar postTeardownAssertions supervisor
+
+        case mAllEventsAssertion of
+          Nothing -> return ()
+          Just allEventsAssertion -> do
+            events <- reverse <$> readIORef accRef
+            assertBool ("Expected all events to match predicate, but didn't ("
+                         <> show (length events)
+                         <> " events tried)\n"
+                         <> ppShow (zip ([0 ..] :: [Int]) events)
+                         )
+                       (all allEventsAssertion events)
+  where
+    runAssertions (eventStream, accRef) pendingCountVar assertions supervisor = do
+      raceResult <- race (threadDelay 1000100)
+                         (readEventLoop eventStream pendingCountVar assertions)
+      case raceResult of
+        Left _ -> do
+          events <- reverse <$> readIORef accRef
+          pendingCount <- readIORef pendingCountVar
+          void $ SUT.teardown supervisor
+          assertFailure
+            (  "Expected all assertions to match, but didn't ("
+            <> show pendingCount
+            <> " assertions remaining, "
+            <> show (length events)
+            <> " events tried)\n"
+            <> ppShow (zip ([0 ..] :: [Int]) events)
+            )
+        Right _ -> return ()
+
+
+    trackEvent accRef eventStream event = do
+      atomicModifyIORef' accRef (\old -> (event: old, ()))
+      atomically $ writeTQueue eventStream event
+
+    readEventLoop eventStream pendingCount assertions = do
+      writeIORef pendingCount (length assertions)
+      case assertions of
+        [] -> return ()
+        (assertionFn:assertions1) -> do
+          event <- atomically $ readTQueue eventStream
+          if assertionFn event then
+            readEventLoop eventStream pendingCount assertions1
+          else
+            readEventLoop eventStream pendingCount assertions
+
+
+testSupervisorStream
+  :: [SUT.SupervisorEvent -> Bool]
   -> (SUT.Supervisor -> IO ())
-  -> TestTree
-testSupervisor testCaseStr assertionsFn =
-  testSupervisorWithOptions testCaseStr assertionsFn identity
+  -> [SUT.SupervisorEvent -> Bool]
+  -> [SUT.SupervisorEvent -> Bool]
+  -> Maybe (SUT.SupervisorEvent -> Bool)
+  -> IO ()
+testSupervisorStream preSetupAssertions =
+  testSupervisorStreamWithOptions preSetupAssertions identity
 
 --------------------------------------------------------------------------------
 -- Actual Tests
 
 tests :: [TestTree]
-tests
-  = [ testGroup
-      "supervisor without childSpecList"
-      [ testSupervisor
-          "initialize and teardown works as expected"
-          ( assertInOrder
-            [ andP
-              [ assertEventType SupervisorStatusChanged
-              , assertSupervisorStatusChanged SUT.Initializing SUT.Running
-              ]
-            , andP
-              [ assertEventType SupervisorStatusChanged
-              , assertSupervisorStatusChanged SUT.Running SUT.Halted
-              ]
+tests =
+  [ testGroup
+    "supervisor without childSpecList"
+    [ testCase "initialize and teardown works as expected" $
+      testSupervisorStream
+        [ andP
+          [ assertEventType SupervisorStatusChanged
+          , assertSupervisorStatusChanged SUT.Initializing SUT.Running
+          ]
+        ]
+        (const $ return ())
+        []
+        [ andP
+          [ assertEventType SupervisorStatusChanged
+          , assertSupervisorStatusChanged SUT.Running SUT.Halting
+          ]
+        , andP
+          [ assertEventType SupervisorStatusChanged
+          , assertSupervisorStatusChanged SUT.Halting SUT.Halted
+          ]
+        ]
+        Nothing
+    ]
+  , testGroup
+    "supervisor with childSpecList"
+    [ testCase "initialize and teardown works as expected"
+        $ do
+        testSupervisorStreamWithOptions
+          [ assertChildStarted "A"
+          , assertChildStarted "B"
+          , andP
+            [ assertEventType SupervisorStatusChanged
+            , assertSupervisorStatusChanged SUT.Initializing SUT.Running
             ]
-          )
-          (\_supervisor -> threadDelay 500)
-      ]
-    , testGroup
-      "supervisor with childSpecList"
-      [ testSupervisorWithOptions
-          "initialize and teardown works as expected"
-          ( assertInOrder
-            [ assertChildStarted "A"
-            , assertChildStarted "B"
-            , andP
-              [ assertEventType SupervisorStatusChanged
-              , assertSupervisorStatusChanged SUT.Initializing SUT.Running
-              ]
-            , assertEventType SupervisedChildrenTerminationStarted
-            , assertChildTerminated "A"
-            , assertChildTerminated "B"
-            , assertEventType SupervisedChildrenTerminationFinished
-            , andP
-              [ assertEventType SupervisorStatusChanged
-              , assertSupervisorStatusChanged SUT.Running SUT.Halted
-              ]
-            ]
-          )
+          ]
           ( \supOptions -> supOptions
-            { SUT.supervisorChildSpecList = [
-                SUT.defChildSpec
-                  { SUT.childName   = "A"
-                  , SUT.childAction = forever
-                                      $ threadDelay
-                                      1000100
-                  }
-                , SUT.defChildSpec
-                  { SUT.childName   = "B"
-                  , SUT.childAction = forever
-                                      $ threadDelay
-                                      1000100
-                  }
-                ]
+            { SUT.supervisorChildSpecList = [ SUT.defChildSpec
+                                              { SUT.childName   = "A"
+                                              , SUT.childAction = forever (threadDelay 10001000)
+                                              }
+                                            , SUT.defChildSpec
+                                              { SUT.childName   = "B"
+                                              , SUT.childAction = forever (threadDelay 10001000)
+                                              }
+                                            ]
             }
           )
-          (\_supervisor -> threadDelay 500)
-      ]
-    , testSupervisor
+          (const $ return ())
+          []
+          [ andP
+            [ assertEventType SupervisorStatusChanged
+            , assertSupervisorStatusChanged SUT.Running SUT.Halting
+            ]
+          , assertEventType SupervisedChildrenTerminationStarted
+          , assertChildTerminated "A"
+          , assertChildTerminated "B"
+          , assertEventType SupervisedChildrenTerminationFinished
+          , andP
+            [ assertEventType SupervisorStatusChanged
+            , assertSupervisorStatusChanged SUT.Halting SUT.Halted
+            ]
+          ]
+          Nothing
+    ]
+  , testCase
       "reports supervisor error when supervisor thread receives async exception"
-      (assertInOrder [assertEventType SupervisorFailed])
-      ( \SUT.Supervisor { supervisorAsync } -> do
-        threadDelay 100
-        cancelWith supervisorAsync (ErrorCall "async exception")
-      )
-    , testSupervisor
+    $ testSupervisorStream
+        [ andP
+            [ assertEventType SupervisorStatusChanged
+            , assertSupervisorStatusChanged SUT.Initializing SUT.Running
+            ]
+        ]
+        ( \SUT.Supervisor { supervisorAsync } -> do
+          threadDelay 100 -- leave enough room for supervisor to start
+          cancelWith supervisorAsync (ErrorCall "async exception")
+        )
+        [ assertEventType SupervisorFailed ]
+        []
+        Nothing
+  , testCase
       "reports supervisor error when child retries violate restart intensity"
-      ( assertInOrder
+    $ do
+      lockVar <- newEmptyMVar
+      let (signalIntensityReached, waitTillIntensityReached) =
+            (putMVar lockVar (), takeMVar lockVar)
+      testSupervisorStreamWithOptions
+        []
+        (\supOptions -> supOptions { SUT.onSupervisorIntensityReached = signalIntensityReached })
+        ( \supervisor -> do
+          _childId <- SUT.forkChild SUT.defChildOptions
+                                    (throwIO RestartingChildError)
+                                    supervisor
+          waitTillIntensityReached
+        )
         [ assertEventType SupervisedChildFailed
         , assertEventType SupervisedChildFailed
         , assertEventType SupervisedChildFailed
         , assertSupervisorFailedWith "SupervisorIntensityReached"
         ]
-      )
-      ( \supervisor -> do
-        (failingSubRoutine, _waitFailures) <- mkFailingSubRoutine 3
-        _childId                           <- SUT.forkChild SUT.defChildOptions
-                                                            failingSubRoutine
-                                                            supervisor
-        threadDelay 500
-      )
-    , testGroup
-      "single supervised IO sub-routine"
+        []
+        Nothing
+  , testGroup
+    "single supervised IO sub-routine"
+    [ testGroup
+      "callbacks"
       [ testGroup
-        "callbacks"
-        [ testGroup
-          "childOnCompletion"
-          [ testSupervisor
-            "does execute callback when sub-routine is completed"
-            (assertInOrder [assertEventType SupervisedChildCompleted])
-            ( \supervisor -> do
-              callbackVar <- newEmptyMVar
-              _childId    <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy = SUT.Temporary
-                  , SUT.childOnCompletion    = putMVar callbackVar ()
-                  }
-                )
-                (return ())
-                supervisor
-              race_ (threadDelay 100 >> throwIO TimeoutError)
-                    (takeMVar callbackVar)
-            )
-
-          , testSupervisor
-            "does not execute callback when sub-routine fails"
-            (assertInOrder [assertEventType SupervisedChildFailed])
-            ( \supervisor -> do
-              callbackVar <- newMVar ()
-              _childId    <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy = SUT.Temporary
-                  , SUT.childOnCompletion    = takeMVar callbackVar
-                  }
-                )
-                (throwIO RestartingChildError)
-                supervisor
-
-              threadDelay 100
-              wasEmpty <- isEmptyMVar callbackVar
-              assertBool
-                "Expecting childOnCompletion to not get called, but it was"
-                (not wasEmpty)
-            )
-
-          , testSupervisor
-            "does not execute callback when sub-routine is terminated"
-            (assertInOrder [assertEventType SupervisedChildTerminated])
-            ( \supervisor -> do
-              (subRoutine, waitTillIsCalled) <- mkNonCompletingSubRoutine
-              callbackVar <- newMVar ()
-              childId     <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy = SUT.Temporary
-                  , SUT.childOnCompletion    = takeMVar callbackVar
-                  }
-                )
-                subRoutine
-                supervisor
-
-              SUT.terminateChild "testing onCompletion callback"
-                                 childId
-                                 supervisor
-              waitTillIsCalled
-
-              wasEmpty <- isEmptyMVar callbackVar
-              assertBool
-                "Expecting childOnCompletion to not get called, but it was"
-                (not wasEmpty)
-
-            )
-
-          , testSupervisor
-            "treats as sub-routine failed if callback fails"
-            ( assertInOrder
-              [ andP
-                  [ assertEventType SupervisedChildFailed
-                  , assertErrorType "ChildCallbackFailed"
-                  ]
-              ]
-            )
-            ( \supervisor -> do
-              (subRoutine, waitCompletion) <- mkCompletingSubRoutine
-              _childId <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy = SUT.Temporary
-                  , SUT.childOnCompletion    = throwIO RestartingChildError
-                  }
-                )
-                subRoutine
-                supervisor
-              waitCompletion
-            )
-          ]
-        , testGroup
-          "childOnFailure"
-          [ testSupervisor
-            "does execute callback when sub-routine fails"
-            (assertInOrder [assertEventType SupervisedChildFailed])
-            ( \supervisor -> do
-              callbackVar <- newEmptyMVar
-              _childId    <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy = SUT.Temporary
-                  , SUT.childOnFailure       = const $ putMVar callbackVar ()
-                  }
-                )
-                (throwIO RestartingChildError)
-                supervisor
-              race_ (threadDelay 100 >> throwIO TimeoutError)
-                    (takeMVar callbackVar)
-            )
-          , testSupervisor
-            "does not execute callback when sub-routine is completed"
-            (assertInOrder [assertEventType SupervisedChildCompleted])
-            ( \supervisor -> do
-              callbackVar <- newMVar ()
-              _childId    <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy = SUT.Temporary
-                  , SUT.childOnFailure       = const $ takeMVar callbackVar
-                  }
-                )
-                (return ())
-                supervisor
-
-              threadDelay 100
-              wasEmpty <- isEmptyMVar callbackVar
-              assertBool
-                "Expecting childOnFailure to not get called, but it was"
-                (not wasEmpty)
-            )
-          , testSupervisor
-            "does not execute callback when sub-routine is terminated"
-            (assertInOrder [assertEventType SupervisedChildTerminated])
-            ( \supervisor -> do
-              callbackVar <- newMVar ()
-              childId     <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy = SUT.Temporary
-                  , SUT.childOnFailure       = const $ takeMVar callbackVar
-                  }
-                )
-                (forever $ threadDelay 1000100)
-                supervisor
-
-              SUT.terminateChild "testing onFailure callback" childId supervisor
-              threadDelay 100
-
-              wasEmpty <- isEmptyMVar callbackVar
-              assertBool
-                "Expecting childOnFailure to not get called, but it was"
-                (not wasEmpty)
-            )
-          , testSupervisor
-            "treats as sub-routine failed if callback fails"
-            ( assertInOrder
-              [ andP
-                  [ assertEventType SupervisedChildFailed
-                  , assertErrorType "ChildCallbackFailed"
-                  ]
-              ]
-            )
-            ( \supervisor -> do
-              _childId <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy = SUT.Temporary
-                  , SUT.childOnFailure = const $ throwIO RestartingChildError
-                  }
-                )
-                (throwIO (ErrorCall "surprise"))
-                supervisor
-              threadDelay 100
-            )
-          ]
-        , testGroup
-          "childOnTermination"
-          [ testSupervisor
-            "gets brutally killed when TimeoutSeconds termination policy is not met"
-            ( assertInOrder
-              [ andP
-                  [ assertEventType SupervisedChildFailed
-                  , assertErrorType "ChildCallbackFailed"
-                  , assertCallbackType SUT.OnTermination
-                  ]
-              ]
-            )
-            ( \supervisor -> do
-              childId <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy   = SUT.Temporary
-                  , SUT.childTerminationPolicy = SUT.TimeoutMillis 1
-                  , SUT.childOnTermination     = forever $ threadDelay 100100
-                  }
-                )
-                (forever $ threadDelay 10001000)
-                supervisor
-
-              SUT.terminateChild "testing childOnTermination callback"
-                                 childId
-                                 supervisor
-              threadDelay 500
-            )
-          , testSupervisor
-            "does execute callback when sub-routine is terminated"
-            (assertInOrder [assertEventType SupervisedChildTerminated])
-            ( \supervisor -> do
-              callbackVar <- newEmptyMVar
-              childId     <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy = SUT.Temporary
-                  , SUT.childOnTermination   = putMVar callbackVar ()
-                  }
-                )
-                (forever $ threadDelay 1000100)
-                supervisor
-
-              SUT.terminateChild "testing childOnTermination callback"
-                                 childId
-                                 supervisor
-              race_ (threadDelay 100 >> throwIO TimeoutError)
-                    (takeMVar callbackVar)
-            )
-          , testSupervisor
-            "does not execute callback when sub-routine is completed"
-            (assertInOrder [assertEventType SupervisedChildCompleted])
-            ( \supervisor -> do
-              callbackVar <- newMVar ()
-              _childId    <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy = SUT.Temporary
-                  , SUT.childOnTermination   = takeMVar callbackVar
-                  }
-                )
-                (return ())
-                supervisor
-
-              threadDelay 100
-              wasEmpty <- isEmptyMVar callbackVar
-              assertBool
-                "Expecting childOnTermination to not get called, but it was"
-                (not wasEmpty)
-            )
-          , testSupervisor
-            "does not execute callback when sub-routine fails"
-            (assertInOrder [assertEventType SupervisedChildFailed])
-            ( \supervisor -> do
-              callbackVar <- newMVar ()
-              _childId    <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy = SUT.Temporary
-                  , SUT.childOnTermination   = takeMVar callbackVar
-                  }
-                )
-                (throwIO (ErrorCall "surprise!"))
-                supervisor
-
-              threadDelay 100
-              wasEmpty <- isEmptyMVar callbackVar
-              assertBool
-                "Expecting childOnTermination to not get called, but it was"
-                (not wasEmpty)
-            )
-          , testSupervisor
-            "treats as sub-routine failed if callback fails"
-            ( assertInOrder
-              [ andP
-                  [ assertEventType SupervisedChildFailed
-                  , assertErrorType "ChildCallbackFailed"
-                  ]
-              ]
-            )
-            ( \supervisor -> do
-              childId <- SUT.forkChild
-                ( SUT.defChildOptions
-                  { SUT.childRestartStrategy = SUT.Temporary
-                  , SUT.childOnTermination   = throwIO RestartingChildError
-                  }
-                )
-                (forever $ threadDelay 10001000)
-                supervisor
-
-              SUT.terminateChild "testing childOnTermination callback"
-                                 childId
-                                 supervisor
-              threadDelay 500
-            )
-          ]
-        ]
-      , testGroup
-        "with transient strategy"
-        [ testSupervisor
-          "does not restart on completion"
-          ( combineAssertions
-            [ assertInOrder
-              [ assertEventType SupervisedChildStarted
+        "childOnCompletion"
+        [ testCase "does execute callback when sub-routine is completed"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                _childId    <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy = SUT.Temporary
+                    }
+                  )
+                  (return ())
+                  supervisor
+                return ()
+              )
+              [ andP [ assertEventType SupervisedChildCallbackExecuted
+                     , assertCallbackType SUT.OnCompletion ]
               , assertEventType SupervisedChildCompleted
-              , assertEventType SupervisorTerminated
               ]
-            , assertAll (not . assertEventType SupervisedChildRestarted)
-            ]
-          )
-          ( \supervisor -> do
-            (subRoutineAction, waitCompletion) <- mkCompletingSubRoutine
-            _childId <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
-              subRoutineAction
-              supervisor
-            waitCompletion
-          )
-        , testSupervisor
-          "does not restart on termination"
-          ( combineAssertions
-            [ assertInOrder
-              [ assertEventType SupervisedChildTerminated
-              , assertEventType SupervisorTerminated
-              ]
-            , assertAll (not . assertEventType SupervisedChildRestarted)
-            ]
-          )
-          ( \supervisor -> do
-            childId <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
-              (forever $ threadDelay 1000100)
-              supervisor
-            SUT.terminateChild "termination test (1)" childId supervisor
-            threadDelay 500
-          )
-        , testSupervisor
-          "does restart on failure"
-          ( assertInOrder
-            [ assertEventType SupervisedChildStarted
-            , assertEventType SupervisedChildFailed
-            , andP
-              [ assertEventType SupervisedChildRestarted
-              , assertRestartCount (== 1)
-              ]
-            ]
-          )
-          ( \supervisor -> do
-            (subRoutineAction, waitFailures) <- mkFailingSubRoutine 1
-            _childId                         <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
-              subRoutineAction
-              supervisor
-            waitFailures
-          )
-        , testSupervisor
-          "does increase restart count on multiple failures"
-          ( assertInOrder
-            [ andP
-              [ assertEventType SupervisedChildRestarted
-              , assertRestartCount (== 1)
-              ]
-            , andP
-              [ assertEventType SupervisedChildRestarted
-              , assertRestartCount (== 2)
-              ]
-            ]
-          )
-          ( \supervisor -> do
-            (subRoutineAction, waitFailures) <- mkFailingSubRoutine 2
-            _childId                         <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
-              subRoutineAction
-              supervisor
-            waitFailures
-          )
-        ]
-      , testGroup
-        "with permanent strategy"
-        [ testSupervisor
-          "does restart on completion"
-          ( assertInOrder
-            [ assertEventType SupervisedChildStarted
-            , assertEventType SupervisedChildCompleted
-            , assertEventType SupervisedChildRestarted
-            , assertEventType SupervisorTerminated
-            ]
-          )
-          ( \supervisor -> do
-            (subRoutineAction, waitCompletion) <- mkCompletingOnceSubRoutine
-            _childId                           <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
-              subRoutineAction
-              supervisor
-            waitCompletion
-          )
-        , testSupervisor
-          "does not increase restart count on multiple completions"
-          ( assertInOrder
-            [ andP
-              [ assertEventType SupervisedChildRestarted
-              , assertRestartCount (== 1)
-              ]
-            , andP
-              [ assertEventType SupervisedChildRestarted
-              , assertRestartCount (== 1)
-              ]
-            ]
-          )
-          ( \supervisor -> do
-            -- Note the number is two (2) given the assertion list has two `SupervisedChildRestarted` assertions
-            let expectedRestartCount = 2
-            (subRoutineAction, waitCompletion) <- mkCompletingBeforeNRestartsSubRoutine expectedRestartCount
-            _childId                           <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
-              subRoutineAction
-              supervisor
-            waitCompletion
-            waitCompletion
-          )
-        , testSupervisor
-          "does restart on termination"
-          ( assertInOrder
-            [ assertEventType SupervisedChildTerminated
-            , assertEventType SupervisedChildRestarted
-            ]
-          )
-          ( \supervisor -> do
-            childId <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
-              (forever $ threadDelay 10001000)
-              supervisor
-            SUT.terminateChild "testing termination (1)" childId supervisor
-            threadDelay 100
-          )
-        , testSupervisor
-          "does increase restart count on multiple terminations"
-          ( assertInOrder
-            [ assertEventType SupervisedChildTerminated
-            , andP
-              [ assertEventType SupervisedChildRestarted
-              , assertRestartCount (== 1)
-              ]
-            , assertEventType SupervisedChildTerminated
-            , andP
-              [ assertEventType SupervisedChildRestarted
-              , assertRestartCount (== 2)
-              ]
-            ]
-          )
-          ( \supervisor -> do
-            childId <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
-              (forever $ threadDelay 10001000)
-              supervisor
-            SUT.terminateChild "testing termination (1)" childId supervisor
-            threadDelay 100
-            SUT.terminateChild "testing termination (2)" childId supervisor
-            threadDelay 100
-          )
-        , testSupervisor
-          "does restart on failure"
-          ( assertInOrder
-            [ assertEventType SupervisedChildStarted
-            , assertEventType SupervisedChildFailed
-            , andP
-              [ assertEventType SupervisedChildRestarted
-              , assertRestartCount (== 1)
-              ]
-            ]
-          )
-          ( \supervisor -> do
-            (subRoutineAction, waitFailures) <- mkFailingSubRoutine 1
-            _childId                         <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
-              subRoutineAction
-              supervisor
-            waitFailures
-          )
-        , testSupervisor
-          "does increase restart count on multiple failures"
-          ( assertInOrder
-            [ andP
-              [ assertEventType SupervisedChildRestarted
-              , assertRestartCount (== 1)
-              ]
-            , andP
-              [ assertEventType SupervisedChildRestarted
-              , assertRestartCount (== 2)
-              ]
-            ]
-          )
-          ( \supervisor -> do
-            (subRoutineAction, waitFailures) <- mkFailingSubRoutine 2
-            _childId                         <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
-              subRoutineAction
-              supervisor
-            waitFailures
-          )
-        ]
-      , testGroup
-        "with temporary strategy"
-        [ testSupervisor
-          "does not restart on completion"
-          ( combineAssertions
-            [ assertInOrder
-              [ assertEventType SupervisedChildStarted
-              , assertEventType SupervisedChildCompleted
-              , assertEventType SupervisorTerminated
-              ]
-            , assertAll (not . assertEventType SupervisedChildRestarted)
-            ]
-          )
-          ( \supervisor -> do
-            _childId <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary }
-              (return ())
-              supervisor
-            threadDelay 10
-          )
-        , testSupervisor
-          "does not restart on termination"
-          ( combineAssertions
-            [ assertInOrder
-              [ assertEventType SupervisedChildStarted
-              , assertEventType SupervisedChildTerminated
-              , assertEventType SupervisorTerminated
-              ]
-            , assertAll (not . assertEventType SupervisedChildRestarted)
-            ]
-          )
-          ( \supervisor -> do
-            childId <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary }
-              (forever $ threadDelay 1000100)
-              supervisor
-            SUT.terminateChild "termination test (1)" childId supervisor
-            threadDelay 100
-          )
-        , testSupervisor
-          "does not restart on failure"
-          ( combineAssertions
-            [ assertInOrder
-              [ assertEventType SupervisedChildStarted
+              []
+              Nothing
+        , testCase "does not execute callback when sub-routine fails"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                _childId    <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy = SUT.Temporary }
+                  )
+                  (throwIO RestartingChildError)
+                  supervisor
+                return ()
+              )
+              [ andP [ assertEventType SupervisedChildCallbackExecuted
+                     , assertCallbackType SUT.OnFailure
+                     ]
               , assertEventType SupervisedChildFailed
-              , assertEventType SupervisorTerminated
               ]
-            , assertAll (not . assertEventType SupervisedChildRestarted)
-            ]
-          )
-          ( \supervisor -> do
-            _childId <- SUT.forkChild
-              SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary }
-              (panic "child failed!")
-              supervisor
-            threadDelay 500
-          )
+              [assertEventType SupervisorTerminated]
+              (Just $ not . andP [ assertEventType SupervisedChildCallbackExecuted
+                                 , assertCallbackType SUT.OnCompletion ])
+        , testCase "does not execute callback when sub-routine is terminated"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                childId                        <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy = SUT.Temporary}
+                  )
+                  (forever $ threadDelay 1000100)
+                  supervisor
+
+                _childId <- SUT.terminateChild "testing onCompletion callback"
+                                   childId
+                                   supervisor
+                return ()
+              )
+              [assertEventType SupervisedChildTerminated]
+              [assertEventType SupervisorTerminated]
+              (Just $ not . andP [ assertEventType SupervisedChildCallbackExecuted
+                                 , assertCallbackType SUT.OnCompletion ])
+
+        , testCase "treats as sub-routine failed if callback fails"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                _childId <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy = SUT.Temporary
+                    , SUT.childOnCompletion    = throwIO TimeoutError
+                    }
+                  )
+                  (return ())
+                  supervisor
+
+                return ()
+              )
+              [ andP [ assertEventType SupervisedChildCallbackExecuted
+                     , assertCallbackType SUT.OnCompletion
+                     , assertErrorType "TimeoutError"]
+
+              , andP [ assertEventType SupervisedChildFailed
+                     , assertErrorType "ChildCallbackFailed"
+                     ]
+              ]
+              []
+              Nothing
+        ]
+      , testGroup
+        "childOnFailure"
+        [ testCase "does execute callback when sub-routine fails"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                _childId    <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy = SUT.Temporary
+                    }
+                  )
+                  (throwIO RestartingChildError)
+                  supervisor
+                return ()
+              )
+              [ andP [ assertEventType SupervisedChildCallbackExecuted
+                     , assertCallbackType SUT.OnFailure ]
+              , assertEventType SupervisedChildFailed
+              ]
+              [assertEventType SupervisorTerminated]
+              Nothing
+        , testCase "does not execute callback when sub-routine is completed"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                _childId    <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy = SUT.Temporary }
+                  )
+                  (return ())
+                  supervisor
+                return ()
+              )
+              [ andP [ assertEventType SupervisedChildCallbackExecuted
+                     , assertCallbackType SUT.OnCompletion ]
+              , assertEventType SupervisedChildCompleted]
+              []
+              (Just $ not . andP [ assertEventType SupervisedChildCallbackExecuted
+                                 , assertCallbackType SUT.OnFailure ])
+        , testCase "does not execute callback when sub-routine is terminated"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                childId     <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy = SUT.Temporary }
+                  )
+                  (forever $ threadDelay 1000100)
+                  supervisor
+
+                SUT.terminateChild "testing onFailure callback"
+                                   childId
+                                   supervisor
+              )
+              [ assertEventType SupervisedChildTerminated ]
+              []
+              (Just $ not . andP [ assertEventType SupervisedChildCallbackExecuted
+                                 , assertCallbackType SUT.OnFailure ])
+        , testCase "treats as sub-routine failed if callback fails"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                _childId <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy = SUT.Temporary
+                    , SUT.childOnFailure = const $ throwIO TimeoutError
+                    }
+                  )
+                  (throwIO RestartingChildError)
+                  supervisor
+
+                return ()
+              )
+              [ andP [ assertEventType SupervisedChildCallbackExecuted
+                     , assertCallbackType SUT.OnFailure
+                     , assertErrorType "TimeoutError"]
+
+              , andP [ assertEventType SupervisedChildFailed
+                     , assertErrorType "ChildCallbackFailed"
+                     ]
+              ]
+              []
+              Nothing
+        ]
+      , testGroup
+        "childOnTermination"
+        [ testCase
+            "gets brutally killed when TimeoutSeconds termination policy is not met"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                childId <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy   = SUT.Temporary
+                    , SUT.childTerminationPolicy = SUT.TimeoutMillis 1
+                    , SUT.childOnTermination     = forever $ threadDelay 100100
+                    }
+                  )
+                  (forever $ threadDelay 10001000)
+                  supervisor
+
+                SUT.terminateChild "testing childOnTermination callback"
+                                   childId
+                                   supervisor
+              )
+              [ andP [ assertEventType SupervisedChildCallbackExecuted
+                     , assertCallbackType SUT.OnTermination
+                     , assertErrorType "BrutallyTerminateChildException"
+                     ]
+
+              , andP [ assertEventType SupervisedChildFailed
+                     , assertErrorType "ChildCallbackFailed"
+                     , assertCallbackType SUT.OnTermination
+                     ]
+              ]
+              []
+              Nothing
+
+        , testCase "does execute callback when sub-routine is terminated"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                childId     <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy = SUT.Temporary
+                    }
+                  )
+                  (forever $ threadDelay 1000100)
+                  supervisor
+
+                SUT.terminateChild "testing childOnTermination callback"
+                                   childId
+                                   supervisor
+              )
+              [ andP [ assertEventType SupervisedChildCallbackExecuted
+                     , assertCallbackType SUT.OnTermination
+                     ]
+              , assertEventType SupervisedChildTerminated
+              ]
+              [assertEventType SupervisorTerminated]
+              Nothing
+        , testCase "does not execute callback when sub-routine is completed"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                _childId    <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy = SUT.Temporary
+                    }
+                  )
+                  (return ())
+                  supervisor
+                return ()
+              )
+              [assertEventType SupervisedChildCompleted]
+              []
+              (Just $ not . andP [ assertEventType SupervisedChildCallbackExecuted
+                                 , assertCallbackType SUT.OnTermination ])
+
+        , testCase "does not execute callback when sub-routine fails"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                _childId    <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy = SUT.Temporary }
+                  )
+                  (throwIO (ErrorCall "surprise!"))
+                  supervisor
+                return ()
+              )
+              [assertEventType SupervisedChildFailed]
+              []
+              (Just $ not . andP [ assertEventType SupervisedChildCallbackExecuted
+                                 , assertCallbackType SUT.OnTermination ])
+        , testCase "treats as sub-routine failed if callback fails"
+          $ testSupervisorStream
+              []
+              ( \supervisor -> do
+                childId <- SUT.forkChild
+                  ( SUT.defChildOptions
+                    { SUT.childRestartStrategy = SUT.Temporary
+                    , SUT.childOnTermination   = throwIO TimeoutError
+                    }
+                  )
+                  (forever $ threadDelay 10001000)
+                  supervisor
+
+                SUT.terminateChild "testing childOnTermination callback"
+                                   childId
+                                   supervisor
+              )
+              [ andP [ assertEventType SupervisedChildCallbackExecuted
+                     , assertCallbackType SUT.OnTermination
+                     , assertErrorType "TimeoutError"]
+
+              , andP [ assertEventType SupervisedChildFailed
+                     , assertErrorType "ChildCallbackFailed"
+                     ]
+              ]
+              []
+              Nothing
         ]
       ]
     , testGroup
-      "multiple supervised IO sub-routines"
-      [ testSupervisor
-        "terminates all supervised sub-routines on teardown"
-        ( assertInOrder
-          [ assertEventType SupervisedChildTerminated
-          , assertEventType SupervisedChildTerminated
-          , assertEventType SupervisorTerminated
-          ]
-        )
+      "with transient strategy"
+      [ testCase "does not restart on completion" $ testSupervisorStream
+        []
         ( \supervisor -> do
-          _childA <- SUT.forkChild
-            SUT.defChildOptions { SUT.childName            = "A"
-                                , SUT.childRestartStrategy = SUT.Permanent
-                                }
-            (forever $ threadDelay 1000100)
+          _childId <- SUT.forkChild
+            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
+            (return ())
             supervisor
-
-
-          _childB <- SUT.forkChild
-            SUT.defChildOptions { SUT.childName            = "B"
-                                , SUT.childRestartStrategy = SUT.Permanent
-                                }
-            (forever $ threadDelay 1000100)
-            supervisor
-
-          threadDelay 500
+          return ()
         )
-      , testGroup
-        "with one for one supervisor restart strategy"
-        [ testSupervisorWithOptions
-            "restarts failing sub-routine only"
-            ( combineAssertions
-              [ assertInOrder
-                [ andP
-                    [ assertEventType SupervisedChildRestarted
-                    , assertChildName "B"
-                    ]
-                ]
-              , assertAll
-                ( not
-                . andP
-                    [ assertEventType SupervisedChildRestarted
-                    , assertChildName "A"
-                    ]
-                )
-              ]
-            )
-            ( \supOptions ->
-              supOptions { SUT.supervisorRestartStrategy = SUT.OneForOne }
-            )
+        [ assertEventType SupervisedChildStarted
+        , assertEventType SupervisedChildCompleted
+        ]
+        [assertEventType SupervisorTerminated]
+        (Just $ not . assertEventType SupervisedChildRestarted)
+
+      , testCase "does not restart on termination" $ testSupervisorStream
+        []
+        ( \supervisor -> do
+          childId <- SUT.forkChild
+            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
+            (forever $ threadDelay 1000100)
+            supervisor
+          SUT.terminateChild "termination test (1)" childId supervisor
+        )
+        [assertEventType SupervisedChildTerminated]
+        [assertEventType SupervisorTerminated]
+        (Just $ not . assertEventType SupervisedChildRestarted)
+
+      , testCase "does restart on failure" $ testSupervisorStream
+        []
+        ( \supervisor -> do
+          subRoutineAction <- mkFailingSubRoutine 1
+          _childId                         <- SUT.forkChild
+            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
+            subRoutineAction
+            supervisor
+          return ()
+        )
+        [ assertEventType SupervisedChildStarted
+          , assertEventType SupervisedChildFailed
+          , andP
+            [ assertEventType SupervisedChildRestarted
+            , assertRestartCount (== 1)
+            ]
+       ]
+       []
+       Nothing
+
+      , testCase "does increase restart count on multiple failures"
+        $ testSupervisorStream
+            []
             ( \supervisor -> do
-              _childA <- SUT.forkChild
-                SUT.defChildOptions { SUT.childName            = "A"
-                                    , SUT.childRestartStrategy = SUT.Temporary
-                                    }
-                (forever $ threadDelay 1000100)
+              subRoutineAction <- mkFailingSubRoutine 2
+              _childId                         <- SUT.forkChild
+                SUT.defChildOptions { SUT.childRestartStrategy = SUT.Transient }
+                subRoutineAction
+                supervisor
+              return ()
+            )
+            [ andP
+                [ assertEventType SupervisedChildRestarted
+                , assertRestartCount (== 1)
+                ]
+              , andP
+                [ assertEventType SupervisedChildRestarted
+                , assertRestartCount (== 2)
+                ]
+            ]
+            []
+            Nothing
+      ]
+    , testGroup
+      "with permanent strategy"
+      [ testCase "does restart on completion" $ testSupervisorStream
+        []
+        ( \supervisor -> do
+          subRoutineAction <- mkCompletingOnceSubRoutine
+          _childId                           <- SUT.forkChild
+            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
+            subRoutineAction
+            supervisor
+          return ()
+        )
+        [ assertEventType SupervisedChildStarted
+        , assertEventType SupervisedChildCompleted
+        , assertEventType SupervisedChildRestarted
+        ]
+        [assertEventType SupervisorTerminated]
+        Nothing
+      , testCase "does not increase restart count on multiple completions"
+        $ testSupervisorStream
+            []
+            ( \supervisor -> do
+            -- Note the number is two (2) given the assertion list has two `SupervisedChildRestarted` assertions
+              let expectedRestartCount = 2
+              subRoutineAction <- mkCompletingBeforeNRestartsSubRoutine expectedRestartCount
+              _childId <- SUT.forkChild
+                SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
+                subRoutineAction
+                supervisor
+              return ()
+            )
+            [ andP
+                [ assertEventType SupervisedChildRestarted
+                , assertRestartCount (== 1)
+                ]
+              , andP
+                [ assertEventType SupervisedChildRestarted
+                , assertRestartCount (== 1)
+                ]
+            ]
+            []
+            Nothing
+      , testCase "does restart on termination" $ testSupervisorStream
+        []
+        ( \supervisor -> do
+          childId <- SUT.forkChild
+            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
+            (forever $ threadDelay 10001000)
+            supervisor
+          SUT.terminateChild "testing termination (1)" childId supervisor
+        )
+        [ assertEventType SupervisedChildTerminated
+        , assertEventType SupervisedChildRestarted
+        ]
+        []
+        Nothing
+      , testCase "does increase restart count on multiple terminations"
+        $ do
+          terminationCountVar <- newTVarIO (0 :: Int)
+          let
+            signalChildTermination = atomically (modifyTVar' terminationCountVar (+1))
+            waitChildTermination i = atomically $ do
+              n <- readTVar terminationCountVar
+              when (n /= i) retry
+          testSupervisorStream
+            []
+            ( \supervisor -> do
+              childId <- SUT.forkChild
+                SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent
+                                    , SUT.childOnTermination = signalChildTermination }
+                (forever $ threadDelay 10001000)
                 supervisor
 
-              (ioB, waitFailures) <- mkFailingSubRoutine 1
+              SUT.terminateChild "testing termination (1)" childId supervisor
+              waitChildTermination 1
+              SUT.terminateChild "testing termination (2)" childId supervisor
+              waitChildTermination 2
+            )
+            [ assertEventType SupervisedChildTerminated
+              , andP
+                [ assertEventType SupervisedChildRestarted
+                , assertRestartCount (== 1)
+                ]
+              , assertEventType SupervisedChildTerminated
+              , andP
+                [ assertEventType SupervisedChildRestarted
+                , assertRestartCount (== 2)
+                ]
+              ]
+            []
+            Nothing
+      , testCase "does restart on failure" $ testSupervisorStream
+        []
+        ( \supervisor -> do
+          subRoutineAction <- mkFailingSubRoutine 1
+          _childId <- SUT.forkChild
+            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
+            subRoutineAction
+            supervisor
+          return ()
+        )
+        [ assertEventType SupervisedChildStarted
+          , assertEventType SupervisedChildFailed
+          , andP
+            [ assertEventType SupervisedChildRestarted
+            , assertRestartCount (== 1)
+            ]
+        ]
+        []
+        Nothing
+      , testCase "does increase restart count on multiple failures"
+        $ testSupervisorStream
+            []
+            ( \supervisor -> do
+              subRoutineAction <- mkFailingSubRoutine 2
+              _childId                         <- SUT.forkChild
+                SUT.defChildOptions { SUT.childRestartStrategy = SUT.Permanent }
+                subRoutineAction
+                supervisor
+              return ()
+            )
+            [ andP
+                [ assertEventType SupervisedChildRestarted
+                , assertRestartCount (== 1)
+                ]
+              , andP
+                [ assertEventType SupervisedChildRestarted
+                , assertRestartCount (== 2)
+                ]
+            ]
+            []
+            Nothing
+      ]
+    , testGroup
+      "with temporary strategy"
+      [ testCase "does not restart on completion" $ testSupervisorStream
+        []
+        ( \supervisor -> do
+          _childId <- SUT.forkChild
+            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary }
+            (return ())
+            supervisor
+          return ()
+        )
+        [ assertEventType SupervisedChildStarted
+        , assertEventType SupervisedChildCompleted
+        ]
+        [assertEventType SupervisorTerminated]
+        (Just $ not . assertEventType SupervisedChildRestarted)
+      , testCase "does not restart on termination" $ testSupervisorStream
+        []
+        ( \supervisor -> do
+          childId <- SUT.forkChild
+            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary }
+            (forever $ threadDelay 1000100)
+            supervisor
+          SUT.terminateChild "termination test (1)" childId supervisor
+          threadDelay 100
+        )
+        [ assertEventType SupervisedChildStarted
+        , assertEventType SupervisedChildTerminated
+        ]
+        [assertEventType SupervisorTerminated]
+        (Just $ not . assertEventType SupervisedChildRestarted)
+      , testCase "does not restart on failure" $ testSupervisorStream
+        []
+        ( \supervisor -> do
+          _childId <- SUT.forkChild
+            SUT.defChildOptions { SUT.childRestartStrategy = SUT.Temporary }
+            (panic "child failed!")
+            supervisor
+          threadDelay 100
+        )
+        [ assertEventType SupervisedChildStarted
+        , assertEventType SupervisedChildFailed
+        ]
+        [assertEventType SupervisorTerminated]
+        (Just $ not . assertEventType SupervisedChildRestarted)
+      ]
+    ]
+  , testGroup
+    "multiple supervised IO sub-routines"
+    [ testCase "terminates all supervised sub-routines on teardown"
+      $ testSupervisorStream
+          []
+          ( \supervisor -> do
+            _childA <- SUT.forkChild
+              SUT.defChildOptions { SUT.childName            = "A"
+                                  , SUT.childRestartStrategy = SUT.Permanent
+                                  }
+              (forever $ threadDelay 1000100)
+              supervisor
 
-              _childB             <- SUT.forkChild
+
+            _childB <- SUT.forkChild
+              SUT.defChildOptions { SUT.childName            = "B"
+                                  , SUT.childRestartStrategy = SUT.Permanent
+                                  }
+              (forever $ threadDelay 1000100)
+              supervisor
+
+            return ()
+          )
+          [ andP [assertEventType SupervisedChildStarted, assertChildName "A"]
+          , andP [assertEventType SupervisedChildStarted, assertChildName "B"]
+          ]
+          [ andP [assertEventType SupervisedChildTerminated, assertChildName "A"]
+          , andP [assertEventType SupervisedChildTerminated, assertChildName "B"]
+          , assertEventType SupervisorTerminated
+          ]
+          Nothing
+    , testGroup
+      "with one for one supervisor restart strategy"
+      [ testCase "restarts failing sub-routine only" $ testSupervisorStreamWithOptions
+          []
+          ( \supOptions ->
+            supOptions { SUT.supervisorRestartStrategy = SUT.OneForOne }
+          )
+          ( \supervisor -> do
+            _childA <- SUT.forkChild
+              SUT.defChildOptions { SUT.childName            = "A"
+                                  , SUT.childRestartStrategy = SUT.Temporary
+                                  }
+              (forever $ threadDelay 1000100)
+              supervisor
+
+            ioB <- mkFailingSubRoutine 1
+
+            _childB <- SUT.forkChild
+              SUT.defChildOptions { SUT.childName            = "B"
+                                  , SUT.childRestartStrategy = SUT.Permanent
+                                  }
+              (forever $ ioB >> threadDelay 1000100)
+              supervisor
+
+            return ()
+          )
+          [ andP
+                  [ assertEventType SupervisedChildRestarted
+                  , assertChildName "B"
+                  ]
+          ]
+          []
+          (Just $ not . andP
+                  [ assertEventType SupervisedChildRestarted
+                  , assertChildName "A"
+                  ])
+      ]
+    , testGroup
+      "with all for one supervisor restart strategy with newest first order"
+      [ testCase "does terminate all other children that did not fail"
+        $ testSupervisorStreamWithOptions
+            []
+            ( \supOptions -> supOptions
+              { SUT.supervisorRestartStrategy       = SUT.AllForOne
+              , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
+              }
+            )
+            ( \supervisor -> do
+              -- This lockVar guarantees that childB executes before childA
+              lockVar <- newEmptyMVar
+
+              ioA <- mkFailingSubRoutine 1
+
+              _childA <- SUT.forkChild
+                SUT.defChildOptions { SUT.childName            = "A"
+                                    , SUT.childRestartStrategy = SUT.Permanent
+                                    }
+                (forever $ readMVar lockVar >> ioA)
+                supervisor
+
+              _childB <- SUT.forkChild
                 SUT.defChildOptions { SUT.childName            = "B"
                                     , SUT.childRestartStrategy = SUT.Permanent
                                     }
-                (forever $ ioB >> threadDelay 1000100)
+                (putMVar lockVar () >> forever (threadDelay 10))
                 supervisor
 
-              waitFailures
+              return ()
             )
-        ]
-      , testGroup
-        "with all for one supervisor restart strategy with newest first order"
-        [ testSupervisorWithOptions
-          "does terminate all other children that did not fail"
-          ( combineAssertions
-            [ assertInOrder
-                [ andP
-                  [assertEventType SupervisedChildStarted, assertChildName "A"]
-                , andP
-                  [assertEventType SupervisedChildStarted, assertChildName "B"]
-                , andP
-                  [assertEventType SupervisedChildFailed, assertChildName "A"]
-                , andP
-                  [assertEventType SupervisedChildRestarted, assertChildName "A"]
-                , andP
-                  [assertEventType SupervisedChildTerminated, assertChildName "B"]
-                , andP
-                  [assertEventType SupervisedChildRestarted, assertChildName "B"]
-                ]
+            [ andP [assertEventType SupervisedChildStarted , assertChildName "A"]
+            , andP [assertEventType SupervisedChildStarted , assertChildName "B"]
+            , andP [assertEventType SupervisedChildFailed, assertChildName "A"]
+            , andP [assertEventType SupervisedChildRestarted , assertChildName "A"]
+            , andP [assertEventType SupervisedChildTerminated, assertChildName "B"]
+            , andP [assertEventType SupervisedChildRestarted, assertChildName "B"]
             ]
-          )
-          ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy       = SUT.AllForOne
-            , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
-            }
-          )
-          ( \supervisor -> do
-            (ioA, waitFailures) <- mkFailingSubRoutine 1
-            lockVar             <- newEmptyMVar
+            []
+            Nothing
+      , testCase "does not restart sub-routines that are temporary"
+        $ testSupervisorStreamWithOptions
+            []
+            ( \supOptions -> supOptions
+              { SUT.supervisorRestartStrategy       = SUT.AllForOne
+              , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
+              }
+            )
+            ( \supervisor -> do
+              lockVar             <- newEmptyMVar
 
-            _childA             <- SUT.forkChild
-              SUT.defChildOptions { SUT.childName            = "A"
-                                  , SUT.childRestartStrategy = SUT.Permanent
-                                  }
-              (forever $ readMVar lockVar >> ioA)
-              supervisor
+              ioA <- mkFailingSubRoutine 1
 
-            _childB <- SUT.forkChild
-              SUT.defChildOptions { SUT.childName            = "B"
-                                  , SUT.childRestartStrategy = SUT.Permanent
-                                  }
-              (putMVar lockVar () >> forever (threadDelay 10))
-              supervisor
+              _childA             <- SUT.forkChild
+                SUT.defChildOptions { SUT.childName            = "A"
+                                    , SUT.childRestartStrategy = SUT.Permanent
+                                    }
+                (forever $ readMVar lockVar >> ioA)
+                supervisor
 
-            waitFailures
-          )
-        , testSupervisorWithOptions
-          "does not restart sub-routines that are temporary"
-          ( combineAssertions
-            [ assertInOrder
-              [ andP
-                [assertEventType SupervisedChildStarted, assertChildName "A"]
-              , andP
-                [assertEventType SupervisedChildStarted, assertChildName "B"]
-              , andP
-                [assertEventType SupervisedChildFailed, assertChildName "A"]
-              , andP
-                [assertEventType SupervisedChildRestarted, assertChildName "A"]
-              , andP
-                [assertEventType SupervisedChildTerminated, assertChildName "B"]
-              ]
-            , assertAll
-              ( not
-              . andP
-                  [ assertEventType SupervisedChildRestarted
-                  , assertChildName "B"
-                  ]
-              )
+              _childB <- SUT.forkChild
+                SUT.defChildOptions { SUT.childName            = "B"
+                                    , SUT.childRestartStrategy = SUT.Temporary
+                                    }
+                (putMVar lockVar () >> forever (threadDelay 10))
+                supervisor
+
+              return ()
+            )
+            [ andP [assertEventType SupervisedChildStarted, assertChildName "A"]
+            , andP [assertEventType SupervisedChildStarted, assertChildName "B"]
+            , andP [assertEventType SupervisedChildFailed, assertChildName "A"]
+            , andP [assertEventType SupervisedChildRestarted, assertChildName "A"]
+            , andP [assertEventType SupervisedChildTerminated, assertChildName "B"]
             ]
-          )
-          ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy       = SUT.AllForOne
-            , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
-            }
-          )
-          ( \supervisor -> do
-            (ioA, waitFailures) <- mkFailingSubRoutine 1
-            lockVar             <- newEmptyMVar
+            []
+            (Just $
+               not . andP [ assertEventType SupervisedChildRestarted
+                          , assertChildName "B"
+                          ])
+      , testCase "restarts sub-routines that are not temporary"
+        $ testSupervisorStreamWithOptions
+            []
+            ( \supOptions -> supOptions
+              { SUT.supervisorRestartStrategy       = SUT.AllForOne
+              , SUT.supervisorChildTerminationOrder = SUT.NewestFirst
+              }
+            )
+            ( \supervisor -> do
+              ioA <- mkFailingSubRoutine 1
 
-            _childA             <- SUT.forkChild
-              SUT.defChildOptions { SUT.childName            = "A"
-                                  , SUT.childRestartStrategy = SUT.Permanent
-                                  }
-              (forever $ readMVar lockVar >> ioA)
-              supervisor
+              lockVar <- newEmptyMVar
 
-            _childB <- SUT.forkChild
-              SUT.defChildOptions { SUT.childName            = "B"
-                                  , SUT.childRestartStrategy = SUT.Temporary
-                                  }
-              (putMVar lockVar () >> forever (threadDelay 10))
-              supervisor
+              _childA             <- SUT.forkChild
+                SUT.defChildOptions { SUT.childName            = "A"
+                                    , SUT.childRestartStrategy = SUT.Permanent
+                                    }
+                (forever $ readMVar lockVar >> ioA)
+                supervisor
 
-            waitFailures
-          )
-        , testSupervisorWithOptions
-          "restarts sub-routines that are not temporary"
-          ( assertInOrder
-            [ andP
-              [assertEventType SupervisedChildRestarted, assertChildName "B"]
-            , andP
-              [assertEventType SupervisedChildRestarted, assertChildName "A"]
+              _childB <- SUT.forkChild
+                SUT.defChildOptions { SUT.childName            = "B"
+                                    , SUT.childRestartStrategy = SUT.Transient
+                                    }
+                (putMVar lockVar () >> forever (threadDelay 10))
+                supervisor
+
+              return ()
+            )
+            [ andP [assertEventType SupervisedChildRestarted, assertChildName "B"]
+            , andP [assertEventType SupervisedChildRestarted, assertChildName "A"]
             ]
-          )
-          ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy       = SUT.AllForOne
-            , SUT.supervisorChildTerminationOrder = SUT.NewestFirst
-            }
-          )
-          ( \supervisor -> do
-            (ioA, waitFailures) <- mkFailingSubRoutine 1
-            lockVar             <- newEmptyMVar
+            []
+            Nothing
+      ]
+    , testGroup
+      "with all for one supervisor restart strategy with oldest first order"
+      [ testCase "does not restart sub-routines that are temporary"
+        $ testSupervisorStreamWithOptions
+            []
+            ( \supOptions -> supOptions
+              { SUT.supervisorRestartStrategy       = SUT.AllForOne
+              , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
+              }
+            )
+            ( \supervisor -> do
+              ioA <- mkFailingSubRoutine 1
 
-            _childA             <- SUT.forkChild
-              SUT.defChildOptions { SUT.childName            = "A"
-                                  , SUT.childRestartStrategy = SUT.Permanent
-                                  }
-              (forever $ readMVar lockVar >> ioA)
-              supervisor
+              -- This lockVar guarantees that childB executes before childA
+              lockVar <- newEmptyMVar
 
-            _childB <- SUT.forkChild
-              SUT.defChildOptions { SUT.childName            = "B"
-                                  , SUT.childRestartStrategy = SUT.Transient
-                                  }
-              (putMVar lockVar () >> forever (threadDelay 10))
-              supervisor
+              _childA             <- SUT.forkChild
+                SUT.defChildOptions { SUT.childName            = "A"
+                                    , SUT.childRestartStrategy = SUT.Permanent
+                                    }
+                (forever $ readMVar lockVar >> ioA)
+                supervisor
 
-            waitFailures
-          )
-        ]
-      , testGroup
-        "with all for one supervisor restart strategy with oldest first order"
-        [ testSupervisorWithOptions
-          "does not restart sub-routines that are temporary"
-          ( combineAssertions
-            [ assertInOrder
-              [ andP
-                  [ assertEventType SupervisedChildRestarted
-                  , assertChildName "A"
-                  ]
-              ]
-            , assertAll
-              ( not
-              . andP
-                  [ assertEventType SupervisedChildRestarted
-                  , assertChildName "B"
-                  ]
-              )
+              _childB <- SUT.forkChild
+                SUT.defChildOptions { SUT.childName            = "B"
+                                    , SUT.childRestartStrategy = SUT.Temporary
+                                    }
+                (putMVar lockVar () >> forever (threadDelay 10))
+                supervisor
+
+              return ()
+            )
+            [ andP [ assertEventType SupervisedChildRestarted
+                   , assertChildName "A"
+                   ]
             ]
-          )
-          ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy       = SUT.AllForOne
-            , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
-            }
-          )
-          ( \supervisor -> do
-            (ioA, waitFailures) <- mkFailingSubRoutine 1
-            lockVar             <- newEmptyMVar
+            []
+            (Just $
+               not . andP [ assertEventType SupervisedChildRestarted
+                          , assertChildName "B"
+                          ])
 
-            _childA             <- SUT.forkChild
-              SUT.defChildOptions { SUT.childName            = "A"
-                                  , SUT.childRestartStrategy = SUT.Permanent
-                                  }
-              (forever $ readMVar lockVar >> ioA)
-              supervisor
+      , testCase "restarts sub-routines that are not temporary"
+        $ testSupervisorStreamWithOptions
+            []
+            ( \supOptions -> supOptions
+              { SUT.supervisorRestartStrategy       = SUT.AllForOne
+              , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
+              }
+            )
+            ( \supervisor -> do
+              ioA <- mkFailingSubRoutine 1
 
-            _childB <- SUT.forkChild
-              SUT.defChildOptions { SUT.childName            = "B"
-                                  , SUT.childRestartStrategy = SUT.Temporary
-                                  }
-              (putMVar lockVar () >> forever (threadDelay 10))
-              supervisor
+              -- This lockVar guarantees that childB executes before childA
+              lockVar <- newEmptyMVar
 
-            waitFailures
-          )
-        , testSupervisorWithOptions
-          "restarts sub-routines that are not temporary"
-          ( assertInOrder
-            [ andP
-              [assertEventType SupervisedChildRestarted, assertChildName "A"]
-            , andP
-              [assertEventType SupervisedChildRestarted, assertChildName "B"]
+              _childA <- SUT.forkChild
+                SUT.defChildOptions { SUT.childName            = "A"
+                                    , SUT.childRestartStrategy = SUT.Permanent
+                                    }
+                (forever $ readMVar lockVar >> ioA)
+                supervisor
+
+              _childB <- SUT.forkChild
+                SUT.defChildOptions { SUT.childName            = "B"
+                                    , SUT.childRestartStrategy = SUT.Transient
+                                    }
+                (putMVar lockVar () >> forever (threadDelay 10))
+                supervisor
+
+              return ()
+            )
+            [ andP [assertEventType SupervisedChildRestarted, assertChildName "A"]
+            , andP [assertEventType SupervisedChildRestarted, assertChildName "B"]
             ]
-          )
-          ( \supOptions -> supOptions
-            { SUT.supervisorRestartStrategy       = SUT.AllForOne
-            , SUT.supervisorChildTerminationOrder = SUT.OldestFirst
-            }
-          )
-          ( \supervisor -> do
-            (ioA, waitFailures) <- mkFailingSubRoutine 1
-            lockVar             <- newEmptyMVar
-
-            _childA             <- SUT.forkChild
-              SUT.defChildOptions { SUT.childName            = "A"
-                                  , SUT.childRestartStrategy = SUT.Permanent
-                                  }
-              (forever $ readMVar lockVar >> ioA)
-              supervisor
-
-            _childB <- SUT.forkChild
-              SUT.defChildOptions { SUT.childName            = "B"
-                                  , SUT.childRestartStrategy = SUT.Transient
-                                  }
-              (putMVar lockVar () >> forever (threadDelay 10))
-              supervisor
-
-            waitFailures
-          )
-        ]
+            []
+            Nothing
       ]
     ]
+  ]

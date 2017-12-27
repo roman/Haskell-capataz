@@ -2,6 +2,7 @@
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module Control.Concurrent.Internal.Supervisor.Restart where
 
 import Data.Time.Clock (NominalDiffTime, UTCTime, diffUTCTime, getCurrentTime)
@@ -59,17 +60,20 @@ execSupervisorRestartStrategy supervisorEnv@SupervisorEnv { supervisorRestartStr
       appendChildToMap supervisorEnv newChild
 
 execRestartAction :: SupervisorEnv -> ChildEnv -> Int -> IO ()
-execRestartAction supervisorEnv childEnv@ChildEnv { childId, childName, childCreationTime } childRestartCount
+execRestartAction supervisorEnv@SupervisorEnv { onSupervisorIntensityReached } childEnv@ChildEnv { childId, childName, childCreationTime } childRestartCount
   = do
     restartAction <- calcRestartAction supervisorEnv childRestartCount
       <$> calcDiffSeconds childCreationTime
 
     case restartAction of
-      HaltSupervisor -> throwIO SupervisorIntensityReached
-        { childId
-        , childName
-        , childRestartCount
-        }
+      HaltSupervisor -> do
+        -- skip exceptions on callback
+        (_ :: Either SomeException ()) <- try onSupervisorIntensityReached
+        throwIO SupervisorIntensityReached
+          { childId
+          , childName
+          , childRestartCount = succ childRestartCount
+          }
 
       ResetRestartCount ->
         execSupervisorRestartStrategy supervisorEnv childEnv 0

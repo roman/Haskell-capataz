@@ -9,11 +9,19 @@ module Main where
 import Protolude
 import Options.Generic (getRecord)
 import Control.Concurrent.Async (async)
-import Lib (Cli(..), SimpleProcess(..), readNumbers)
+import Lib (Cli(..), SimpleProcess(..), spawnNumbersProcess, killNumberProcess)
 
 main :: IO ()
 main = do
   n <- getRecord "Counter spawner"
-  asyncList <- forM [0..procNumber n] $ \i ->
-    async $ readNumbers (\a -> print (i, a))
-  void $ waitAny asyncList
+
+  let numberWriter i a = print (i, a)
+      delayMicros = 5000100
+
+  _asyncList <- forM [1..procNumber n] $ \i ->
+    async $ spawnNumbersProcess (numberWriter i)
+
+  killerAsync <-
+    async $ forever $ threadDelay delayMicros >> killNumberProcess
+
+  wait killerAsync

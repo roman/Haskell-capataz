@@ -10,12 +10,14 @@ extra-source-files:
 - README.md
 dependencies:
 - base
-- protolude
-- pretty-show
 - bytestring
 - optparse-generic
+- pretty-show
 - process
+- protolude
+- random
 - text
+- turtle
 library:
   exposed-modules:
   source-dirs: src/lib

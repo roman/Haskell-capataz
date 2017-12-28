@@ -11,7 +11,10 @@ import System.IO (hGetLine, hIsEOF)
 import Options.Generic (ParseRecord)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text as T
+import Data.List ((!!))
 import qualified System.Process as Process
+import qualified System.Random as Random
+import qualified Turtle
 
 data Cli =
   Cli { procNumber :: !Int }
@@ -53,9 +56,22 @@ spawnSimpleProcess program args = do
 
   return SimpleProcess { readStdOut, terminateProcess, waitProcess }
 
+processKiller :: Text -> IO ()
+processKiller processName = do
+  (_, pgrepOutput) <- Turtle.procStrict "pgrep" ["-f", processName] Turtle.empty
+  let procNumbers = T.lines pgrepOutput
+  case procNumbers of
+    [] -> return ()
+    _ -> do
+      theOneToKill <- Random.randomRIO (0, pred $ length procNumbers)
+      putText $ "Process running: " <> show procNumbers
+      putText $ "Killing: " <> (procNumbers !! theOneToKill)
+      void $ Turtle.procStrict "kill" [procNumbers !! theOneToKill] Turtle.empty
 
-readNumbers :: (Int -> IO ()) -> IO ()
-readNumbers writeNumber = do
+--------------------------------------------------------------------------------
+
+spawnNumbersProcess :: (Int -> IO ()) -> IO ()
+spawnNumbersProcess writeNumber = do
   proc' <-
       spawnSimpleProcess
       "/bin/bash"
@@ -76,3 +92,6 @@ readNumbers writeNumber = do
             loop
 
   loop `finally` terminateProcess proc'
+
+killNumberProcess :: IO ()
+killNumberProcess = processKiller "while"

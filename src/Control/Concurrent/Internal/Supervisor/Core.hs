@@ -39,7 +39,7 @@ import Control.Concurrent.Internal.Supervisor.Util
 
 haltSupervisor :: SupervisorEnv -> IO ()
 haltSupervisor env = do
-  writeSupervisorStatus env Halting
+  writeSupervisorStatus   env                   Halting
   Child.terminateChildren "supervisor shutdown" env
   resetChildMap           env                   (const HashMap.empty)
   writeSupervisorStatus   env                   Halted
@@ -152,8 +152,7 @@ runSupervisorLoop unmask env@SupervisorEnv { supervisorId, supervisorName, super
           -- Discard messages when halting
           return ()
 
-        Halted ->
-          panic "TODO: Pending halted state"
+        Halted -> panic "TODO: Pending halted state"
 
 buildSupervisorRuntime :: SupervisorOptions -> IO SupervisorRuntime
 buildSupervisorRuntime supervisorOptions = do
@@ -168,7 +167,8 @@ forkSupervisor supervisorOptions@SupervisorOptions { supervisorName, supervisorC
   = do
     supervisorRuntime <- buildSupervisorRuntime supervisorOptions
 
-    let supervisorEnv@SupervisorEnv {supervisorId} = supervisorToEnv supervisorRuntime
+    let supervisorEnv@SupervisorEnv { supervisorId } =
+          supervisorToEnv supervisorRuntime
 
     supervisorAsync <- asyncWithUnmask
       $ \unmask -> runSupervisorLoop unmask supervisorEnv
@@ -187,12 +187,12 @@ forkSupervisor supervisorOptions@SupervisorOptions { supervisorName, supervisorC
       ( do
         status <- readSupervisorStatus supervisorEnv
         case status of
-          Halted -> return ()
+          Halted  -> return ()
           Halting -> return ()
-          _      -> do
+          _       -> do
             eventTime <- getCurrentTime
-            notifyEvent SupervisorShutdownInvoked {
-                supervisorId
+            notifyEvent SupervisorShutdownInvoked
+              { supervisorId
               , supervisorName
               , eventTime
               }

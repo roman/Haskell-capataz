@@ -80,10 +80,9 @@ spawnNumbersProcess writeNumber = do
   let loop = do
         eInput <- ((readMaybe . BS.unpack) <$>) <$> readStdOut proc'
         case eInput of
-          Left exitCode ->
-            if exitCode == ExitSuccess then
-              return ()
-            else throwIO exitCode
+          Left exitCode
+            | exitCode == ExitSuccess -> return ()
+            | otherwise -> throwIO exitCode
           Right Nothing -> do
             putText "didn't get a number?"
             loop

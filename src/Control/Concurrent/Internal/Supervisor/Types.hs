@@ -251,7 +251,6 @@ data ControlAction
   | TerminateSupervisor {
     notifySupervisorTermination :: !(IO ())
   }
-  -- | TerminateChildren
   deriving (Generic)
 
 

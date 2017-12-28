@@ -9,7 +9,7 @@ module Main where
 import Protolude
 import Options.Generic (getRecord)
 import Control.Concurrent.Async (async)
-import Lib (Cli(..), SimpleProcess(..), spawnNumbersProcess, killNumberProcess)
+import Lib (Cli(..), procNumber, spawnNumbersProcess, killNumberProcess)
 
 main :: IO ()
 main = do

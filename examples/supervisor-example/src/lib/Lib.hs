@@ -75,7 +75,11 @@ spawnNumbersProcess writeNumber = do
   proc' <-
       spawnSimpleProcess
       "/bin/bash"
-      ["-c", "COUNTER=1; while [ $COUNTER -gt 0 ]; do echo $COUNTER; sleep 1; let COUNTER=COUNTER+1; done"]
+      ["-c"
+      , "COUNTER=1; while [ $COUNTER -gt 0 ]; do "
+        <>  "echo $COUNTER; sleep 1; let COUNTER=COUNTER+1; "
+        <> "done"
+      ]
 
   let loop = do
         eInput <- ((readMaybe . BS.unpack) <$>) <$> readStdOut proc'

@@ -1,30 +1,42 @@
-SOURCES=$$(find . -maxdepth 1 -type d | grep 'src\|test\|benchmark')
+################################################################################
+## SETUP
 
+.PHONY: help build test format help dev-setup lint build repl test sdist untar-sdist test-sdist clean run-example1 run-example2
+.DEFAULT_GOAL := help
+
+################################################################################
+## VARIABLE
+
+RESOLVER ?= lts-10.1
+
+HASKELL_FILES:=$(find . -maxdepth 1 -type d | grep 'src\|test')
+
+BIN_DIR:=./out/bin
 DIST_DIR:=$$(stack path --dist-dir)
 SDIST_TAR:=$$(find $(DIST_DIR) -name "*.tar.gz" | tail -1)
 SDIST_FOLDER:=$$(basename $(SDIST_TAR) .tar.gz)
 SDIST_INIT:=$$(stack init --force)
 
-BRITTANY_BIN:=./bin/brittany
-STYLISH_BIN:=./bin/stylish-haskell
-HLINT_BIN:=./bin/hlint
-INTERO_BIN:=./bin/intero
+TOOLS_DIR=./tools/bin
+BRITTANY_BIN:=$(TOOLS_DIR)/brittany
+STYLISH_BIN:=$(TOOLS_DIR)/stylish-haskell
+HLINT_BIN:=$(TOOLS_DIR)/hlint
+PPSH_BIN:=$(TOOLS_DIR)/ppsh
+
+EXAMPLE1_BIN=$(BIN_DIR)/example1
+EXAMPLE2_BIN=$(BIN_DIR)/example2
 
 BRITTANY=$(BRITTANY_BIN) --config-file .brittany.yml --write-mode inplace {} \;
 STYLISH=$(STYLISH_BIN) -i {} \;
 HLINT=$(HLINT_BIN) --refactor --refactor-options -i {} \;
 
-STACK:=stack --install-ghc --local-bin-path ./target/bin
-TOOLS_STACK:=stack --stack-yaml .tools.stack.yaml --install-ghc --local-bin-path ./bin
-
-TEST_DOC:=$(STACK) --haddock --no-haddock-deps build --pedantic
-TEST:=$(STACK) build --test
+STACK:=stack --resolver $(RESOLVER) --install-ghc --local-bin-path ./target/bin
+TOOLS_STACK:=stack --stack-yaml .tools.stack.yaml --install-ghc --local-bin-path $(TOOLS_DIR)
 
 ################################################################################
 
 help:	## Display this message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
-.DEFAULT_GOAL := help
 
 ################################################################################
 
@@ -37,55 +49,65 @@ $(STYLISH_BIN):
 $(BRITTANY_BIN):
 	$(TOOLS_STACK) install brittany
 
-$(INTERO_BIN):
-	$(STACK) install pretty-show intero
+$(PPSH_BIN):
+	$(STACK) install pretty-show
+
+$(EXAMPLE1_BIN): $(HASKELL_FILES)
+	$(STACK) build --ghc-options="-j +RTS -A128m -n4m -RTS" --copy-bins --local-bin-path $(BIN_DIR) --test --no-run-tests --haddock --no-haddock-deps --pedantic
+
+$(EXAMPLE2_BIN) : $(EXAMPLE1_BIN)
 
 .make/setup_done:
-	$(TOOLS_STACK) install hlint stylish-haskell pretty-show brittany
-	mkdir -p .make
-	mkdir -p .stack-work/intero
-	chmod go-w .
+	$(TOOLS_STACK) install hlint stylish-haskell pretty-show brittany refactor
+	chmod -R go-w .stack-work
 	chmod go-w .ghci
-	chmod go-w .stack-work/intero
-	touch .make/setup_done
+	@mkdir -p .make
+	@touch .make/setup_done
 
 ################################################################################
 
-test: ## Execute test suites
-	$(TEST_DOC) supervisor
-	$(TEST) supervisor:supervisor-test
-	$(TEST) supervisor:supervisor-doctest
-.PHONY: test
+build: $(EXAMPLE1_BIN)  ## Build library and example binaries
+
+
+test: $(EXAMPLE1_BIN) ## Execute test suites
+	$(STACK) test
 
 sdist: ## Build a release
-	mkdir -p target
+	@mkdir -p target
 	stack sdist . --pvp-bounds both
 	cp $(SDIST_TAR) target
-.PHONY: sdist
 
-untar_sdist: sdist
-	mkdir -p tmp
+untar-sdist: sdist
+	@mkdir -p tmp
 	tar xzf $(SDIST_TAR)
 	@rm -rf tmp/$(SDIST_FOLDER) || true
 	mv $(SDIST_FOLDER) tmp
-.PHONY: untar_sdist
 
-test_sdist: untar_sdist
+test_sdist: untar-sdist
 	cd tmp/$(SDIST_FOLDER) && $(SDIST_INIT) && $(TEST) supervisor:supervisor-test
-	cd tmp/$(SDIST_FOLDER) && $(TEST) supervisor:supervisor-doctest
-.PHONY: test_sdist
 
 format: $(BRITTANY_BIN) $(STYLISH_BIN) ## Normalize style of source files
-	find $(SOURCES) -name "*.hs" -exec $(BRITTANY) -exec $(STYLISH) && git diff --exit-code
-.PHONY: format
+	find . -maxdepth 1 -name "*.hs" -exec $(BRITTANY) -exec $(STYLISH) && git diff --exit-code
 
 lint: $(HLINT_BIN) ## Execute linter
-	$(HLINT_BIN) $(SOURCES)
-.PHONY: lint
+	$(HLINT_BIN) $(HASKELL_FILES)
 
-repl: $(INTERO_BIN) ## Start project's repl
+repl: $(PPSH_BIN) ## Start project's repl
+	@chmod go-w -R .stack-work
+	@chmod go-w .ghci
 	stack ghci
-.PHONY: repl
 
-setup: .make/setup_done ## Install development dependencies
-.PHONY: setup
+clean: ## Clean built artifacts
+	rm $(BIN_DIR)/*
+	stack clean
+
+dev-setup: .make/setup_done ## Install development dependencies
+
+################################################################################
+## Demo tasks
+
+run-example1: $(EXAMPLE1_BIN) ## Runs example1 binary from tutorial
+	$(EXAMPLE1_BIN) --procNumber 3
+
+run-example2: $(EXAMPLE2_BIN) ## Runs example2 binary from tutorial
+	$(EXAMPLE2_BIN) --procNumber 3

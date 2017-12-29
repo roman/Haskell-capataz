@@ -53,7 +53,7 @@ $(PPSH_BIN):
 	$(STACK) install pretty-show
 
 $(EXAMPLE1_BIN): $(HASKELL_FILES)
-	$(STACK) build --ghc-options="-j +RTS -A128m -n4m -RTS" --copy-bins --local-bin-path $(BIN_DIR) --test --no-run-tests --haddock --no-haddock-deps --pedantic
+	$(STACK) build --copy-bins --local-bin-path $(BIN_DIR) --test --no-run-tests --haddock --no-haddock-deps --pedantic
 
 $(EXAMPLE2_BIN) : $(EXAMPLE1_BIN)
 

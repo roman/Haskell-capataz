@@ -13,6 +13,10 @@ matrix:
     compiler: "GHC-8.2.1"
     addons: {apt: {packages: [libgmp-dev]}}
 
+  - env: BUILD=lts-10
+    compiler: "GHC-8.2.1"
+    addons: {apt: {packages: [libgmp-dev]}}
+
   - env: BUILD=lts-9
     compiler: "GHC-8.0.2"
     addons: {apt: {packages: [libgmp-dev]}}
@@ -21,20 +25,16 @@ matrix:
     compiler: "GHC-8.0.2"
     addons: {apt: {packages: [libgmp-dev]}}
 
-  - env: BUILD=lts-7
-    compiler: "GHC-8.0.1"
-    addons: {apt: {packages: [libgmp-dev]}}
-
   - env: BUILD=lint
-    compiler: "GHC-8.0.2"
+    compiler: "GHC-8.2.1"
     addons: {apt: {packages: [libgmp-dev]}}
 
   - env: BUILD=pretty
-    compiler: "GHC-8.0.2"
+    compiler: "GHC-8.2.1"
     addons: {apt: {packages: [libgmp-dev]}}
 
   - env: BUILD=sdist
-    compiler: "GHC-8.0.2"
+    compiler: "GHC-8.2.1"
     addons: {apt: {packages: [libgmp-dev]}}
 
 before_install:
@@ -65,10 +65,10 @@ script:
       make lint
       ;;
     pretty)
-      make pretty
+      make format
       ;;
     sdist)
-      make test_sdist
+      make test-sdist
       ;;
   esac
   set +ex

@@ -1,4 +1,4 @@
-# overseer
+# Capataz
 
 > Our greatest glory is not in never failing, but in rising every time we fail.– Confucius
 
@@ -29,7 +29,7 @@ provides a simple Supervisor API.
 This library is intended to be a drop-in replacement to `forkIO` invocations
 throughout your codebase, the difference being, you'll need to do a bit more of
 setup specifying supervision rules, and also pass along a reference of a
-supervisor descriptor to every thread fork.
+capataz descriptor to every thread fork.
 
 ### Why not [distributed-process](https://hackage.haskell.org/package/distributed-process)?
 
@@ -64,13 +64,13 @@ outcome.
 
 ## Documentation
 
-Documentation can be found [here](https://romanandreg.gitbooks.io/haskell-supervisor/content/)
+Documentation can be found [here](https://romanandreg.gitbooks.io/haskell-capataz/content/)
 
 ## Installation
 
-[![Hackage](https://img.shields.io/hackage/v/supervisor.svg)](https://img.shields.io/hackage/v/supervisor.svg)
-[![Stackage LTS](https://stackage.org/package/supervisor/badge/lts)](http://stackage.org/lts/package/supervisor)
-[![Stackage Nightly](https://stackage.org/package/supervisor/badge/nightly)](http://stackage.org/nightly/package/supervisor)
+[![Hackage](https://img.shields.io/hackage/v/capataz.svg)](https://img.shields.io/hackage/v/capataz.svg)
+[![Stackage LTS](https://stackage.org/package/capataz/badge/lts)](http://stackage.org/lts/package/capataz)
+[![Stackage Nightly](https://stackage.org/package/capataz/badge/nightly)](http://stackage.org/nightly/package/capataz)
 
 Make sure you include the following entry on your [cabal file's
 dependecies](https://www.haskell.org/cabal/users-guide/developing-packages.html#build-information)
@@ -78,25 +78,25 @@ section.
 
 ```cabal
 library:
-  build-depends: overseer
+  build-depends: capataz
 ```
 
 Or on your `package.yaml`
 
 ```
 dependencies:
-- overseer
+- capataz
 ```
 
 ## Development
 
-[![Build Status](https://travis-ci.org/roman/Haskell-supervisor.svg?branch=master)](https://travis-ci.org/roman/Haskell-supervisor)
-[![Github](https://img.shields.io/github/commits-since/roman/haskell-supervisor/v0.0.0.1.svg)](https://img.shields.io/github/commits-since/roman/haskell-supervisor/v0.0.0.1.svg)
-[![Hackage Dependencies\]](https://img.shields.io/hackage-deps/v/supervisor.svg)](https://img.shields.io/hackage/v/supervisor.svg)
+[![Build Status](https://travis-ci.org/roman/Haskell-capataz.svg?branch=master)](https://travis-ci.org/roman/Haskell-capataz)
+[![Github](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.0.0.1.svg)](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.0.0.1.svg)
+[![Hackage Dependencies\]](https://img.shields.io/hackage-deps/v/capataz.svg)](https://img.shields.io/hackage/v/capataz.svg)
 
 ### Open Commit Bit
 
-supervisor has an open commit bit policy: Anyone with an accepted pull request
+capataz has an open commit bit policy: Anyone with an accepted pull request
 gets added as a repository collaborator. Please try to follow these simple
 rules:
 

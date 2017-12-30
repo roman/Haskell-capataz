@@ -2,7 +2,7 @@
 
 In this (contrived) tutorial, we will build a small CLI app that spawns processes through Haskell's Process API, and keep our program running smoothly despite having another thread killing those processes using Unix Signals.
 
-To get started, we are going to implement our CLI program without the supervisor library, and we'll add supervisor as we work on this.
+To get started, we are going to implement our CLI program without the capataz library, and we'll add capataz as we work on this.
 
 For this tutorial, we assume the reader is familiar with the following:
 
@@ -17,7 +17,7 @@ If you are not familiar with the topics above, we recommend following the links 
 
 We are going to implement a CLI program that spawns a given amount of processes that executes a bash script that prints a number and increments it in a recurring fashion. Our Haskell program will also run a Haskell thread that will kill one of the many bash script executions.
 
-You can find the code for this tutorial in the [`examples` directory](https://github.com/roman/Haskell-supervisor/tree/examples/examples) of the project's repository.
+You can find the code for this tutorial in the [`examples` directory](https://github.com/roman/Haskell-capataz/tree/examples/examples) of the project's repository.
 
 ## Setting up the stage
 
@@ -126,7 +126,7 @@ When executed, this program is going to fail silently, removing the output of ea
 
 ## Example 2 - Running program with supervision
 
-Now, let's have a supervisor that monitors both a group of threads that execute the `spawnProcessNumber` sub-routine and also another thread that kills process randomly.
+Now, let's have a capataz that monitors both a group of threads that execute the `spawnProcessNumber` sub-routine and also another thread that kills process randomly.
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
@@ -135,16 +135,16 @@ module Main where
 
 import Protolude
 import Options.Generic (getRecord)
-import Control.Concurrent.Supervisor -- (0)
-  ( ChildOptions(..)
-  , SupervisorOptions(..)
-  , ChildRestartStrategy(..)
-  , SupervisorRestartStrategy(..)
-  , forkSupervisor
-  , forkChild
-  , defChildOptions
-  , defSupervisorOptions
-  , supervisorToAsync
+import Control.Concurrent.Capataz -- (0)
+  ( WorkerOptions(..)
+  , CapatazOptions(..)
+  , WorkerRestartStrategy(..)
+  , CapatazRestartStrategy(..)
+  , forkCapataz
+  , forkWorker
+  , defWorkerOptions
+  , defCapatazOptions
+  , capatazToAsync
   , teardown
   )
 import Lib (Cli(..), spawnNumbersProcess, killNumberProcess)
@@ -154,11 +154,11 @@ import Text.Show.Pretty (pPrint)
 main :: IO ()
 main = do
   n <- getRecord "Counter spawner"
-  supervisor <-
+  capataz <-
     --                     (1)
     --                      |
-    forkSupervisor defSupervisorOptions { supervisorName = "Example Supervisor"
-                                        , supervisorRestartStrategy = OneForOne -- (2)
+    forkCapataz defCapatazOptions { capatazName = "Example Capataz"
+                                        , capatazRestartStrategy = OneForOne -- (2)
                                         , notifyEvent = pPrint                  -- (3)
                                         }
 
@@ -168,57 +168,57 @@ main = do
   forM_ [1..procNumber n] $ \i ->
     --              (4)
     --               |
-    void $ forkChild defChildOptions { childName = "Worker (" <> show i <> ")"
-                                     , childRestartStrategy = Permanent  -- (5)
+    void $ forkWorker defWorkerOptions { workerName = "Worker (" <> show i <> ")"
+                                     , workerRestartStrategy = Permanent  -- (5)
                                      }
                      (spawnNumbersProcess (numberWriter i)) -- (6)
-                     supervisor
+                     capataz
 
   let delayMicros = 5000100
-  void $ forkChild defChildOptions { childName = "Worker Killer" }
+  void $ forkWorker defWorkerOptions { workerName = "Worker Killer" }
                    (forever $ threadDelay delayMicros >> processKiller "while")
-                   supervisor
+                   capataz
 
-  wait (supervisorToAsync supervisor)  -- (7)
+  wait (capatazToAsync capataz)  -- (7)
     `finally`
-    (teardown supervisor >>= print)    -- (8)
+    (teardown capataz >>= print)    -- (8)
 ```
 
-We start the `main` sub-routine building a supervisor using the `forkSupervisor` function.
+We start the `main` sub-routine building a capataz using the `forkCapataz` function.
 
-`(0)` We start by importing a lot of symbols from our Supervisor library; when using this library, we need to provide many settings that will define the restart mechanisms for the threads we want to keep running despite errors
+`(0)` We start by importing a lot of symbols from our Capataz library; when using this library, we need to provide many settings that will define the restart mechanisms for the threads we want to keep running despite errors
 
-`(1)` its first argument is a set of options for the supervisor, in this example, we are overwriting some of them
+`(1)` its first argument is a set of options for the capataz, in this example, we are overwriting some of them
 
-`(2)` One of the options we overwrite is the `supervisorRestartStrategy`. Currently, the possible values may be:
+`(2)` One of the options we overwrite is the `capatazRestartStrategy`. Currently, the possible values may be:
 
-* `OneForOne` -- if a monitored sub-routine fails, the supervisor will only restart the failing one
+* `OneForOne` -- if a monitored sub-routine fails, the capataz will only restart the failing one
 
-* `AllForOne` -- if a monitored sub-routine fails, the supervisor will restart all sub-routines that are currently monitoring
+* `AllForOne` -- if a monitored sub-routine fails, the capataz will restart all sub-routines that are currently monitoring
 
-`(3)` The `notifyEvent` function will emit a `SupervisorEvent` record that emits events that indicate the current status of the supervisor, in this simple example, we are using the `pPrint` (pretty print) function to debug it.
+`(3)` The `notifyEvent` function will emit a `CapatazEvent` record that emits events that indicate the current status of the capataz, in this simple example, we are using the `pPrint` (pretty print) function to debug it.
 
-We continue the example by spawning a few child sub-routines, for this, we use the `forkChild` function.
+We continue the example by spawning a few worker sub-routines, for this, we use the `forkWorker` function.
 
-`(4)` As well as the `forkSupervisor` function, `forkChild` receives an options record, in this example, we are setting an explicit name for the children.
+`(4)` As well as the `forkCapataz` function, `forkWorker` receives an options record, in this example, we are setting an explicit name for the workers.
 
-`(5)` We are also specifying the `childRestartStrategy`; this can be:
+`(5)` We are also specifying the `workerRestartStrategy`; this can be:
 
 * Permanent -- The sub-routine will _always_ get restarted, even it finishes without any errors. This strategy is ideal to monitor servers.
 
-* Transient -- The sub-routine gets restarted, if and only if it fails, if it completes without any errors, the supervisor will drop the sub-routine. This strategy is ideal to monitor one time executions.
+* Transient -- The sub-routine gets restarted, if and only if it fails, if it completes without any errors, the capataz will drop the sub-routine. This strategy is ideal to monitor one time executions.
 
 * Temporary -- The sub-routine will not be restarted, even in the cause of failure, used for non-important executions.
 
-`(6)` Then, we pass an `IO` sub-routine to execute in a monitored thread (in this particular example, our number process spawner). This approach is no different from using `forkIO`. Note the supervisor created on step (1) is the last parameter to the `forkChild` function.
+`(6)` Then, we pass an `IO` sub-routine to execute in a monitored thread (in this particular example, our number process spawner). This approach is no different from using `forkIO`. Note the capataz created on step (1) is the last parameter to the `forkWorker` function.
 
-`(7)` We can convert the supervisor sub-routine into an [`async`](https://hackage.haskell.org/package/async)
+`(7)` We can convert the capataz sub-routine into an [`async`](https://hackage.haskell.org/package/async)
 
-`(8)` We made sure that we cleaned up the supervisor and supervised sub-routine threads using the [`teardown`](https://hackage.haskell.org/package/teardown) API.
+`(8)` We made sure that we cleaned up the capataz and supervised sub-routine threads using the [`teardown`](https://hackage.haskell.org/package/teardown) API.
 
 ## Try it out!
 
-1) Clone the [supervisor repository](https://github.com/roman/Haskell-supervisor)
+1) Clone the [capataz repository](https://github.com/roman/Haskell-capataz)
 
 1) Run `make run-example1`
 

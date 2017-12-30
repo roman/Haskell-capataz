@@ -1,4 +1,4 @@
-name: supervisor
+name: capataz
 version: '0.0.0.1'
 category: TODO
 author: Roman Gonzalez
@@ -6,7 +6,7 @@ maintainer: romanandreg@gmail.com
 copyright: © 2017 Roman Gonzalez
 license: MIT
 license-file: LICENSE
-github: roman/Haskell-supervisor
+github: roman/Haskell-capataz
 tested-with: GHC==8.0.1 GHC==8.0.2 GHC==8.2.1
 extra-source-files:
 - README.md
@@ -37,10 +37,10 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - Control.Concurrent.Supervisor
+  - Control.Concurrent.Capataz
 
 tests:
-  supervisor-test:
+  capataz-test:
     main: Main.hs
     source-dirs: test/testsuite
     ghc-options:
@@ -54,6 +54,6 @@ tests:
     - tasty-smallcheck
     - tasty-rerun
     - pretty-show
-    - supervisor
+    - capataz
 
 stability: alpha (experimental)

@@ -7,7 +7,7 @@ module Main where
 
 import Protolude
 
-import Control.Concurrent.SupervisorTest
+import Control.Concurrent.CapatazTest
 import Test.Tasty                        (defaultMainWithIngredients, testGroup)
 import Test.Tasty.Ingredients.Rerun      (rerunningTests)
 import Test.Tasty.Runners                (consoleTestReporter, listingTests)
@@ -15,4 +15,4 @@ import Test.Tasty.Runners                (consoleTestReporter, listingTests)
 main :: IO ()
 main = defaultMainWithIngredients
   [rerunningTests [listingTests, consoleTestReporter]]
-  (testGroup "supervisor" tests)
+  (testGroup "capataz" tests)

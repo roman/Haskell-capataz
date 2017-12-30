@@ -1,11 +1,11 @@
-name: supervisor-example
+name: capataz-example
 version: '0.0.0.1'
 category: TODO
 author: Roman Gonzalez
 maintainer: romanandreg@gmail.com
 copyright: © 2017 Roman Gonzalez
 license: MIT
-github: roman/Haskell-supervisor
+github: roman/Haskell-capataz
 extra-source-files:
 - README.md
 dependencies:
@@ -34,7 +34,7 @@ executables:
     - -O2
     dependencies:
     - async
-    - supervisor-example
+    - capataz-example
   example2:
     main: Main.hs
     source-dirs: src/example2
@@ -44,5 +44,5 @@ executables:
     - -with-rtsopts=-N
     - -O2
     dependencies:
-    - supervisor
-    - supervisor-example
+    - capataz
+    - capataz-example

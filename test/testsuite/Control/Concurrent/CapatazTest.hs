@@ -3,6 +3,21 @@
 {-# LANGUAGE NoImplicitPrelude     #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-| This module contains:
+
+* Assertion functions to get attributes from a `CapatazEvent`
+
+* Helpers to run the test (reduce boilerplate)
+
+* Actual tests
+
+Tests just exercises the __public API__ and asserts all the events delivered via
+the @notifyEvent@ callback are what we are expecting.
+
+NOTE: This tests may be flaky depending on the load of the application, there is
+a ticket pending to add dejafu tests to ensure our tests are stable.
+
+-}
 module Control.Concurrent.CapatazTest (tests) where
 
 import Protolude
@@ -23,18 +38,22 @@ import qualified Control.Concurrent.Capataz as SUT
 --------------------------------------------------------------------------------
 -- Util
 
+-- | Utility function that gets the type name of a Record through it's Show
+-- output.
 fetchRecordName :: Show a => a -> Text
 fetchRecordName = T.takeWhile (/= ' ') . show
 
+-- | Composes two predicate functions together with a boolean AND
 andP :: [a -> Bool] -> a -> Bool
 andP predList a = all ($ a) predList
-
--- orP :: [a -> Bool] -> a -> Bool
--- orP predList a = any ($ a) predList
 
 --------------------------------------------------------------------------------
 -- Assertions and Testers
 
+-- | This record duplicate the same event names as the ones found in the
+-- "CapatazEvent" type, we use this to avoid using Text comparisons on assertion
+-- helper functions. The "CapatazEvent" record is imported qualified, so there
+-- is no conflict happening.
 data EventType
   = InvalidCapatazStatusReached
   | CapatazStatusChanged
@@ -50,9 +69,11 @@ data EventType
   | CapatazTerminated
   deriving (Show)
 
+-- | Predicate function to assert "CapatazEvent" types
 assertEventType :: EventType -> SUT.CapatazEvent -> Bool
 assertEventType evType ev = fetchRecordName ev == show evType
 
+-- | Predicate function to assert "CapatazEvent" worker name
 assertWorkerName :: Text -> SUT.CapatazEvent -> Bool
 assertWorkerName workerName' ev = case ev of
   SUT.WorkerRestarted { workerName }  -> workerName' == workerName
@@ -61,6 +82,7 @@ assertWorkerName workerName' ev = case ev of
   SUT.WorkerStarted { workerName }    -> workerName' == workerName
   _                                   -> False
 
+-- | Predicate function to assert type of an error inside a "CapatazEvent"
 assertErrorType :: Text -> SUT.CapatazEvent -> Bool
 assertErrorType errType ev = case ev of
   SUT.WorkerFailed { workerError }   -> fetchRecordName workerError == errType
@@ -71,6 +93,8 @@ assertErrorType errType ev = case ev of
       Just originalError -> fetchRecordName originalError == errType
   _ -> False
 
+-- | Predicate function to assert type of callback executed inside a
+-- "CapatazEvent"
 assertCallbackType :: SUT.CallbackType -> SUT.CapatazEvent -> Bool
 assertCallbackType cbType ev = case ev of
   SUT.WorkerFailed { workerError } -> case fromException workerError of
@@ -79,11 +103,13 @@ assertCallbackType cbType ev = case ev of
   SUT.WorkerCallbackExecuted { callbackType } -> cbType == callbackType
   _ -> False
 
+-- | Predicate function to assert restart count inside a "CapatazEvent"
 assertRestartCount :: (Int -> Bool) -> SUT.CapatazEvent -> Bool
 assertRestartCount predFn ev = case ev of
   SUT.WorkerRestarted { workerRestartCount } -> predFn workerRestartCount
   _                                          -> False
 
+-- | Predicate function to assert a Capataz status change
 assertCapatazStatusChanged
   :: SUT.CapatazStatus -> SUT.CapatazStatus -> SUT.CapatazEvent -> Bool
 assertCapatazStatusChanged fromEv toEv ev = case ev of
@@ -91,33 +117,42 @@ assertCapatazStatusChanged fromEv toEv ev = case ev of
     fromEv == prevCapatazStatus && toEv == newCapatazStatus
   _ -> False
 
+-- | Predicate function to assert a worker was started
 assertWorkerStarted :: Text -> SUT.CapatazEvent -> Bool
 assertWorkerStarted workerName =
   andP [assertEventType WorkerStarted, assertWorkerName workerName]
 
+-- | Predicate function to assert a worker was terminated
 assertWorkerTerminated :: Text -> SUT.CapatazEvent -> Bool
 assertWorkerTerminated workerName =
   andP [assertEventType WorkerTerminated, assertWorkerName workerName]
 
+-- | Predicate function to assert a capataz thread failed with error type
 assertCapatazFailedWith :: Text -> SUT.CapatazEvent -> Bool
 assertCapatazFailedWith errorName =
   andP [assertEventType CapatazFailed, assertErrorType errorName]
 
 --------------------------------------------------------------------------------
 
+-- | Exception used to test failures inside Worker sub-routines
 data RestartingWorkerError
   = RestartingWorkerError
   deriving (Show)
 
 instance Exception RestartingWorkerError
 
+-- | Exception used to test failures inside Worker callback sub-routines
 data TimeoutError
   = TimeoutError
   deriving (Show)
 
 instance Exception TimeoutError
 
-mkFailingSubRoutine :: Int -> IO (IO ())
+-- | Utility function to create a Worker sub-routine that fails at least a
+-- number of times
+mkFailingSubRoutine
+  :: Int  -- ^ Number of times the Worker sub-routine will fail
+  -> IO (IO ()) -- ^ Sub-routine used on worker creation
 mkFailingSubRoutine failCount = do
   countRef <- newIORef failCount
   let subRoutine = do
@@ -127,16 +162,10 @@ mkFailingSubRoutine failCount = do
 
   return subRoutine
 
--- | Returns two values:
---
--- * A sub-routine that will complete for `initCount` amount of
---   times
--- * A sub-routine that will release a lock every time it is restarted
---
--- This function works great when testing `Permanent` strategies, as you would
--- like to assert restart events once (if it keeps completing it will fill up the
--- log with restart events)
---
+-- | A sub-routine that will complete for `initCount` amount of times. This
+-- function works great when testing `Permanent` strategies, as you would like
+-- to assert restart events once (if it keeps completing it will fill up the log
+-- with restart events)
 mkCompletingBeforeNRestartsSubRoutine :: Int -> IO (IO ())
 mkCompletingBeforeNRestartsSubRoutine initCount = do
   countRef <- newIORef initCount
@@ -146,24 +175,35 @@ mkCompletingBeforeNRestartsSubRoutine initCount = do
         if shouldStop then return () else forever $ threadDelay 1000100
   return subRoutine
 
--- | Returns two values:
---
--- * A sub-routine that will complete once
---
--- This function works great when testing `Permanent` strategies, as you would
--- like to assert restart events once (if it keeps completing it will fill up the
--- log with restart events)
---
+-- | A sub-routine that will complete once. This function works great when
+-- testing `Permanent` strategies, as you would like to assert restart events
+-- once (if it keeps completing it will fill up the log with restart events)
 mkCompletingOnceSubRoutine :: IO (IO ())
 mkCompletingOnceSubRoutine = mkCompletingBeforeNRestartsSubRoutine 1
 
+-- | Utility function to build a test environment for a Capataz execution.
+-- It is composed by:
+--
+-- * List of assertions that represent events that should be triggered by the
+--   capataz instance in order
+--
+-- * A function to modify the default "CapatazOptions", this utility function injects
+--   a special @notifyEvent@ callback to execute given assertions.
 testCapatazStreamWithOptions
-  :: [SUT.CapatazEvent -> Bool]
-  -> (SUT.CapatazOptions -> SUT.CapatazOptions)
-  -> (SUT.Capataz -> IO ())
-  -> [SUT.CapatazEvent -> Bool]
-  -> [SUT.CapatazEvent -> Bool]
-  -> Maybe (SUT.CapatazEvent -> Bool)
+  :: [SUT.CapatazEvent -> Bool] -- ^ Assertions happening before setup function
+                                -- is called
+  -> (SUT.CapatazOptions -> SUT.CapatazOptions) -- ^ Function to modify default
+                                                -- @CapatazOptions@
+  -> (SUT.Capataz -> IO ()) -- ^ Function used to test public the supervisor
+                            -- public API (a.k.a setup function)
+  -> [SUT.CapatazEvent -> Bool] -- ^ Assertions happening after the setup
+                                -- function
+  -> [SUT.CapatazEvent -> Bool] -- ^ Assertions happening after the capataz
+                                -- record is terminated
+  -> Maybe (SUT.CapatazEvent -> Bool) -- ^ An assertion checked across all
+                                      -- @CapatazEvents@ that happened in a
+                                      -- test, great when testing that an event
+                                      -- __did not__ happen
   -> IO ()
 testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAssertions postTeardownAssertions mAllEventsAssertion
   = do
@@ -180,26 +220,39 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
       { SUT.notifyEvent = trackEvent accRef eventStream
       }
 
+    -- We check preSetup assertions are met before we execute the setup
+    -- function. This serves to test initialization of capataz instance
     runAssertions (eventStream, accRef)
                   pendingCountVar
                   preSetupAssertion
                   capataz
+
+    -- We execute the setup sub-routine, which is going to use the Capataz public
+    -- API to assert events
     setupResult <- try (setupFn capataz)
 
     case setupResult of
+      -- If the sub-routine fails, show exception
       Left  err -> assertFailure (show (err :: SomeException))
       Right _   -> do
+        -- We now run post-setup assertions
         runAssertions (eventStream, accRef)
                       pendingCountVar
                       postSetupAssertions
                       capataz
 
+        -- We now shutdown the capataz instance
         void $ SUT.teardown capataz
+
+        -- We run assertions for after the capataz has been shut down
         runAssertions (eventStream, accRef)
                       pendingCountVar
                       postTeardownAssertions
                       capataz
 
+        -- Lastly, we check if there is a function that we want to execute
+        -- across all events that happened in the test, this is to assert the
+        -- absence of an event
         case mAllEventsAssertion of
           Nothing                 -> return ()
           Just allEventsAssertion -> do
@@ -212,6 +265,9 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
               )
               (all allEventsAssertion events)
  where
+  -- Utility functions that runs the readEventLoop function with a timeout
+  -- of a second, this way we can guarantee assertions are met without having
+  -- to add @threadDelays@ to the test execution
   runAssertions (eventStream, accRef) pendingCountVar assertions capataz = do
     raceResult <- race (threadDelay 1000100)
                        (readEventLoop eventStream pendingCountVar assertions)
@@ -231,10 +287,14 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
       Right _ -> return ()
 
 
+  -- Sub-routine that accumulates all events that have happened in the Capataz
+  -- instance so far
   trackEvent accRef eventStream event = do
     atomicModifyIORef' accRef (\old -> (event : old, ()))
     atomically $ writeTQueue eventStream event
 
+  -- Sub-routine that reads the event stream, and ensures that all assertions
+  -- are executed, this loop won't stop until all assertions are met
   readEventLoop eventStream pendingCount assertions = do
     writeIORef pendingCount (length assertions)
     case assertions of
@@ -246,12 +306,21 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
           else readEventLoop eventStream pendingCount assertions
 
 
+-- | A version of "testCapatazStreamWithOptions" that does not receive the
+-- function that modifies a "CapatazOptions" record.
 testCapatazStream
-  :: [SUT.CapatazEvent -> Bool]
-  -> (SUT.Capataz -> IO ())
-  -> [SUT.CapatazEvent -> Bool]
-  -> [SUT.CapatazEvent -> Bool]
-  -> Maybe (SUT.CapatazEvent -> Bool)
+  :: [SUT.CapatazEvent -> Bool] -- ^ Assertions happening before setup function
+                                -- is called
+  -> (SUT.Capataz -> IO ()) -- ^ Function used to test public the supervisor
+                            -- public API (a.k.a setup function)
+  -> [SUT.CapatazEvent -> Bool] -- ^ Assertions happening after the setup
+                                -- function
+  -> [SUT.CapatazEvent -> Bool] -- ^ Assertions happening after the capataz
+                                -- record is terminated
+  -> Maybe (SUT.CapatazEvent -> Bool) -- ^ An assertion checked across all
+                                      -- @CapatazEvents@ that happened in a
+                                      -- test, great when testing that an event
+                                      -- __did not__ happen
   -> IO ()
 testCapatazStream preSetupAssertions =
   testCapatazStreamWithOptions preSetupAssertions identity

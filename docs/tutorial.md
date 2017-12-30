@@ -155,12 +155,12 @@ main :: IO ()
 main = do
   n <- getRecord "Counter spawner"
   capataz <-
-    --                     (1)
-    --                      |
+    --                (1)
+    --                 |
     forkCapataz defCapatazOptions { capatazName = "Example Capataz"
-                                        , capatazRestartStrategy = OneForOne -- (2)
-                                        , notifyEvent = pPrint                  -- (3)
-                                        }
+                                  , capatazRestartStrategy = OneForOne -- (2)
+                                  , notifyEvent = pPrint               -- (3)
+                                  }
 
   let numberWriter i a = print (i, a)
       delayMicros = 5000100
@@ -169,8 +169,8 @@ main = do
     --              (4)
     --               |
     void $ forkWorker defWorkerOptions { workerName = "Worker (" <> show i <> ")"
-                                     , workerRestartStrategy = Permanent  -- (5)
-                                     }
+                                       , workerRestartStrategy = Permanent  -- (5)
+                                       }
                      (spawnNumbersProcess (numberWriter i)) -- (6)
                      capataz
 
@@ -181,7 +181,7 @@ main = do
 
   wait (capatazToAsync capataz)  -- (7)
     `finally`
-    (teardown capataz >>= print)    -- (8)
+    (teardown capataz >>= print) -- (8)
 ```
 
 We start the `main` sub-routine building a capataz using the `forkCapataz` function.
@@ -204,11 +204,11 @@ We continue the example by spawning a few worker sub-routines, for this, we use 
 
 `(5)` We are also specifying the `workerRestartStrategy`; this can be:
 
-* Permanent -- The sub-routine will _always_ get restarted, even it finishes without any errors. This strategy is ideal to monitor servers.
+* `Permanent` -- The sub-routine will _always_ get restarted, even it finishes without any errors. This strategy is ideal to monitor servers.
 
-* Transient -- The sub-routine gets restarted, if and only if it fails, if it completes without any errors, the capataz will drop the sub-routine. This strategy is ideal to monitor one time executions.
+* `Transient` -- The sub-routine gets restarted, if and only if it fails, if it completes without any errors, the capataz will drop the sub-routine. This strategy is ideal to monitor one time executions.
 
-* Temporary -- The sub-routine will not be restarted, even in the cause of failure, used for non-important executions.
+* `Temporary` -- The sub-routine will not be restarted, even in the cause of failure, used for non-important executions.
 
 `(6)` Then, we pass an `IO` sub-routine to execute in a monitored thread (in this particular example, our number process spawner). This approach is no different from using `forkIO`. Note the capataz created on step (1) is the last parameter to the `forkWorker` function.
 

@@ -222,7 +222,8 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
 
     -- We check preSetup assertions are met before we execute the setup
     -- function. This serves to test initialization of capataz instance
-    runAssertions (eventStream, accRef)
+    runAssertions "PRE-SETUP"
+                  (eventStream, accRef)
                   pendingCountVar
                   preSetupAssertion
                   capataz
@@ -236,7 +237,8 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
       Left  err -> assertFailure (show (err :: SomeException))
       Right _   -> do
         -- We now run post-setup assertions
-        runAssertions (eventStream, accRef)
+        runAssertions "POST-SETUP"
+                      (eventStream, accRef)
                       pendingCountVar
                       postSetupAssertions
                       capataz
@@ -245,7 +247,8 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
         void $ SUT.teardown capataz
 
         -- We run assertions for after the capataz has been shut down
-        runAssertions (eventStream, accRef)
+        runAssertions "POST-TEARDOWN"
+                      (eventStream, accRef)
                       pendingCountVar
                       postTeardownAssertions
                       capataz
@@ -258,7 +261,7 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
           Just allEventsAssertion -> do
             events <- reverse <$> readIORef accRef
             assertBool
-              (  "Expected all events to match predicate, but didn't ("
+              (  "On AFTER-TEST, expected all events to match predicate, but didn't ("
               <> show (length events)
               <> " events tried)\n"
               <> ppShow (zip ([0 ..] :: [Int]) events)
@@ -268,7 +271,7 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
   -- Utility functions that runs the readEventLoop function with a timeout
   -- of a second, this way we can guarantee assertions are met without having
   -- to add @threadDelays@ to the test execution
-  runAssertions (eventStream, accRef) pendingCountVar assertions capataz = do
+  runAssertions stageName (eventStream, accRef) pendingCountVar assertions capataz = do
     raceResult <- race (threadDelay 1000100)
                        (readEventLoop eventStream pendingCountVar assertions)
     case raceResult of
@@ -277,7 +280,7 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
         pendingCount <- readIORef pendingCountVar
         void $ SUT.teardown capataz
         assertFailure
-          (  "Expected all assertions to match, but didn't ("
+          (  "On " <> stageName <> " stage, expected all assertions to match, but didn't ("
           <> show pendingCount
           <> " assertions remaining, "
           <> show (length events)

@@ -19,19 +19,19 @@ import Data.Time.Clock               (getCurrentTime)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.UUID.V4        as UUID (nextRandom)
 
-import qualified Control.Concurrent.Internal.Capataz.Worker   as Worker
 import qualified Control.Concurrent.Internal.Capataz.Restart as Restart
+import qualified Control.Concurrent.Internal.Capataz.Worker  as Worker
 
 import Control.Concurrent.Internal.Capataz.Types
 import Control.Concurrent.Internal.Capataz.Util
     ( appendWorkerToMap
-    , workerOptionsToSpec
+    , capatazToEnv
     , fetchWorker
     , readCapatazStatus
     , readCapatazStatusSTM
     , resetWorkerMap
     , sendSyncControlMsg
-    , capatazToEnv
+    , workerOptionsToSpec
     , writeCapatazStatus
     )
 
@@ -41,10 +41,10 @@ import Control.Concurrent.Internal.Capataz.Util
 -- Workers being supervised by it.
 haltCapataz :: CapatazEnv -> IO ()
 haltCapataz env = do
-  writeCapatazStatus   env                   Halting
+  writeCapatazStatus      env                Halting
   Worker.terminateWorkers "capataz shutdown" env
-  resetWorkerMap       env                   (const HashMap.empty)
-  writeCapatazStatus   env                   Halted
+  resetWorkerMap          env                (const HashMap.empty)
+  writeCapatazStatus      env                Halted
 
 -- | Handles an event produced by one of the workers this capataz monitors
 handleMonitorEvent :: CapatazEnv -> MonitorEvent -> IO Bool
@@ -61,11 +61,11 @@ handleMonitorEvent env monitorEv = do
     WorkerFailed' { workerId, workerError, workerRestartCount } ->
       Restart.handleWorkerFailed env workerId workerError workerRestartCount
 
-    WorkerTerminated' { workerId, workerRestartCount, workerTerminationReason } ->
-      Restart.handleWorkerTerminated env
-                                    workerId
-                                    workerTerminationReason
-                                    workerRestartCount
+    WorkerTerminated' { workerId, workerRestartCount, workerTerminationReason }
+      -> Restart.handleWorkerTerminated env
+                                        workerId
+                                        workerTerminationReason
+                                        workerRestartCount
 
 
   return True
@@ -79,15 +79,16 @@ handleControlAction env controlAction = case controlAction of
     returnWorkerId workerId
     return True
 
-  TerminateWorker { terminationReason, workerId, notifyWorkerTermination } -> do
-    mWorker <- fetchWorker env workerId
-    case mWorker of
-      Nothing    -> return True
-      Just worker -> do
-        Worker.terminateWorker terminationReason env worker
-        -- removeWorkerFromMap env workerId
-        notifyWorkerTermination
-        return True
+  TerminateWorker { terminationReason, workerId, notifyWorkerTermination } ->
+    do
+      mWorker <- fetchWorker env workerId
+      case mWorker of
+        Nothing     -> return True
+        Just worker -> do
+          Worker.terminateWorker terminationReason env worker
+          -- removeWorkerFromMap env workerId
+          notifyWorkerTermination
+          return True
 
   TerminateCapataz { notifyCapatazTermination } -> do
     haltCapataz env
@@ -127,7 +128,7 @@ runCapatazLoop unmask env@CapatazEnv { capatazId, capatazName, capatazStatusVar,
       <*> readTQueue capatazQueue
 
     case loopResult of
-      Left  capatazError   -> handleCapatazException env capatazError
+      Left  capatazError      -> handleCapatazException env capatazError
 
       Right (status, message) -> case status of
         Initializing -> do
@@ -142,8 +143,7 @@ runCapatazLoop unmask env@CapatazEnv { capatazId, capatazName, capatazStatusVar,
         Running -> do
           eContinueLoop <- try $ unmask $ handleCapatazMessage env message
           case eContinueLoop of
-            Left capatazError ->
-              handleCapatazException env capatazError
+            Left capatazError -> handleCapatazException env capatazError
 
             Right continueLoop
               | continueLoop -> runCapatazLoop unmask env
@@ -167,7 +167,7 @@ buildCapatazRuntime capatazOptions = do
   capatazId        <- UUID.nextRandom
   capatazQueue     <- newTQueueIO
   capatazStatusVar <- newTVarIO Initializing
-  capatazWorkerMap  <- newIORef HashMap.empty
+  capatazWorkerMap <- newIORef HashMap.empty
   return CapatazRuntime {..}
 
 -- | Creates a Capataz record, which represents a supervision thread which
@@ -178,8 +178,7 @@ forkCapataz capatazOptions@CapatazOptions { capatazName, capatazWorkerSpecList, 
   = do
     capatazRuntime <- buildCapatazRuntime capatazOptions
 
-    let capatazEnv@CapatazEnv { capatazId } =
-          capatazToEnv capatazRuntime
+    let capatazEnv@CapatazEnv { capatazId } = capatazToEnv capatazRuntime
 
     capatazAsync <- asyncWithUnmask
       $ \unmask -> runCapatazLoop unmask capatazEnv
@@ -227,7 +226,11 @@ forkWorker workerOptions workerAction Capataz { capatazEnv } = do
   workerIdVar <- newEmptyMVar
   atomically $ writeTQueue
     capatazQueue
-    (ControlAction ForkWorker {workerSpec , returnWorkerId = putMVar workerIdVar})
+    ( ControlAction ForkWorker
+      { workerSpec
+      , returnWorkerId = putMVar workerIdVar
+      }
+    )
   takeMVar workerIdVar
 
 -- | Stops the execution of a worker green thread being supervised by the given
@@ -241,6 +244,9 @@ terminateWorker :: Text -> WorkerId -> Capataz -> IO ()
 terminateWorker terminationReason workerId Capataz { capatazEnv } =
   sendSyncControlMsg
     capatazEnv
-    ( \notifyWorkerTermination ->
-      TerminateWorker {terminationReason , workerId , notifyWorkerTermination }
+    ( \notifyWorkerTermination -> TerminateWorker
+      { terminationReason
+      , workerId
+      , notifyWorkerTermination
+      }
     )

@@ -9,7 +9,6 @@ import Data.Time.Clock (NominalDiffTime, UTCTime, diffUTCTime, getCurrentTime)
 
 import Protolude
 
-import qualified Control.Concurrent.Internal.Capataz.Worker as Worker
 import           Control.Concurrent.Internal.Capataz.Types
 import           Control.Concurrent.Internal.Capataz.Util
     ( appendWorkerToMap
@@ -19,7 +18,8 @@ import           Control.Concurrent.Internal.Capataz.Util
     , resetWorkerMap
     , sortWorkersByTerminationOrder
     )
-import qualified Data.HashMap.Strict                          as HashMap
+import qualified Control.Concurrent.Internal.Capataz.Worker as Worker
+import qualified Data.HashMap.Strict                        as HashMap
 
 --------------------------------------------------------------------------------
 
@@ -33,15 +33,11 @@ calcDiffSeconds creationTime = do
 -- | Function that checks restart counts and worker start time to assess if the
 -- capataz error intensity has been breached, see "WorkerRestartAction" for
 -- possible outcomes.
-calcRestartAction
-  :: CapatazEnv -> Int -> NominalDiffTime -> WorkerRestartAction
+calcRestartAction :: CapatazEnv -> Int -> NominalDiffTime -> WorkerRestartAction
 calcRestartAction CapatazEnv { capatazIntensity, capatazPeriodSeconds } restartCount diffSeconds
   = case () of
     _
-      | diffSeconds
-        <  capatazPeriodSeconds
-        && restartCount
-        >  capatazIntensity
+      | diffSeconds < capatazPeriodSeconds && restartCount > capatazIntensity
       -> HaltCapataz
       | diffSeconds > capatazPeriodSeconds
       -> ResetRestartCount
@@ -62,7 +58,10 @@ execCapatazRestartStrategy capatazEnv@CapatazEnv { capatazRestartStrategy } Work
 
     OneForOne -> do
       removeWorkerFromMap capatazEnv workerId
-      newWorker <- restartWorker capatazEnv workerSpec workerId workerRestartCount
+      newWorker <- restartWorker capatazEnv
+                                 workerSpec
+                                 workerId
+                                 workerRestartCount
       appendWorkerToMap capatazEnv newWorker
 
 -- | Executes a restart action returned from the invokation of "calcRestartAction"
@@ -82,8 +81,7 @@ execRestartAction capatazEnv@CapatazEnv { onCapatazIntensityReached } workerEnv@
           , workerRestartCount = succ workerRestartCount
           }
 
-      ResetRestartCount ->
-        execCapatazRestartStrategy capatazEnv workerEnv 0
+      ResetRestartCount    -> execCapatazRestartStrategy capatazEnv workerEnv 0
 
       IncreaseRestartCount -> execCapatazRestartStrategy
         capatazEnv
@@ -100,12 +98,12 @@ restartWorkers capatazEnv@CapatazEnv { capatazWorkerTerminationOrder } failingWo
   = do
     workerMap <- readWorkerMap capatazEnv
 
-    let workers = sortWorkersByTerminationOrder
-          capatazWorkerTerminationOrder
-          workerMap
+    let workers =
+          sortWorkersByTerminationOrder capatazWorkerTerminationOrder workerMap
 
     newWorkers <- forM workers $ \worker@Worker { workerId, workerSpec } -> do
-      unless (failingWorkerId == workerId) $ forceRestartWorker capatazEnv worker
+      unless (failingWorkerId == workerId)
+        $ forceRestartWorker capatazEnv worker
 
       let WorkerSpec { workerRestartStrategy } = workerSpec
       case workerRestartStrategy of
@@ -126,7 +124,7 @@ forceRestartWorker CapatazEnv { capatazName, capatazId, notifyEvent } Worker { w
       , workerId
       , workerName
       , eventTime
-      , workerThreadId     = asyncThreadId workerAsync
+      , workerThreadId    = asyncThreadId workerAsync
       , terminationReason = "forced restart"
       }
     cancelWith workerAsync RestartWorkerException
@@ -149,15 +147,15 @@ handleWorkerCompleted env@CapatazEnv { capatazName, capatazId, notifyEvent } wor
     mWorkerEnv <- fetchWorkerEnv env workerId
     case mWorkerEnv of
       Nothing -> return ()
-      Just workerEnv@WorkerEnv { workerName, workerAsync, workerRestartStrategy } ->
-        do
+      Just workerEnv@WorkerEnv { workerName, workerAsync, workerRestartStrategy }
+        -> do
           notifyEvent WorkerCompleted
             { capatazId
             , capatazName
             , workerId
             , workerName
             , eventTime
-            , workerThreadId  = asyncThreadId workerAsync
+            , workerThreadId = asyncThreadId workerAsync
             }
           case workerRestartStrategy of
             Permanent -> do
@@ -179,8 +177,8 @@ handleWorkerFailed env@CapatazEnv { capatazName, capatazId, notifyEvent } worker
     mWorkerEnv <- fetchWorkerEnv env workerId
     case mWorkerEnv of
       Nothing -> return ()
-      Just workerEnv@WorkerEnv { workerName, workerAsync, workerRestartStrategy } ->
-        do
+      Just workerEnv@WorkerEnv { workerName, workerAsync, workerRestartStrategy }
+        -> do
           eventTime <- getCurrentTime
           notifyEvent WorkerFailed
             { capatazName
@@ -188,7 +186,7 @@ handleWorkerFailed env@CapatazEnv { capatazName, capatazId, notifyEvent } worker
             , workerId
             , workerName
             , workerError
-            , workerThreadId  = asyncThreadId workerAsync
+            , workerThreadId = asyncThreadId workerAsync
             , eventTime
             }
           case workerRestartStrategy of
@@ -203,8 +201,8 @@ handleWorkerTerminated env@CapatazEnv { capatazName, capatazId, notifyEvent } wo
     mWorkerEnv <- fetchWorkerEnv env workerId
     case mWorkerEnv of
       Nothing -> return ()
-      Just workerEnv@WorkerEnv { workerName, workerAsync, workerRestartStrategy } ->
-        do
+      Just workerEnv@WorkerEnv { workerName, workerAsync, workerRestartStrategy }
+        -> do
           eventTime <- getCurrentTime
           notifyEvent WorkerTerminated
             { capatazName
@@ -213,7 +211,7 @@ handleWorkerTerminated env@CapatazEnv { capatazName, capatazId, notifyEvent } wo
             , workerName
             , eventTime
             , terminationReason
-            , workerThreadId     = asyncThreadId workerAsync
+            , workerThreadId    = asyncThreadId workerAsync
             }
           case workerRestartStrategy of
             Permanent -> execRestartAction env workerEnv workerRestartCount

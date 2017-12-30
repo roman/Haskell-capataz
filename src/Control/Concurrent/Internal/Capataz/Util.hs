@@ -48,19 +48,19 @@ removeWorkerFromMap CapatazEnv { capatazWorkerMap } workerId =
   atomicModifyIORef'
     capatazWorkerMap
     ( \workerMap -> maybe (workerMap, ())
-                         (const (HashMap.delete workerId workerMap, ()))
-                         (HashMap.lookup workerId workerMap)
+                          (const (HashMap.delete workerId workerMap, ()))
+                          (HashMap.lookup workerId workerMap)
     )
 
 -- | Function to modify a "Capataz" worker map using a pure function.
 resetWorkerMap :: CapatazEnv -> (WorkerMap -> WorkerMap) -> IO ()
-resetWorkerMap CapatazEnv { capatazWorkerMap } workerMapFn =
-  atomicModifyIORef' capatazWorkerMap (\workerMap -> (workerMapFn workerMap, ()))
+resetWorkerMap CapatazEnv { capatazWorkerMap } workerMapFn = atomicModifyIORef'
+  capatazWorkerMap
+  (\workerMap -> (workerMapFn workerMap, ()))
 
 -- | Function to get a snapshot of the "Capataz"' worker map
 readWorkerMap :: CapatazEnv -> IO WorkerMap
-readWorkerMap CapatazEnv { capatazWorkerMap } =
-  readIORef capatazWorkerMap
+readWorkerMap CapatazEnv { capatazWorkerMap } = readIORef capatazWorkerMap
 
 -- | Returns all worker's of a "Capataz" by "WorkerTerminationOrder". This is
 -- used "AllForOne" restarts and shutdown operations.
@@ -127,8 +127,8 @@ sendSyncControlMsg
   -> IO ()
 sendSyncControlMsg CapatazEnv { capatazQueue } mkCtrlMsg = do
   result <- newEmptyMVar
-  atomically $ writeTQueue capatazQueue
-                           (ControlAction $ mkCtrlMsg (putMVar result ()))
+  atomically
+    $ writeTQueue capatazQueue (ControlAction $ mkCtrlMsg (putMVar result ()))
   takeMVar result
 
 -- | Utility function to transform a "CapatazRuntime" into a "CapatazEnv"

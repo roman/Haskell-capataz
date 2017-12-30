@@ -59,14 +59,12 @@ assertWorkerName workerName' ev = case ev of
   SUT.WorkerFailed { workerName }     -> workerName' == workerName
   SUT.WorkerTerminated { workerName } -> workerName' == workerName
   SUT.WorkerStarted { workerName }    -> workerName' == workerName
-  _                                           -> False
+  _                                   -> False
 
 assertErrorType :: Text -> SUT.CapatazEvent -> Bool
 assertErrorType errType ev = case ev of
-  SUT.WorkerFailed { workerError } ->
-    fetchRecordName workerError == errType
-  SUT.CapatazFailed { capatazError } ->
-    fetchRecordName capatazError == errType
+  SUT.WorkerFailed { workerError }   -> fetchRecordName workerError == errType
+  SUT.CapatazFailed { capatazError } -> fetchRecordName capatazError == errType
   SUT.WorkerCallbackExecuted { workerCallbackError } ->
     case workerCallbackError of
       Nothing            -> False
@@ -77,16 +75,14 @@ assertCallbackType :: SUT.CallbackType -> SUT.CapatazEvent -> Bool
 assertCallbackType cbType ev = case ev of
   SUT.WorkerFailed { workerError } -> case fromException workerError of
     Just SUT.WorkerCallbackFailed { callbackType } -> cbType == callbackType
-    _                                             -> False
-  SUT.WorkerCallbackExecuted { callbackType } ->
-    cbType == callbackType
+    _                                              -> False
+  SUT.WorkerCallbackExecuted { callbackType } -> cbType == callbackType
   _ -> False
 
 assertRestartCount :: (Int -> Bool) -> SUT.CapatazEvent -> Bool
 assertRestartCount predFn ev = case ev of
-  SUT.WorkerRestarted { workerRestartCount } ->
-    predFn workerRestartCount
-  _ -> False
+  SUT.WorkerRestarted { workerRestartCount } -> predFn workerRestartCount
+  _                                          -> False
 
 assertCapatazStatusChanged
   :: SUT.CapatazStatus -> SUT.CapatazStatus -> SUT.CapatazEvent -> Bool
@@ -216,25 +212,23 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
               )
               (all allEventsAssertion events)
  where
-  runAssertions (eventStream, accRef) pendingCountVar assertions capataz =
-    do
-      raceResult <- race
-        (threadDelay 1000100)
-        (readEventLoop eventStream pendingCountVar assertions)
-      case raceResult of
-        Left _ -> do
-          events       <- reverse <$> readIORef accRef
-          pendingCount <- readIORef pendingCountVar
-          void $ SUT.teardown capataz
-          assertFailure
-            (  "Expected all assertions to match, but didn't ("
-            <> show pendingCount
-            <> " assertions remaining, "
-            <> show (length events)
-            <> " events tried)\n"
-            <> ppShow (zip ([0 ..] :: [Int]) events)
-            )
-        Right _ -> return ()
+  runAssertions (eventStream, accRef) pendingCountVar assertions capataz = do
+    raceResult <- race (threadDelay 1000100)
+                       (readEventLoop eventStream pendingCountVar assertions)
+    case raceResult of
+      Left _ -> do
+        events       <- reverse <$> readIORef accRef
+        pendingCount <- readIORef pendingCountVar
+        void $ SUT.teardown capataz
+        assertFailure
+          (  "Expected all assertions to match, but didn't ("
+          <> show pendingCount
+          <> " assertions remaining, "
+          <> show (length events)
+          <> " events tried)\n"
+          <> ppShow (zip ([0 ..] :: [Int]) events)
+          )
+      Right _ -> return ()
 
 
   trackEvent accRef eventStream event = do
@@ -269,25 +263,24 @@ tests :: [TestTree]
 tests
   = [ testGroup
       "capataz without workerSpecList"
-      [ testCase "initialize and teardown works as expected"
-          $ testCapatazStream
-              [ andP
-                  [ assertEventType CapatazStatusChanged
-                  , assertCapatazStatusChanged SUT.Initializing SUT.Running
-                  ]
+      [ testCase "initialize and teardown works as expected" $ testCapatazStream
+          [ andP
+              [ assertEventType CapatazStatusChanged
+              , assertCapatazStatusChanged SUT.Initializing SUT.Running
               ]
-              (const $ return ())
-              []
-              [ andP
-                [ assertEventType CapatazStatusChanged
-                , assertCapatazStatusChanged SUT.Running SUT.Halting
-                ]
-              , andP
-                [ assertEventType CapatazStatusChanged
-                , assertCapatazStatusChanged SUT.Halting SUT.Halted
-                ]
-              ]
-              Nothing
+          ]
+          (const $ return ())
+          []
+          [ andP
+            [ assertEventType CapatazStatusChanged
+            , assertCapatazStatusChanged SUT.Running SUT.Halting
+            ]
+          , andP
+            [ assertEventType CapatazStatusChanged
+            , assertCapatazStatusChanged SUT.Halting SUT.Halted
+            ]
+          ]
+          Nothing
       ]
     , testGroup
       "capataz with workerSpecList"
@@ -302,16 +295,16 @@ tests
               ]
               ( \supOptions -> supOptions
                 { SUT.capatazWorkerSpecList = [ SUT.defWorkerSpec
-                                                  { SUT.workerName   = "A"
-                                                  , SUT.workerAction = forever
-                                                    (threadDelay 10001000)
-                                                  }
-                                                , SUT.defWorkerSpec
-                                                  { SUT.workerName   = "B"
-                                                  , SUT.workerAction = forever
-                                                    (threadDelay 10001000)
-                                                  }
-                                                ]
+                                                { SUT.workerName   = "A"
+                                                , SUT.workerAction = forever
+                                                  (threadDelay 10001000)
+                                                }
+                                              , SUT.defWorkerSpec
+                                                { SUT.workerName   = "B"
+                                                , SUT.workerAction = forever
+                                                  (threadDelay 10001000)
+                                                }
+                                              ]
                 }
               )
               (const $ return ())
@@ -331,8 +324,7 @@ tests
               ]
               Nothing
       ]
-    , testCase
-        "reports error when capataz thread receives async exception"
+    , testCase "reports error when capataz thread receives async exception"
       $ testCapatazStream
           [ andP
               [ assertEventType CapatazStatusChanged
@@ -346,8 +338,7 @@ tests
           [assertEventType CapatazFailed]
           []
           Nothing
-    , testCase
-        "reports error when worker retries violate restart intensity"
+    , testCase "reports error when worker retries violate restart intensity"
       $ do
           lockVar <- newEmptyMVar
           let (signalIntensityReached, waitTillIntensityReached) =
@@ -360,8 +351,8 @@ tests
             )
             ( \capataz -> do
               _workerId <- SUT.forkWorker SUT.defWorkerOptions
-                                        (throwIO RestartingWorkerError)
-                                        capataz
+                                          (throwIO RestartingWorkerError)
+                                          capataz
               waitTillIntensityReached
             )
             [ assertEventType WorkerFailed
@@ -519,10 +510,12 @@ tests
                 , assertEventType WorkerCompleted
                 ]
                 []
-                ( Just $ not . andP
-                  [ assertEventType WorkerCallbackExecuted
-                  , assertCallbackType SUT.OnFailure
-                  ]
+                ( Just
+                $ not
+                . andP
+                    [ assertEventType WorkerCallbackExecuted
+                    , assertCallbackType SUT.OnFailure
+                    ]
                 )
           , testCase "does not execute callback when sub-routine is terminated"
             $ testCapatazStream
@@ -537,15 +530,17 @@ tests
                     capataz
 
                   SUT.terminateWorker "testing onFailure callback"
-                                     workerId
-                                     capataz
+                                      workerId
+                                      capataz
                 )
                 [assertEventType WorkerTerminated]
                 []
-                ( Just $ not . andP
-                  [ assertEventType WorkerCallbackExecuted
-                  , assertCallbackType SUT.OnFailure
-                  ]
+                ( Just
+                $ not
+                . andP
+                    [ assertEventType WorkerCallbackExecuted
+                    , assertCallbackType SUT.OnFailure
+                    ]
                 )
           , testCase "treats as sub-routine failed if callback fails"
             $ testCapatazStream
@@ -593,8 +588,8 @@ tests
                     capataz
 
                   SUT.terminateWorker "testing workerOnTermination callback"
-                                     workerId
-                                     capataz
+                                      workerId
+                                      capataz
                 )
                 [ andP
                   [ assertEventType WorkerCallbackExecuted
@@ -622,8 +617,8 @@ tests
                     capataz
 
                   SUT.terminateWorker "testing workerOnTermination callback"
-                                     workerId
-                                     capataz
+                                      workerId
+                                      capataz
                 )
                 [ andP
                   [ assertEventType WorkerCallbackExecuted
@@ -687,8 +682,8 @@ tests
                     capataz
 
                   SUT.terminateWorker "testing workerOnTermination callback"
-                                     workerId
-                                     capataz
+                                      workerId
+                                      capataz
                 )
                 [ andP
                   [ assertEventType WorkerCallbackExecuted
@@ -715,9 +710,7 @@ tests
               capataz
             return ()
           )
-          [ assertEventType WorkerStarted
-          , assertEventType WorkerCompleted
-          ]
+          [assertEventType WorkerStarted, assertEventType WorkerCompleted]
           [assertEventType CapatazTerminated]
           (Just $ not . assertEventType WorkerRestarted)
         , testCase "does not restart on termination" $ testCapatazStream
@@ -736,7 +729,7 @@ tests
           []
           ( \capataz -> do
             subRoutineAction <- mkFailingSubRoutine 1
-            _workerId         <- SUT.forkWorker
+            _workerId        <- SUT.forkWorker
               SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Transient }
               subRoutineAction
               capataz
@@ -744,10 +737,7 @@ tests
           )
           [ assertEventType WorkerStarted
           , assertEventType WorkerFailed
-          , andP
-            [ assertEventType WorkerRestarted
-            , assertRestartCount (== 1)
-            ]
+          , andP [assertEventType WorkerRestarted, assertRestartCount (== 1)]
           ]
           []
           Nothing
@@ -756,21 +746,18 @@ tests
               []
               ( \capataz -> do
                 subRoutineAction <- mkFailingSubRoutine 2
-                _workerId         <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Transient
-                                      }
+                _workerId        <- SUT.forkWorker
+                  SUT.defWorkerOptions
+                    { SUT.workerRestartStrategy = SUT.Transient
+                    }
                   subRoutineAction
                   capataz
                 return ()
               )
               [ andP
-                [ assertEventType WorkerRestarted
-                , assertRestartCount (== 1)
-                ]
+                [assertEventType WorkerRestarted, assertRestartCount (== 1)]
               , andP
-                [ assertEventType WorkerRestarted
-                , assertRestartCount (== 2)
-                ]
+                [assertEventType WorkerRestarted, assertRestartCount (== 2)]
               ]
               []
               Nothing
@@ -781,7 +768,7 @@ tests
           []
           ( \capataz -> do
             subRoutineAction <- mkCompletingOnceSubRoutine
-            _workerId         <- SUT.forkWorker
+            _workerId        <- SUT.forkWorker
               SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Permanent }
               subRoutineAction
               capataz
@@ -802,20 +789,17 @@ tests
                 subRoutineAction <- mkCompletingBeforeNRestartsSubRoutine
                   expectedRestartCount
                 _workerId <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Permanent
-                                      }
+                  SUT.defWorkerOptions
+                    { SUT.workerRestartStrategy = SUT.Permanent
+                    }
                   subRoutineAction
                   capataz
                 return ()
               )
               [ andP
-                [ assertEventType WorkerRestarted
-                , assertRestartCount (== 1)
-                ]
+                [assertEventType WorkerRestarted, assertRestartCount (== 1)]
               , andP
-                [ assertEventType WorkerRestarted
-                , assertRestartCount (== 1)
-                ]
+                [assertEventType WorkerRestarted, assertRestartCount (== 1)]
               ]
               []
               Nothing
@@ -828,9 +812,7 @@ tests
               capataz
             SUT.terminateWorker "testing termination (1)" workerId capataz
           )
-          [ assertEventType WorkerTerminated
-          , assertEventType WorkerRestarted
-          ]
+          [assertEventType WorkerTerminated, assertEventType WorkerRestarted]
           []
           Nothing
         , testCase "does increase restart count on multiple terminations" $ do
@@ -857,15 +839,9 @@ tests
               waitWorkerTermination 2
             )
             [ assertEventType WorkerTerminated
-            , andP
-              [ assertEventType WorkerRestarted
-              , assertRestartCount (== 1)
-              ]
+            , andP [assertEventType WorkerRestarted, assertRestartCount (== 1)]
             , assertEventType WorkerTerminated
-            , andP
-              [ assertEventType WorkerRestarted
-              , assertRestartCount (== 2)
-              ]
+            , andP [assertEventType WorkerRestarted, assertRestartCount (== 2)]
             ]
             []
             Nothing
@@ -873,7 +849,7 @@ tests
           []
           ( \capataz -> do
             subRoutineAction <- mkFailingSubRoutine 1
-            _workerId         <- SUT.forkWorker
+            _workerId        <- SUT.forkWorker
               SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Permanent }
               subRoutineAction
               capataz
@@ -881,10 +857,7 @@ tests
           )
           [ assertEventType WorkerStarted
           , assertEventType WorkerFailed
-          , andP
-            [ assertEventType WorkerRestarted
-            , assertRestartCount (== 1)
-            ]
+          , andP [assertEventType WorkerRestarted, assertRestartCount (== 1)]
           ]
           []
           Nothing
@@ -893,21 +866,18 @@ tests
               []
               ( \capataz -> do
                 subRoutineAction <- mkFailingSubRoutine 2
-                _workerId         <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Permanent
-                                      }
+                _workerId        <- SUT.forkWorker
+                  SUT.defWorkerOptions
+                    { SUT.workerRestartStrategy = SUT.Permanent
+                    }
                   subRoutineAction
                   capataz
                 return ()
               )
               [ andP
-                [ assertEventType WorkerRestarted
-                , assertRestartCount (== 1)
-                ]
+                [assertEventType WorkerRestarted, assertRestartCount (== 1)]
               , andP
-                [ assertEventType WorkerRestarted
-                , assertRestartCount (== 2)
-                ]
+                [assertEventType WorkerRestarted, assertRestartCount (== 2)]
               ]
               []
               Nothing
@@ -923,9 +893,7 @@ tests
               capataz
             return ()
           )
-          [ assertEventType WorkerStarted
-          , assertEventType WorkerCompleted
-          ]
+          [assertEventType WorkerStarted, assertEventType WorkerCompleted]
           [assertEventType CapatazTerminated]
           (Just $ not . assertEventType WorkerRestarted)
         , testCase "does not restart on termination" $ testCapatazStream
@@ -938,9 +906,7 @@ tests
             SUT.terminateWorker "termination test (1)" workerId capataz
             threadDelay 100
           )
-          [ assertEventType WorkerStarted
-          , assertEventType WorkerTerminated
-          ]
+          [assertEventType WorkerStarted, assertEventType WorkerTerminated]
           [assertEventType CapatazTerminated]
           (Just $ not . assertEventType WorkerRestarted)
         , testCase "does not restart on failure" $ testCapatazStream
@@ -952,9 +918,7 @@ tests
               capataz
             threadDelay 100
           )
-          [ assertEventType WorkerStarted
-          , assertEventType WorkerFailed
-          ]
+          [assertEventType WorkerStarted, assertEventType WorkerFailed]
           [assertEventType CapatazTerminated]
           (Just $ not . assertEventType WorkerRestarted)
         ]
@@ -967,16 +931,16 @@ tests
             ( \capataz -> do
               _workerA <- SUT.forkWorker
                 SUT.defWorkerOptions { SUT.workerName            = "A"
-                                    , SUT.workerRestartStrategy = SUT.Permanent
-                                    }
+                                     , SUT.workerRestartStrategy = SUT.Permanent
+                                     }
                 (forever $ threadDelay 1000100)
                 capataz
 
 
               _workerB <- SUT.forkWorker
                 SUT.defWorkerOptions { SUT.workerName            = "B"
-                                    , SUT.workerRestartStrategy = SUT.Permanent
-                                    }
+                                     , SUT.workerRestartStrategy = SUT.Permanent
+                                     }
                 (forever $ threadDelay 1000100)
                 capataz
 
@@ -985,10 +949,8 @@ tests
             [ andP [assertEventType WorkerStarted, assertWorkerName "A"]
             , andP [assertEventType WorkerStarted, assertWorkerName "B"]
             ]
-            [ andP
-              [assertEventType WorkerTerminated, assertWorkerName "A"]
-            , andP
-              [assertEventType WorkerTerminated, assertWorkerName "B"]
+            [ andP [assertEventType WorkerTerminated, assertWorkerName "A"]
+            , andP [assertEventType WorkerTerminated, assertWorkerName "B"]
             , assertEventType CapatazTerminated
             ]
             Nothing
@@ -1009,7 +971,7 @@ tests
                     (forever $ threadDelay 1000100)
                     capataz
 
-                  ioB     <- mkFailingSubRoutine 1
+                  ioB      <- mkFailingSubRoutine 1
 
                   _workerB <- SUT.forkWorker
                     SUT.defWorkerOptions
@@ -1021,18 +983,10 @@ tests
 
                   return ()
                 )
-                [ andP
-                    [ assertEventType WorkerRestarted
-                    , assertWorkerName "B"
-                    ]
-                ]
+                [andP [assertEventType WorkerRestarted, assertWorkerName "B"]]
                 []
-                ( Just
-                $ not
-                . andP
-                    [ assertEventType WorkerRestarted
-                    , assertWorkerName "A"
-                    ]
+                ( Just $ not . andP
+                  [assertEventType WorkerRestarted, assertWorkerName "A"]
                 )
         ]
       , testGroup
@@ -1041,44 +995,40 @@ tests
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy       = SUT.AllForOne
+                { SUT.capatazRestartStrategy        = SUT.AllForOne
                 , SUT.capatazWorkerTerminationOrder = SUT.OldestFirst
                 }
               )
               ( \capataz -> do
               -- This lockVar guarantees that workerB executes before workerA
-                lockVar <- newEmptyMVar
+                lockVar  <- newEmptyMVar
 
-                ioA     <- mkFailingSubRoutine 1
+                ioA      <- mkFailingSubRoutine 1
 
                 _workerA <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerName            = "A"
-                                      , SUT.workerRestartStrategy = SUT.Permanent
-                                      }
+                  SUT.defWorkerOptions
+                    { SUT.workerName            = "A"
+                    , SUT.workerRestartStrategy = SUT.Permanent
+                    }
                   (forever $ readMVar lockVar >> ioA)
                   capataz
 
                 _workerB <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerName            = "B"
-                                      , SUT.workerRestartStrategy = SUT.Permanent
-                                      }
+                  SUT.defWorkerOptions
+                    { SUT.workerName            = "B"
+                    , SUT.workerRestartStrategy = SUT.Permanent
+                    }
                   (putMVar lockVar () >> forever (threadDelay 10))
                   capataz
 
                 return ()
               )
-              [ andP
-                [assertEventType WorkerStarted, assertWorkerName "A"]
-              , andP
-                [assertEventType WorkerStarted, assertWorkerName "B"]
-              , andP
-                [assertEventType WorkerFailed, assertWorkerName "A"]
-              , andP
-                [assertEventType WorkerRestarted, assertWorkerName "A"]
-              , andP
-                [assertEventType WorkerTerminated, assertWorkerName "B"]
-              , andP
-                [assertEventType WorkerRestarted, assertWorkerName "B"]
+              [ andP [assertEventType WorkerStarted, assertWorkerName "A"]
+              , andP [assertEventType WorkerStarted, assertWorkerName "B"]
+              , andP [assertEventType WorkerFailed, assertWorkerName "A"]
+              , andP [assertEventType WorkerRestarted, assertWorkerName "A"]
+              , andP [assertEventType WorkerTerminated, assertWorkerName "B"]
+              , andP [assertEventType WorkerRestarted, assertWorkerName "B"]
               ]
               []
               Nothing
@@ -1086,83 +1036,76 @@ tests
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy       = SUT.AllForOne
+                { SUT.capatazRestartStrategy        = SUT.AllForOne
                 , SUT.capatazWorkerTerminationOrder = SUT.OldestFirst
                 }
               )
               ( \capataz -> do
-                lockVar <- newEmptyMVar
+                lockVar  <- newEmptyMVar
 
-                ioA     <- mkFailingSubRoutine 1
+                ioA      <- mkFailingSubRoutine 1
 
                 _workerA <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerName            = "A"
-                                      , SUT.workerRestartStrategy = SUT.Permanent
-                                      }
+                  SUT.defWorkerOptions
+                    { SUT.workerName            = "A"
+                    , SUT.workerRestartStrategy = SUT.Permanent
+                    }
                   (forever $ readMVar lockVar >> ioA)
                   capataz
 
                 _workerB <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerName            = "B"
-                                      , SUT.workerRestartStrategy = SUT.Temporary
-                                      }
+                  SUT.defWorkerOptions
+                    { SUT.workerName            = "B"
+                    , SUT.workerRestartStrategy = SUT.Temporary
+                    }
                   (putMVar lockVar () >> forever (threadDelay 10))
                   capataz
 
                 return ()
               )
-              [ andP
-                [assertEventType WorkerStarted, assertWorkerName "A"]
-              , andP
-                [assertEventType WorkerStarted, assertWorkerName "B"]
-              , andP
-                [assertEventType WorkerFailed, assertWorkerName "A"]
-              , andP
-                [assertEventType WorkerRestarted, assertWorkerName "A"]
-              , andP
-                [assertEventType WorkerTerminated, assertWorkerName "B"]
+              [ andP [assertEventType WorkerStarted, assertWorkerName "A"]
+              , andP [assertEventType WorkerStarted, assertWorkerName "B"]
+              , andP [assertEventType WorkerFailed, assertWorkerName "A"]
+              , andP [assertEventType WorkerRestarted, assertWorkerName "A"]
+              , andP [assertEventType WorkerTerminated, assertWorkerName "B"]
               ]
               []
-              ( Just
-              $ not
-              . andP
-                  [ assertEventType WorkerRestarted
-                  , assertWorkerName "B"
-                  ]
+              ( Just $ not . andP
+                [assertEventType WorkerRestarted, assertWorkerName "B"]
               )
         , testCase "restarts sub-routines that are not temporary"
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy       = SUT.AllForOne
+                { SUT.capatazRestartStrategy        = SUT.AllForOne
                 , SUT.capatazWorkerTerminationOrder = SUT.NewestFirst
                 }
               )
               ( \capataz -> do
-                ioA     <- mkFailingSubRoutine 1
+                ioA      <- mkFailingSubRoutine 1
 
-                lockVar <- newEmptyMVar
+                lockVar  <- newEmptyMVar
 
                 _workerA <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerName            = "A"
-                                      , SUT.workerRestartStrategy = SUT.Permanent
-                                      }
+                  SUT.defWorkerOptions
+                    { SUT.workerName            = "A"
+                    , SUT.workerRestartStrategy = SUT.Permanent
+                    }
                   (forever $ readMVar lockVar >> ioA)
                   capataz
 
                 _workerB <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerName            = "B"
-                                      , SUT.workerRestartStrategy = SUT.Transient
-                                      }
+                  SUT.defWorkerOptions
+                    { SUT.workerName            = "B"
+                    , SUT.workerRestartStrategy = SUT.Transient
+                    }
                   (putMVar lockVar () >> forever (threadDelay 10))
                   capataz
 
                 return ()
               )
-              [ andP
-                [assertEventType WorkerRestarted, assertWorkerName "B"]
-              , andP
-                [assertEventType WorkerRestarted, assertWorkerName "A"]
+              [ andP [assertEventType WorkerRestarted, assertWorkerName "B"]
+              , andP [assertEventType WorkerRestarted, assertWorkerName "A"]
               ]
               []
               Nothing
@@ -1173,79 +1116,73 @@ tests
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy       = SUT.AllForOne
+                { SUT.capatazRestartStrategy        = SUT.AllForOne
                 , SUT.capatazWorkerTerminationOrder = SUT.OldestFirst
                 }
               )
               ( \capataz -> do
-                ioA     <- mkFailingSubRoutine 1
+                ioA      <- mkFailingSubRoutine 1
 
                 -- This lockVar guarantees that workerB executes before workerA
-                lockVar <- newEmptyMVar
+                lockVar  <- newEmptyMVar
 
                 _workerA <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerName            = "A"
-                                      , SUT.workerRestartStrategy = SUT.Permanent
-                                      }
+                  SUT.defWorkerOptions
+                    { SUT.workerName            = "A"
+                    , SUT.workerRestartStrategy = SUT.Permanent
+                    }
                   (forever $ readMVar lockVar >> ioA)
                   capataz
 
                 _workerB <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerName            = "B"
-                                      , SUT.workerRestartStrategy = SUT.Temporary
-                                      }
+                  SUT.defWorkerOptions
+                    { SUT.workerName            = "B"
+                    , SUT.workerRestartStrategy = SUT.Temporary
+                    }
                   (putMVar lockVar () >> forever (threadDelay 10))
                   capataz
 
                 return ()
               )
-              [ andP
-                  [ assertEventType WorkerRestarted
-                  , assertWorkerName "A"
-                  ]
-              ]
+              [andP [assertEventType WorkerRestarted, assertWorkerName "A"]]
               []
-              ( Just
-              $ not
-              . andP
-                  [ assertEventType WorkerRestarted
-                  , assertWorkerName "B"
-                  ]
+              ( Just $ not . andP
+                [assertEventType WorkerRestarted, assertWorkerName "B"]
               )
         , testCase "restarts sub-routines that are not temporary"
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy       = SUT.AllForOne
+                { SUT.capatazRestartStrategy        = SUT.AllForOne
                 , SUT.capatazWorkerTerminationOrder = SUT.OldestFirst
                 }
               )
               ( \capataz -> do
-                ioA     <- mkFailingSubRoutine 1
+                ioA      <- mkFailingSubRoutine 1
 
                 -- This lockVar guarantees that workerB executes before workerA
-                lockVar <- newEmptyMVar
+                lockVar  <- newEmptyMVar
 
                 _workerA <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerName            = "A"
-                                      , SUT.workerRestartStrategy = SUT.Permanent
-                                      }
+                  SUT.defWorkerOptions
+                    { SUT.workerName            = "A"
+                    , SUT.workerRestartStrategy = SUT.Permanent
+                    }
                   (forever $ readMVar lockVar >> ioA)
                   capataz
 
                 _workerB <- SUT.forkWorker
-                  SUT.defWorkerOptions { SUT.workerName            = "B"
-                                      , SUT.workerRestartStrategy = SUT.Transient
-                                      }
+                  SUT.defWorkerOptions
+                    { SUT.workerName            = "B"
+                    , SUT.workerRestartStrategy = SUT.Transient
+                    }
                   (putMVar lockVar () >> forever (threadDelay 10))
                   capataz
 
                 return ()
               )
-              [ andP
-                [assertEventType WorkerRestarted, assertWorkerName "A"]
-              , andP
-                [assertEventType WorkerRestarted, assertWorkerName "B"]
+              [ andP [assertEventType WorkerRestarted, assertWorkerName "A"]
+              , andP [assertEventType WorkerRestarted, assertWorkerName "B"]
               ]
               []
               Nothing

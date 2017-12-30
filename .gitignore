@@ -1,4 +1,5 @@
-bin/*
+out/bin/*
+tools/bin/*
 tmp/*
 target/*
 .make/*

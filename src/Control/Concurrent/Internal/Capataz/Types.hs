@@ -3,6 +3,7 @@
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-| This module contains all the types used across all the other modules -}
 module Control.Concurrent.Internal.Capataz.Types where
 
 import Protolude

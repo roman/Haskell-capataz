@@ -3,6 +3,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-| This module contains:
+
+* Functions exported on the public API
+* The supervisor thread loop
+* High level message handlers of the supervisor thread loop
+
+-}
 module Control.Concurrent.Internal.Capataz.Core where
 
 import Protolude

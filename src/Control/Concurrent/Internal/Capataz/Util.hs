@@ -2,6 +2,13 @@
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
 {-# LANGUAGE RecordWildCards       #-}
+{-| This module contains:
+
+* Functions to manipulate the state of the Capataz record
+* Utility functions used for communication between threads
+* Public API utility functions
+
+-}
 module Control.Concurrent.Internal.Capataz.Util where
 
 import Protolude

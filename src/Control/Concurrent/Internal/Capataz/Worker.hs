@@ -2,6 +2,9 @@
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-| This module contains all logic related to error handling when spawning threads
+  to execute Worker sub-routines
+-}
 module Control.Concurrent.Internal.Capataz.Worker where
 
 import Protolude

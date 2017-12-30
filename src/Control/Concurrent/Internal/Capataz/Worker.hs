@@ -18,6 +18,8 @@ import Control.Concurrent.Internal.Capataz.Types
 import Control.Concurrent.Internal.Capataz.Util
     (getTidNumber, readWorkerMap, sortWorkersByTerminationOrder)
 
+-- | Internal functions that overwrites the GHC thread name, for increasing
+-- traceability on GHC internals
 setWorkerThreadName :: WorkerId -> WorkerName -> IO ()
 setWorkerThreadName workerId workerName = do
   tid <- myThreadId
@@ -28,6 +30,7 @@ setWorkerThreadName workerId workerName = do
           (getTidNumber tid)
   labelThread tid workerIdentifier
 
+-- | Handles errors caused by the execution of the "workerMain" sub-routine
 handleWorkerException
   :: (IO () -> IO a)
   -> CapatazEnv
@@ -47,7 +50,7 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
       Just TerminateWorkerException { workerTerminationReason } -> do
         eErrResult <- try $ unmask workerOnTermination
 
-        notifyEvent SupervisedWorkerCallbackExecuted
+        notifyEvent WorkerCallbackExecuted
           { capatazId
           , capatazName
           , workerId
@@ -59,7 +62,7 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
           }
 
         case eErrResult of
-          Left workerCallbackError -> return WorkerFailed
+          Left workerCallbackError -> return WorkerFailed'
             { workerName
             , workerId
             , monitorEventTime
@@ -71,7 +74,7 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
               }
             , workerRestartCount = restartCount
             }
-          Right _ -> return WorkerTerminated
+          Right _ -> return WorkerTerminated'
             { workerId
             , workerName
             , monitorEventTime
@@ -80,7 +83,7 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
             }
 
       Just BrutallyTerminateWorkerException { workerTerminationReason } -> return
-        WorkerTerminated
+        WorkerTerminated'
           { workerId
           , workerName
           , monitorEventTime
@@ -92,7 +95,7 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
       Nothing -> do
         eErrResult <- try $ unmask $ workerOnFailure err
 
-        notifyEvent SupervisedWorkerCallbackExecuted
+        notifyEvent WorkerCallbackExecuted
           { capatazId
           , capatazName
           , workerId
@@ -104,7 +107,7 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
           }
 
         case eErrResult of
-          Left workerCallbackError -> return WorkerFailed
+          Left workerCallbackError -> return WorkerFailed'
             { workerName
             , workerId
             , monitorEventTime
@@ -116,7 +119,7 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
               , workerActionError   = Just err
               }
             }
-          Right _ -> return WorkerFailed
+          Right _ -> return WorkerFailed'
             { workerName
             , workerId
             , monitorEventTime
@@ -124,6 +127,7 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
             , workerRestartCount = restartCount
             }
 
+-- | Handles completion of the "workerMain" sub-routine
 handleWorkerCompletion
   :: (IO () -> IO a)
   -> CapatazEnv
@@ -137,7 +141,7 @@ handleWorkerCompletion unmask CapatazEnv { capatazId, capatazName, notifyEvent }
     monitorEventTime <- getCurrentTime
     eCompResult      <- try $ unmask workerOnCompletion
 
-    notifyEvent SupervisedWorkerCallbackExecuted
+    notifyEvent WorkerCallbackExecuted
       { capatazId
       , capatazName
       , workerId
@@ -149,7 +153,7 @@ handleWorkerCompletion unmask CapatazEnv { capatazId, capatazName, notifyEvent }
       }
 
     case eCompResult of
-      Left err -> return WorkerFailed
+      Left err -> return WorkerFailed'
         { workerName
         , workerId
         , monitorEventTime
@@ -162,8 +166,9 @@ handleWorkerCompletion unmask CapatazEnv { capatazId, capatazName, notifyEvent }
         , workerRestartCount = restartCount
         }
       Right _ ->
-        return WorkerCompleted {workerName , workerId , monitorEventTime }
+        return WorkerCompleted' {workerName , workerId , monitorEventTime }
 
+-- | Decorates the given @IO ()@ sub-routine with failure handling
 workerMain :: CapatazEnv -> WorkerSpec -> WorkerId -> RestartCount -> IO Worker
 workerMain env@CapatazEnv { capatazQueue } workerSpec@WorkerSpec { workerName, workerAction } workerId restartCount
   = do
@@ -190,13 +195,15 @@ workerMain env@CapatazEnv { capatazQueue } workerSpec@WorkerSpec { workerName, w
       , workerSpec
       }
 
+-- | Internal function used to send a proper "CapatazEvent" to the "notifyEvent"
+-- callback, this event can either be a @WorkerStarted@ or a @WorkerRestarted@
 notifyWorkerStarted :: Maybe (WorkerId, Int) -> CapatazEnv -> Worker -> IO ()
 notifyWorkerStarted mRestartInfo CapatazEnv { capatazId, capatazName, notifyEvent } Worker { workerId, workerName, workerAsync }
   = do
     eventTime <- getCurrentTime
     case mRestartInfo of
       Just (_workerId, workerRestartCount) -> notifyEvent
-        SupervisedWorkerRestarted
+        WorkerRestarted
           { capatazId
           , capatazName
           , workerId
@@ -205,7 +212,7 @@ notifyWorkerStarted mRestartInfo CapatazEnv { capatazId, capatazName, notifyEven
           , workerThreadId     = asyncThreadId workerAsync
           , eventTime
           }
-      Nothing -> notifyEvent SupervisedWorkerStarted
+      Nothing -> notifyEvent WorkerStarted
         { capatazId
         , capatazName
         , workerId
@@ -214,6 +221,9 @@ notifyWorkerStarted mRestartInfo CapatazEnv { capatazId, capatazName, notifyEven
         , workerThreadId  = asyncThreadId workerAsync
         }
 
+-- | Internal function that forks a worker thread on the Capataz thread; note
+-- this is different from the public @forkWorker@ function which sends a message
+-- to the capataz loop
 forkWorker
   :: CapatazEnv -> WorkerSpec -> Maybe (WorkerId, RestartCount) -> IO Worker
 forkWorker env workerSpec mRestartInfo = do
@@ -225,7 +235,14 @@ forkWorker env workerSpec mRestartInfo = do
   notifyWorkerStarted mRestartInfo env worker
   return worker
 
-terminateWorker :: Text -> CapatazEnv -> Worker -> IO ()
+-- | Internal function that forks a worker thread on the Capataz thread; note
+-- this is different from the public @forkWorker@ function which sends a message
+-- to the capataz loop
+terminateWorker
+  :: Text -- ^ Text that indicates why there is a termination
+  -> CapatazEnv
+  -> Worker
+  -> IO ()
 terminateWorker workerTerminationReason CapatazEnv { capatazId, capatazName, notifyEvent } Worker { workerId, workerName, workerSpec, workerAsync }
   = do
     let WorkerSpec { workerTerminationPolicy } = workerSpec
@@ -251,7 +268,7 @@ terminateWorker workerTerminationReason CapatazEnv { capatazId, capatazName, not
         )
 
     eventTime <- getCurrentTime
-    notifyEvent SupervisedWorkerTerminated
+    notifyEvent WorkerTerminated
       { capatazId
       , capatazName
       , eventTime
@@ -262,6 +279,8 @@ terminateWorker workerTerminationReason CapatazEnv { capatazId, capatazName, not
       }
 
 
+-- | Internal sub-routine that terminates workers of a Capataz, used when a
+-- Capataz instance is terminated
 terminateWorkers :: Text -> CapatazEnv -> IO ()
 terminateWorkers terminationReason env@CapatazEnv { capatazName, capatazId, capatazWorkerTerminationOrder, notifyEvent }
   = do
@@ -272,7 +291,7 @@ terminateWorkers terminationReason env@CapatazEnv { capatazName, capatazId, capa
           capatazWorkerTerminationOrder
           workerMap
 
-    notifyEvent SupervisedWorkersTerminationStarted
+    notifyEvent WorkersTerminationStarted
       { capatazName
       , capatazId
       , terminationReason
@@ -281,7 +300,7 @@ terminateWorkers terminationReason env@CapatazEnv { capatazName, capatazId, capa
 
     forM_ workers (terminateWorker terminationReason env)
 
-    notifyEvent SupervisedWorkersTerminationFinished
+    notifyEvent WorkersTerminationFinished
       { capatazName
       , capatazId
       , terminationReason

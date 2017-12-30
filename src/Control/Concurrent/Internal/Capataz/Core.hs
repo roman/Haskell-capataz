@@ -37,13 +37,16 @@ import Control.Concurrent.Internal.Capataz.Util
 
 --------------------------------------------------------------------------------
 
+-- | Executes the shutdown operation of a Capataz, including the termination of
+-- Workers being supervised by it.
 haltCapataz :: CapatazEnv -> IO ()
 haltCapataz env = do
   writeCapatazStatus   env                   Halting
   Worker.terminateWorkers "capataz shutdown" env
-  resetWorkerMap           env                   (const HashMap.empty)
+  resetWorkerMap       env                   (const HashMap.empty)
   writeCapatazStatus   env                   Halted
 
+-- | Handles an event produced by one of the workers this capataz monitors
 handleMonitorEvent :: CapatazEnv -> MonitorEvent -> IO Bool
 handleMonitorEvent env monitorEv = do
   case monitorEv of
@@ -52,13 +55,13 @@ handleMonitorEvent env monitorEv = do
       -- sub-routine
       return ()
 
-    WorkerCompleted { workerId, monitorEventTime } ->
+    WorkerCompleted' { workerId, monitorEventTime } ->
       Restart.handleWorkerCompleted env workerId monitorEventTime
 
-    WorkerFailed { workerId, workerError, workerRestartCount } ->
+    WorkerFailed' { workerId, workerError, workerRestartCount } ->
       Restart.handleWorkerFailed env workerId workerError workerRestartCount
 
-    WorkerTerminated { workerId, workerRestartCount, workerTerminationReason } ->
+    WorkerTerminated' { workerId, workerRestartCount, workerTerminationReason } ->
       Restart.handleWorkerTerminated env
                                     workerId
                                     workerTerminationReason
@@ -67,6 +70,7 @@ handleMonitorEvent env monitorEv = do
 
   return True
 
+-- | Handles an action triggered by the public API
 handleControlAction :: CapatazEnv -> ControlAction -> IO Bool
 handleControlAction env controlAction = case controlAction of
   ForkWorker { workerSpec, returnWorkerId } -> do
@@ -90,11 +94,13 @@ handleControlAction env controlAction = case controlAction of
     notifyCapatazTermination
     return False
 
+-- | Handles all messages that a capataz instance can receive
 handleCapatazMessage :: CapatazEnv -> CapatazMessage -> IO Bool
 handleCapatazMessage env message = case message of
   ControlAction controlAction -> handleControlAction env controlAction
   MonitorEvent  monitorEvent  -> handleMonitorEvent env monitorEvent
 
+-- | Handles errors caused by the execution of the "runCapatazLoop" sub-routine
 handleCapatazException :: CapatazEnv -> SomeException -> IO ()
 handleCapatazException env@CapatazEnv { capatazId, capatazName, notifyEvent } capatazError
   = do
@@ -108,6 +114,7 @@ handleCapatazException env@CapatazEnv { capatazId, capatazName, notifyEvent } ca
     haltCapataz env
     throwIO capatazError
 
+-- | This is the main thread loop of a "Capataz" instance
 runCapatazLoop :: (forall b . IO b -> IO b) -> CapatazEnv -> IO ()
 runCapatazLoop unmask env@CapatazEnv { capatazId, capatazName, capatazStatusVar, capatazQueue, notifyEvent }
   = do
@@ -154,6 +161,7 @@ runCapatazLoop unmask env@CapatazEnv { capatazId, capatazName, capatazStatusVar,
 
         Halted -> panic "TODO: Pending halted state"
 
+-- | Builds a record that contains runtime values of a "Capataz" (id, queue, status, etc.)
 buildCapatazRuntime :: CapatazOptions -> IO CapatazRuntime
 buildCapatazRuntime capatazOptions = do
   capatazId        <- UUID.nextRandom
@@ -162,6 +170,9 @@ buildCapatazRuntime capatazOptions = do
   capatazWorkerMap  <- newIORef HashMap.empty
   return CapatazRuntime {..}
 
+-- | Creates a Capataz record, which represents a supervision thread which
+-- monitors failure on worker threads defined in the "CapatazOptions" or worker
+-- threads that are created dynamically using "forkWorker".
 forkCapataz :: CapatazOptions -> IO Capataz
 forkCapataz capatazOptions@CapatazOptions { capatazName, capatazWorkerSpecList, notifyEvent }
   = do
@@ -201,7 +212,14 @@ forkCapataz capatazOptions@CapatazOptions { capatazName, capatazWorkerSpecList, 
 
     return Capataz {..}
 
-forkWorker :: WorkerOptions -> IO () -> Capataz -> IO WorkerId
+-- | Creates a worker green thread "IO ()" sub-routine, and depending in options
+-- defined in the "WorkerOptions" record, it will restart the Worker sub-routine
+-- in case of failures
+forkWorker
+  :: WorkerOptions -- ^ Worker options (restart, name, callbacks, etc)
+  -> IO ()         -- ^ IO sub-routine that will be executed on worker thread
+  -> Capataz       -- ^ "Capataz" instance that supervises the worker
+  -> IO WorkerId   -- ^ An identifier that can be used to terminate the "Worker"
 forkWorker workerOptions workerAction Capataz { capatazEnv } = do
   let workerSpec = workerOptionsToSpec workerOptions workerAction
       CapatazEnv { capatazQueue } = capatazEnv
@@ -212,6 +230,13 @@ forkWorker workerOptions workerAction Capataz { capatazEnv } = do
     (ControlAction ForkWorker {workerSpec , returnWorkerId = putMVar workerIdVar})
   takeMVar workerIdVar
 
+-- | Stops the execution of a worker green thread being supervised by the given
+-- "Capataz" instance, if the WorkerId does not belong to the Capataz, the
+-- operation does not perform any side-effect.
+--
+-- Note: If your worker has a "Permanent" worker restart strategy, the worker
+-- thread __will be restarted again__; so use a "Transient" restart strategy
+-- instead.
 terminateWorker :: Text -> WorkerId -> Capataz -> IO ()
 terminateWorker terminationReason workerId Capataz { capatazEnv } =
   sendSyncControlMsg

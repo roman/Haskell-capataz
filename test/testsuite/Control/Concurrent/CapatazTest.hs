@@ -38,14 +38,14 @@ andP predList a = all ($ a) predList
 data EventType
   = InvalidCapatazStatusReached
   | CapatazStatusChanged
-  | SupervisedWorkerTerminated
-  | SupervisedWorkerStarted
-  | SupervisedWorkerRestarted
-  | SupervisedWorkerCompleted
-  | SupervisedWorkerFailed
-  | SupervisedWorkerCallbackExecuted
-  | SupervisedWorkersTerminationStarted
-  | SupervisedWorkersTerminationFinished
+  | WorkerTerminated
+  | WorkerStarted
+  | WorkerRestarted
+  | WorkerCompleted
+  | WorkerFailed
+  | WorkerCallbackExecuted
+  | WorkersTerminationStarted
+  | WorkersTerminationFinished
   | CapatazFailed
   | CapatazTerminated
   deriving (Show)
@@ -55,19 +55,19 @@ assertEventType evType ev = fetchRecordName ev == show evType
 
 assertWorkerName :: Text -> SUT.CapatazEvent -> Bool
 assertWorkerName workerName' ev = case ev of
-  SUT.SupervisedWorkerRestarted { workerName }  -> workerName' == workerName
-  SUT.SupervisedWorkerFailed { workerName }     -> workerName' == workerName
-  SUT.SupervisedWorkerTerminated { workerName } -> workerName' == workerName
-  SUT.SupervisedWorkerStarted { workerName }    -> workerName' == workerName
+  SUT.WorkerRestarted { workerName }  -> workerName' == workerName
+  SUT.WorkerFailed { workerName }     -> workerName' == workerName
+  SUT.WorkerTerminated { workerName } -> workerName' == workerName
+  SUT.WorkerStarted { workerName }    -> workerName' == workerName
   _                                           -> False
 
 assertErrorType :: Text -> SUT.CapatazEvent -> Bool
 assertErrorType errType ev = case ev of
-  SUT.SupervisedWorkerFailed { workerError } ->
+  SUT.WorkerFailed { workerError } ->
     fetchRecordName workerError == errType
   SUT.CapatazFailed { capatazError } ->
     fetchRecordName capatazError == errType
-  SUT.SupervisedWorkerCallbackExecuted { workerCallbackError } ->
+  SUT.WorkerCallbackExecuted { workerCallbackError } ->
     case workerCallbackError of
       Nothing            -> False
       Just originalError -> fetchRecordName originalError == errType
@@ -75,16 +75,16 @@ assertErrorType errType ev = case ev of
 
 assertCallbackType :: SUT.CallbackType -> SUT.CapatazEvent -> Bool
 assertCallbackType cbType ev = case ev of
-  SUT.SupervisedWorkerFailed { workerError } -> case fromException workerError of
+  SUT.WorkerFailed { workerError } -> case fromException workerError of
     Just SUT.WorkerCallbackFailed { callbackType } -> cbType == callbackType
     _                                             -> False
-  SUT.SupervisedWorkerCallbackExecuted { callbackType } ->
+  SUT.WorkerCallbackExecuted { callbackType } ->
     cbType == callbackType
   _ -> False
 
 assertRestartCount :: (Int -> Bool) -> SUT.CapatazEvent -> Bool
 assertRestartCount predFn ev = case ev of
-  SUT.SupervisedWorkerRestarted { workerRestartCount } ->
+  SUT.WorkerRestarted { workerRestartCount } ->
     predFn workerRestartCount
   _ -> False
 
@@ -97,11 +97,11 @@ assertCapatazStatusChanged fromEv toEv ev = case ev of
 
 assertWorkerStarted :: Text -> SUT.CapatazEvent -> Bool
 assertWorkerStarted workerName =
-  andP [assertEventType SupervisedWorkerStarted, assertWorkerName workerName]
+  andP [assertEventType WorkerStarted, assertWorkerName workerName]
 
 assertWorkerTerminated :: Text -> SUT.CapatazEvent -> Bool
 assertWorkerTerminated workerName =
-  andP [assertEventType SupervisedWorkerTerminated, assertWorkerName workerName]
+  andP [assertEventType WorkerTerminated, assertWorkerName workerName]
 
 assertCapatazFailedWith :: Text -> SUT.CapatazEvent -> Bool
 assertCapatazFailedWith errorName =
@@ -320,10 +320,10 @@ tests
                 [ assertEventType CapatazStatusChanged
                 , assertCapatazStatusChanged SUT.Running SUT.Halting
                 ]
-              , assertEventType SupervisedWorkersTerminationStarted
+              , assertEventType WorkersTerminationStarted
               , assertWorkerTerminated "A"
               , assertWorkerTerminated "B"
-              , assertEventType SupervisedWorkersTerminationFinished
+              , assertEventType WorkersTerminationFinished
               , andP
                 [ assertEventType CapatazStatusChanged
                 , assertCapatazStatusChanged SUT.Halting SUT.Halted
@@ -364,9 +364,9 @@ tests
                                         capataz
               waitTillIntensityReached
             )
-            [ assertEventType SupervisedWorkerFailed
-            , assertEventType SupervisedWorkerFailed
-            , assertEventType SupervisedWorkerFailed
+            [ assertEventType WorkerFailed
+            , assertEventType WorkerFailed
+            , assertEventType WorkerFailed
             , assertCapatazFailedWith "CapatazIntensityReached"
             ]
             []
@@ -391,10 +391,10 @@ tests
                   return ()
                 )
                 [ andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnCompletion
                   ]
-                , assertEventType SupervisedWorkerCompleted
+                , assertEventType WorkerCompleted
                 ]
                 []
                 Nothing
@@ -412,14 +412,14 @@ tests
                   return ()
                 )
                 [ andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnFailure
                   ]
-                , assertEventType SupervisedWorkerFailed
+                , assertEventType WorkerFailed
                 ]
                 [assertEventType CapatazTerminated]
                 ( Just $ not . andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnCompletion
                   ]
                 )
@@ -441,10 +441,10 @@ tests
                     capataz
                   return ()
                 )
-                [assertEventType SupervisedWorkerTerminated]
+                [assertEventType WorkerTerminated]
                 [assertEventType CapatazTerminated]
                 ( Just $ not . andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnCompletion
                   ]
                 )
@@ -464,12 +464,12 @@ tests
                   return ()
                 )
                 [ andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnCompletion
                   , assertErrorType "TimeoutError"
                   ]
                 , andP
-                  [ assertEventType SupervisedWorkerFailed
+                  [ assertEventType WorkerFailed
                   , assertErrorType "WorkerCallbackFailed"
                   ]
                 ]
@@ -492,10 +492,10 @@ tests
                   return ()
                 )
                 [ andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnFailure
                   ]
-                , assertEventType SupervisedWorkerFailed
+                , assertEventType WorkerFailed
                 ]
                 [assertEventType CapatazTerminated]
                 Nothing
@@ -513,14 +513,14 @@ tests
                   return ()
                 )
                 [ andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnCompletion
                   ]
-                , assertEventType SupervisedWorkerCompleted
+                , assertEventType WorkerCompleted
                 ]
                 []
                 ( Just $ not . andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnFailure
                   ]
                 )
@@ -540,10 +540,10 @@ tests
                                      workerId
                                      capataz
                 )
-                [assertEventType SupervisedWorkerTerminated]
+                [assertEventType WorkerTerminated]
                 []
                 ( Just $ not . andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnFailure
                   ]
                 )
@@ -563,12 +563,12 @@ tests
                   return ()
                 )
                 [ andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnFailure
                   , assertErrorType "TimeoutError"
                   ]
                 , andP
-                  [ assertEventType SupervisedWorkerFailed
+                  [ assertEventType WorkerFailed
                   , assertErrorType "WorkerCallbackFailed"
                   ]
                 ]
@@ -597,12 +597,12 @@ tests
                                      capataz
                 )
                 [ andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnTermination
                   , assertErrorType "BrutallyTerminateWorkerException"
                   ]
                 , andP
-                  [ assertEventType SupervisedWorkerFailed
+                  [ assertEventType WorkerFailed
                   , assertErrorType "WorkerCallbackFailed"
                   , assertCallbackType SUT.OnTermination
                   ]
@@ -626,10 +626,10 @@ tests
                                      capataz
                 )
                 [ andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnTermination
                   ]
-                , assertEventType SupervisedWorkerTerminated
+                , assertEventType WorkerTerminated
                 ]
                 [assertEventType CapatazTerminated]
                 Nothing
@@ -646,10 +646,10 @@ tests
                     capataz
                   return ()
                 )
-                [assertEventType SupervisedWorkerCompleted]
+                [assertEventType WorkerCompleted]
                 []
                 ( Just $ not . andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnTermination
                   ]
                 )
@@ -666,10 +666,10 @@ tests
                     capataz
                   return ()
                 )
-                [assertEventType SupervisedWorkerFailed]
+                [assertEventType WorkerFailed]
                 []
                 ( Just $ not . andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnTermination
                   ]
                 )
@@ -691,12 +691,12 @@ tests
                                      capataz
                 )
                 [ andP
-                  [ assertEventType SupervisedWorkerCallbackExecuted
+                  [ assertEventType WorkerCallbackExecuted
                   , assertCallbackType SUT.OnTermination
                   , assertErrorType "TimeoutError"
                   ]
                 , andP
-                  [ assertEventType SupervisedWorkerFailed
+                  [ assertEventType WorkerFailed
                   , assertErrorType "WorkerCallbackFailed"
                   ]
                 ]
@@ -715,11 +715,11 @@ tests
               capataz
             return ()
           )
-          [ assertEventType SupervisedWorkerStarted
-          , assertEventType SupervisedWorkerCompleted
+          [ assertEventType WorkerStarted
+          , assertEventType WorkerCompleted
           ]
           [assertEventType CapatazTerminated]
-          (Just $ not . assertEventType SupervisedWorkerRestarted)
+          (Just $ not . assertEventType WorkerRestarted)
         , testCase "does not restart on termination" $ testCapatazStream
           []
           ( \capataz -> do
@@ -729,9 +729,9 @@ tests
               capataz
             SUT.terminateWorker "termination test (1)" workerId capataz
           )
-          [assertEventType SupervisedWorkerTerminated]
+          [assertEventType WorkerTerminated]
           [assertEventType CapatazTerminated]
-          (Just $ not . assertEventType SupervisedWorkerRestarted)
+          (Just $ not . assertEventType WorkerRestarted)
         , testCase "does restart on failure" $ testCapatazStream
           []
           ( \capataz -> do
@@ -742,10 +742,10 @@ tests
               capataz
             return ()
           )
-          [ assertEventType SupervisedWorkerStarted
-          , assertEventType SupervisedWorkerFailed
+          [ assertEventType WorkerStarted
+          , assertEventType WorkerFailed
           , andP
-            [ assertEventType SupervisedWorkerRestarted
+            [ assertEventType WorkerRestarted
             , assertRestartCount (== 1)
             ]
           ]
@@ -764,11 +764,11 @@ tests
                 return ()
               )
               [ andP
-                [ assertEventType SupervisedWorkerRestarted
+                [ assertEventType WorkerRestarted
                 , assertRestartCount (== 1)
                 ]
               , andP
-                [ assertEventType SupervisedWorkerRestarted
+                [ assertEventType WorkerRestarted
                 , assertRestartCount (== 2)
                 ]
               ]
@@ -787,9 +787,9 @@ tests
               capataz
             return ()
           )
-          [ assertEventType SupervisedWorkerStarted
-          , assertEventType SupervisedWorkerCompleted
-          , assertEventType SupervisedWorkerRestarted
+          [ assertEventType WorkerStarted
+          , assertEventType WorkerCompleted
+          , assertEventType WorkerRestarted
           ]
           [assertEventType CapatazTerminated]
           Nothing
@@ -797,7 +797,7 @@ tests
           $ testCapatazStream
               []
               ( \capataz -> do
-            -- Note the number is two (2) given the assertion list has two `SupervisedWorkerRestarted` assertions
+            -- Note the number is two (2) given the assertion list has two `WorkerRestarted` assertions
                 let expectedRestartCount = 2
                 subRoutineAction <- mkCompletingBeforeNRestartsSubRoutine
                   expectedRestartCount
@@ -809,11 +809,11 @@ tests
                 return ()
               )
               [ andP
-                [ assertEventType SupervisedWorkerRestarted
+                [ assertEventType WorkerRestarted
                 , assertRestartCount (== 1)
                 ]
               , andP
-                [ assertEventType SupervisedWorkerRestarted
+                [ assertEventType WorkerRestarted
                 , assertRestartCount (== 1)
                 ]
               ]
@@ -828,8 +828,8 @@ tests
               capataz
             SUT.terminateWorker "testing termination (1)" workerId capataz
           )
-          [ assertEventType SupervisedWorkerTerminated
-          , assertEventType SupervisedWorkerRestarted
+          [ assertEventType WorkerTerminated
+          , assertEventType WorkerRestarted
           ]
           []
           Nothing
@@ -856,14 +856,14 @@ tests
               SUT.terminateWorker "testing termination (2)" workerId capataz
               waitWorkerTermination 2
             )
-            [ assertEventType SupervisedWorkerTerminated
+            [ assertEventType WorkerTerminated
             , andP
-              [ assertEventType SupervisedWorkerRestarted
+              [ assertEventType WorkerRestarted
               , assertRestartCount (== 1)
               ]
-            , assertEventType SupervisedWorkerTerminated
+            , assertEventType WorkerTerminated
             , andP
-              [ assertEventType SupervisedWorkerRestarted
+              [ assertEventType WorkerRestarted
               , assertRestartCount (== 2)
               ]
             ]
@@ -879,10 +879,10 @@ tests
               capataz
             return ()
           )
-          [ assertEventType SupervisedWorkerStarted
-          , assertEventType SupervisedWorkerFailed
+          [ assertEventType WorkerStarted
+          , assertEventType WorkerFailed
           , andP
-            [ assertEventType SupervisedWorkerRestarted
+            [ assertEventType WorkerRestarted
             , assertRestartCount (== 1)
             ]
           ]
@@ -901,11 +901,11 @@ tests
                 return ()
               )
               [ andP
-                [ assertEventType SupervisedWorkerRestarted
+                [ assertEventType WorkerRestarted
                 , assertRestartCount (== 1)
                 ]
               , andP
-                [ assertEventType SupervisedWorkerRestarted
+                [ assertEventType WorkerRestarted
                 , assertRestartCount (== 2)
                 ]
               ]
@@ -923,11 +923,11 @@ tests
               capataz
             return ()
           )
-          [ assertEventType SupervisedWorkerStarted
-          , assertEventType SupervisedWorkerCompleted
+          [ assertEventType WorkerStarted
+          , assertEventType WorkerCompleted
           ]
           [assertEventType CapatazTerminated]
-          (Just $ not . assertEventType SupervisedWorkerRestarted)
+          (Just $ not . assertEventType WorkerRestarted)
         , testCase "does not restart on termination" $ testCapatazStream
           []
           ( \capataz -> do
@@ -938,11 +938,11 @@ tests
             SUT.terminateWorker "termination test (1)" workerId capataz
             threadDelay 100
           )
-          [ assertEventType SupervisedWorkerStarted
-          , assertEventType SupervisedWorkerTerminated
+          [ assertEventType WorkerStarted
+          , assertEventType WorkerTerminated
           ]
           [assertEventType CapatazTerminated]
-          (Just $ not . assertEventType SupervisedWorkerRestarted)
+          (Just $ not . assertEventType WorkerRestarted)
         , testCase "does not restart on failure" $ testCapatazStream
           []
           ( \capataz -> do
@@ -952,11 +952,11 @@ tests
               capataz
             threadDelay 100
           )
-          [ assertEventType SupervisedWorkerStarted
-          , assertEventType SupervisedWorkerFailed
+          [ assertEventType WorkerStarted
+          , assertEventType WorkerFailed
           ]
           [assertEventType CapatazTerminated]
-          (Just $ not . assertEventType SupervisedWorkerRestarted)
+          (Just $ not . assertEventType WorkerRestarted)
         ]
       ]
     , testGroup
@@ -982,13 +982,13 @@ tests
 
               return ()
             )
-            [ andP [assertEventType SupervisedWorkerStarted, assertWorkerName "A"]
-            , andP [assertEventType SupervisedWorkerStarted, assertWorkerName "B"]
+            [ andP [assertEventType WorkerStarted, assertWorkerName "A"]
+            , andP [assertEventType WorkerStarted, assertWorkerName "B"]
             ]
             [ andP
-              [assertEventType SupervisedWorkerTerminated, assertWorkerName "A"]
+              [assertEventType WorkerTerminated, assertWorkerName "A"]
             , andP
-              [assertEventType SupervisedWorkerTerminated, assertWorkerName "B"]
+              [assertEventType WorkerTerminated, assertWorkerName "B"]
             , assertEventType CapatazTerminated
             ]
             Nothing
@@ -1022,7 +1022,7 @@ tests
                   return ()
                 )
                 [ andP
-                    [ assertEventType SupervisedWorkerRestarted
+                    [ assertEventType WorkerRestarted
                     , assertWorkerName "B"
                     ]
                 ]
@@ -1030,7 +1030,7 @@ tests
                 ( Just
                 $ not
                 . andP
-                    [ assertEventType SupervisedWorkerRestarted
+                    [ assertEventType WorkerRestarted
                     , assertWorkerName "A"
                     ]
                 )
@@ -1068,17 +1068,17 @@ tests
                 return ()
               )
               [ andP
-                [assertEventType SupervisedWorkerStarted, assertWorkerName "A"]
+                [assertEventType WorkerStarted, assertWorkerName "A"]
               , andP
-                [assertEventType SupervisedWorkerStarted, assertWorkerName "B"]
+                [assertEventType WorkerStarted, assertWorkerName "B"]
               , andP
-                [assertEventType SupervisedWorkerFailed, assertWorkerName "A"]
+                [assertEventType WorkerFailed, assertWorkerName "A"]
               , andP
-                [assertEventType SupervisedWorkerRestarted, assertWorkerName "A"]
+                [assertEventType WorkerRestarted, assertWorkerName "A"]
               , andP
-                [assertEventType SupervisedWorkerTerminated, assertWorkerName "B"]
+                [assertEventType WorkerTerminated, assertWorkerName "B"]
               , andP
-                [assertEventType SupervisedWorkerRestarted, assertWorkerName "B"]
+                [assertEventType WorkerRestarted, assertWorkerName "B"]
               ]
               []
               Nothing
@@ -1112,21 +1112,21 @@ tests
                 return ()
               )
               [ andP
-                [assertEventType SupervisedWorkerStarted, assertWorkerName "A"]
+                [assertEventType WorkerStarted, assertWorkerName "A"]
               , andP
-                [assertEventType SupervisedWorkerStarted, assertWorkerName "B"]
+                [assertEventType WorkerStarted, assertWorkerName "B"]
               , andP
-                [assertEventType SupervisedWorkerFailed, assertWorkerName "A"]
+                [assertEventType WorkerFailed, assertWorkerName "A"]
               , andP
-                [assertEventType SupervisedWorkerRestarted, assertWorkerName "A"]
+                [assertEventType WorkerRestarted, assertWorkerName "A"]
               , andP
-                [assertEventType SupervisedWorkerTerminated, assertWorkerName "B"]
+                [assertEventType WorkerTerminated, assertWorkerName "B"]
               ]
               []
               ( Just
               $ not
               . andP
-                  [ assertEventType SupervisedWorkerRestarted
+                  [ assertEventType WorkerRestarted
                   , assertWorkerName "B"
                   ]
               )
@@ -1160,9 +1160,9 @@ tests
                 return ()
               )
               [ andP
-                [assertEventType SupervisedWorkerRestarted, assertWorkerName "B"]
+                [assertEventType WorkerRestarted, assertWorkerName "B"]
               , andP
-                [assertEventType SupervisedWorkerRestarted, assertWorkerName "A"]
+                [assertEventType WorkerRestarted, assertWorkerName "A"]
               ]
               []
               Nothing
@@ -1200,7 +1200,7 @@ tests
                 return ()
               )
               [ andP
-                  [ assertEventType SupervisedWorkerRestarted
+                  [ assertEventType WorkerRestarted
                   , assertWorkerName "A"
                   ]
               ]
@@ -1208,7 +1208,7 @@ tests
               ( Just
               $ not
               . andP
-                  [ assertEventType SupervisedWorkerRestarted
+                  [ assertEventType WorkerRestarted
                   , assertWorkerName "B"
                   ]
               )
@@ -1243,9 +1243,9 @@ tests
                 return ()
               )
               [ andP
-                [assertEventType SupervisedWorkerRestarted, assertWorkerName "A"]
+                [assertEventType WorkerRestarted, assertWorkerName "A"]
               , andP
-                [assertEventType SupervisedWorkerRestarted, assertWorkerName "B"]
+                [assertEventType WorkerRestarted, assertWorkerName "B"]
               ]
               []
               Nothing

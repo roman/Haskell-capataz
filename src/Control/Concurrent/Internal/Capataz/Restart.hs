@@ -23,11 +23,16 @@ import qualified Data.HashMap.Strict                          as HashMap
 
 --------------------------------------------------------------------------------
 
+-- | Function used to track difference between two timestamps to track capataz
+-- error intensity
 calcDiffSeconds :: UTCTime -> IO NominalDiffTime
 calcDiffSeconds creationTime = do
   currentTime <- getCurrentTime
   return $ diffUTCTime currentTime creationTime
 
+-- | Function that checks restart counts and worker start time to assess if the
+-- capataz error intensity has been breached, see "WorkerRestartAction" for
+-- possible outcomes.
 calcRestartAction
   :: CapatazEnv -> Int -> NominalDiffTime -> WorkerRestartAction
 calcRestartAction CapatazEnv { capatazIntensity, capatazPeriodSeconds } restartCount diffSeconds
@@ -43,6 +48,7 @@ calcRestartAction CapatazEnv { capatazIntensity, capatazPeriodSeconds } restartC
       | otherwise
       -> IncreaseRestartCount
 
+-- | Sub-routine responsible of executing a "CapatazRestartStrategy"
 execCapatazRestartStrategy :: CapatazEnv -> WorkerEnv -> Int -> IO ()
 execCapatazRestartStrategy capatazEnv@CapatazEnv { capatazRestartStrategy } WorkerEnv { workerId, workerSpec } workerRestartCount
   = case capatazRestartStrategy of
@@ -59,6 +65,7 @@ execCapatazRestartStrategy capatazEnv@CapatazEnv { capatazRestartStrategy } Work
       newWorker <- restartWorker capatazEnv workerSpec workerId workerRestartCount
       appendWorkerToMap capatazEnv newWorker
 
+-- | Executes a restart action returned from the invokation of "calcRestartAction"
 execRestartAction :: CapatazEnv -> WorkerEnv -> Int -> IO ()
 execRestartAction capatazEnv@CapatazEnv { onCapatazIntensityReached } workerEnv@WorkerEnv { workerId, workerName, workerCreationTime } workerRestartCount
   = do
@@ -85,6 +92,9 @@ execRestartAction capatazEnv@CapatazEnv { onCapatazIntensityReached } workerEnv@
 
 --------------------------------------------------------------------------------
 
+-- | Restarts _all_ the worker green thread of a Capataz, invoked when one
+-- worker green thread fails and causes sibling worker threads to get restarted
+-- as well
 restartWorkers :: CapatazEnv -> WorkerId -> RestartCount -> IO [Worker]
 restartWorkers capatazEnv@CapatazEnv { capatazWorkerTerminationOrder } failingWorkerId restartCount
   = do
@@ -104,11 +114,13 @@ restartWorkers capatazEnv@CapatazEnv { capatazWorkerTerminationOrder } failingWo
 
     return $ catMaybes newWorkers
 
+-- | Sub-routine that is used when there is a restart request to a Worker caused
+-- by an "AllForOne" restart from a failing sibling worker.
 forceRestartWorker :: CapatazEnv -> Worker -> IO ()
 forceRestartWorker CapatazEnv { capatazName, capatazId, notifyEvent } Worker { workerId, workerName, workerAsync }
   = do
     eventTime <- getCurrentTime
-    notifyEvent SupervisedWorkerTerminated
+    notifyEvent WorkerTerminated
       { capatazName
       , capatazId
       , workerId
@@ -119,6 +131,8 @@ forceRestartWorker CapatazEnv { capatazName, capatazId, notifyEvent } Worker { w
       }
     cancelWith workerAsync RestartWorkerException
 
+-- | Starts a new worker thread taking into account an existing "WorkerId" and
+-- keeping a "RestartCount" to manage Capataz error intensity.
 restartWorker
   :: CapatazEnv -> WorkerSpec -> WorkerId -> RestartCount -> IO Worker
 restartWorker capatazEnv workerSpec workerId restartCount =
@@ -126,6 +140,9 @@ restartWorker capatazEnv workerSpec workerId restartCount =
 
 --------------------------------------------------------------------------------
 
+-- | This sub-routine is responsible of the restart strategies execution when a
+-- supervised worker finishes it execution because of a completion (e.g. worker
+-- sub-routine finished without any errors).
 handleWorkerCompleted :: CapatazEnv -> WorkerId -> UTCTime -> IO ()
 handleWorkerCompleted env@CapatazEnv { capatazName, capatazId, notifyEvent } workerId eventTime
   = do
@@ -134,7 +151,7 @@ handleWorkerCompleted env@CapatazEnv { capatazName, capatazId, notifyEvent } wor
       Nothing -> return ()
       Just workerEnv@WorkerEnv { workerName, workerAsync, workerRestartStrategy } ->
         do
-          notifyEvent SupervisedWorkerCompleted
+          notifyEvent WorkerCompleted
             { capatazId
             , capatazName
             , workerId
@@ -154,6 +171,8 @@ handleWorkerCompleted env@CapatazEnv { capatazName, capatazId, notifyEvent } wor
 
             _ -> removeWorkerFromMap env workerId
 
+-- | This sub-routine is responsible of the restart strategies execution when a
+-- supervised worker finishes it execution because of a failure.
 handleWorkerFailed :: CapatazEnv -> WorkerId -> SomeException -> Int -> IO ()
 handleWorkerFailed env@CapatazEnv { capatazName, capatazId, notifyEvent } workerId workerError restartCount
   = do
@@ -163,7 +182,7 @@ handleWorkerFailed env@CapatazEnv { capatazName, capatazId, notifyEvent } worker
       Just workerEnv@WorkerEnv { workerName, workerAsync, workerRestartStrategy } ->
         do
           eventTime <- getCurrentTime
-          notifyEvent SupervisedWorkerFailed
+          notifyEvent WorkerFailed
             { capatazName
             , capatazId
             , workerId
@@ -176,6 +195,8 @@ handleWorkerFailed env@CapatazEnv { capatazName, capatazId, notifyEvent } worker
             Temporary -> removeWorkerFromMap env workerId
             _         -> execRestartAction env workerEnv restartCount
 
+-- | This sub-routine is responsible of the restart strategies execution when a
+-- supervised worker finishes it execution because of a termination.
 handleWorkerTerminated :: CapatazEnv -> WorkerId -> Text -> Int -> IO ()
 handleWorkerTerminated env@CapatazEnv { capatazName, capatazId, notifyEvent } workerId terminationReason workerRestartCount
   = do
@@ -185,7 +206,7 @@ handleWorkerTerminated env@CapatazEnv { capatazName, capatazId, notifyEvent } wo
       Just workerEnv@WorkerEnv { workerName, workerAsync, workerRestartStrategy } ->
         do
           eventTime <- getCurrentTime
-          notifyEvent SupervisedWorkerTerminated
+          notifyEvent WorkerTerminated
             { capatazName
             , capatazId
             , workerId

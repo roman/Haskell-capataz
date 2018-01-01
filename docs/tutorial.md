@@ -32,7 +32,7 @@ We are going to have a `Lib` module that contains utility functions to spawn and
 {-# LANGUAGE TypeOperators     #-}
 module Lib where
 
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as C
 import           Data.List             ((!!))
 import qualified Data.Text             as T
 import           Options.Generic       (ParseRecord)
@@ -43,7 +43,7 @@ import qualified System.Random         as Random
 import qualified Turtle
 
 -- (0)
-data Cli =
+newtype Cli =
   Cli { procNumber :: !Int }
   deriving (Generic, Show)
 
@@ -55,12 +55,37 @@ data SimpleProcess =
                 , terminateProcess :: !(IO ())
                 , waitProcess      :: !(IO ExitCode)
                 }
+
+-- (2)
+spawnSimpleProcess :: Text -> [Text] -> IO SimpleProcess
+spawnSimpleProcess program args = do
+  let processSpec = (Process.proc (T.unpack program) (fmap T.unpack args))
+        { Process.std_out = Process.CreatePipe
+        }
+
+  (_, Just hout, _, procHandle) <- Process.createProcess processSpec
+
+  let readStdOut :: IO (Either ExitCode ByteString)
+      readStdOut = do
+        isEof <- hIsEOF hout
+        if not isEof
+          then (Right . C.pack) <$> hGetLine hout
+          else Left <$> Process.waitForProcess procHandle
+
+      terminateProcess :: IO ()
+      terminateProcess = Process.terminateProcess procHandle
+
+      waitProcess :: IO ExitCode
+      waitProcess = Process.waitForProcess procHandle
+
+  return SimpleProcess {readStdOut , terminateProcess , waitProcess }
 ```
 
 `(0)` First, we have a `Cli` record that we use to gather values for our CLI program. Using the [optparse-generic](https://hackage.haskell.org/package/optparse-generic) library, this becomes a trivial affair. We add an instance for `Generic` and `ParseRecord`.
 
 `(1)` Next, we create a record that will contain all the logic to read `stdout` and to terminate or wait for a process. This utility record reduces the scope around of the things we could do with the Unix Process Haskell API.
 
+`(2)` This function creates a `SimpleProcess` record, it translates the vast Haskell Process API into something more specific and digestable.
 
 Next, let's start by showcasing an `IO` sub-routine that spawns a UNIX process and reads its stdout.
 
@@ -83,7 +108,7 @@ spawnNumbersProcess writeNumber = do
         -- read number and transform it into a number, this function returns
         -- an Either where Right value is a an stdout line, and Left value is
         -- an exit code
-        eInput <- ((readMaybe . BS.unpack) <$>) <$> readStdOut proc'
+
         case eInput of
           Left exitCode
             | exitCode == ExitSuccess -> return ()

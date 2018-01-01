@@ -19,9 +19,50 @@ We are going to implement a CLI program that spawns a given amount of processes 
 
 You can find the code for this tutorial in the [`examples` directory](https://github.com/roman/Haskell-capataz/tree/examples/examples) of the project's repository.
 
-## Setting up the stage
+## Setting up the stage - A trivial library for Processes
 
-Let's start by showcasing an `IO` sub-routine that spawns a UNIX process and reads its stdout.
+We are going to have a `Lib` module that contains utility functions to spawn and kill unix processes, first the header:
+
+```haskell
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeOperators     #-}
+module Lib where
+
+import qualified Data.ByteString.Char8 as BS
+import           Data.List             ((!!))
+import qualified Data.Text             as T
+import           Options.Generic       (ParseRecord)
+import           Protolude
+import           System.IO             (hGetLine, hIsEOF)
+import qualified System.Process        as Process
+import qualified System.Random         as Random
+import qualified Turtle
+
+-- (0)
+data Cli =
+  Cli { procNumber :: !Int }
+  deriving (Generic, Show)
+
+instance ParseRecord Cli
+
+-- (1)
+data SimpleProcess =
+  SimpleProcess { readStdOut       :: !(IO (Either ExitCode ByteString))
+                , terminateProcess :: !(IO ())
+                , waitProcess      :: !(IO ExitCode)
+                }
+```
+
+`(0)` First, we have a `Cli` record that we use to gather values for our CLI program. Using the [optparse-generic](https://hackage.haskell.org/package/optparse-generic) library, this becomes a trivial affair. We add an instance for `Generic` and `ParseRecord`.
+
+`(1)` Next, we create a record that will contain all the logic to read `stdout` and to terminate or wait for a process. This utility record reduces the scope around of the things we could do with the Unix Process Haskell API.
+
+
+Next, let's start by showcasing an `IO` sub-routine that spawns a UNIX process and reads its stdout.
 
 ```haskell
 spawnNumbersProcess
@@ -59,7 +100,7 @@ spawnNumbersProcess writeNumber = do
   loop `finally` terminateProcess proc'
 ```
 
-Second, let's have another `IO` sub-routine that lists processes pids, and kills on of them randomly. We use the [`Turtle` library](https://hackage.haskell.org/package/turtle) to run commands, we use a single function (`procStrict`) that returns the stdout and `exitCode` of a process.
+Now, let's have another `IO` sub-routine that lists processes pids, and kills on of them randomly. We use the [`Turtle` library](https://hackage.haskell.org/package/turtle) to run commands, we use a single function (`procStrict`) that returns the stdout and `exitCode` of a process.
 
 ```haskell
 processKiller

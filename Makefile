@@ -7,7 +7,7 @@
 ################################################################################
 ## VARIABLE
 
-RESOLVER ?= lts-10.1
+RESOLVER ?= $(shell cat stack.yaml | grep -v '\#' | grep resolver | awk '{print $$2}')
 
 HASKELL_FILES:=$(find . -maxdepth 1 -type d | grep 'src\|test')
 

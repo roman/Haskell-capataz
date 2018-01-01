@@ -6,7 +6,7 @@
 {-# LANGUAGE TypeOperators     #-}
 module Lib where
 
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as C
 import           Data.List             ((!!))
 import qualified Data.Text             as T
 import           Options.Generic       (ParseRecord)
@@ -16,7 +16,7 @@ import qualified System.Process        as Process
 import qualified System.Random         as Random
 import qualified Turtle
 
-data Cli =
+newtype Cli =
   Cli { procNumber :: !Int }
   deriving (Generic, Show)
 
@@ -30,7 +30,7 @@ data SimpleProcess =
 
 spawnSimpleProcess :: Text -> [Text] -> IO SimpleProcess
 spawnSimpleProcess program args = do
-  let processSpec = (Process.proc (T.unpack program) (map T.unpack args))
+  let processSpec = (Process.proc (T.unpack program) (fmap T.unpack args))
         { Process.std_out = Process.CreatePipe
         }
 
@@ -40,7 +40,7 @@ spawnSimpleProcess program args = do
       readStdOut = do
         isEof <- hIsEOF hout
         if not isEof
-          then (Right . BS.pack) <$> hGetLine hout
+          then (Right . C.pack) <$> hGetLine hout
           else Left <$> Process.waitForProcess procHandle
 
       terminateProcess :: IO ()
@@ -76,7 +76,7 @@ spawnNumbersProcess writeNumber = do
     ]
 
   let loop = do
-        eInput <- ((readMaybe . BS.unpack) <$>) <$> readStdOut proc'
+        eInput <- ((readMaybe . C.unpack) <$>) <$> readStdOut proc'
         case eInput of
           Left exitCode | exitCode == ExitSuccess -> return ()
                         | otherwise               -> throwIO exitCode

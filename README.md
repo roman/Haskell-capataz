@@ -95,3 +95,8 @@ dependencies:
 [![Hackage Dependencies](https://img.shields.io/hackage-deps/v/capataz.svg)](https://img.shields.io/hackage/v/capataz.svg)
 
 Follow the [developer guidelines](https://romanandreg.gitbooks.io/capataz/content/developer-guidelines.html)
+
+## In next release
+
+* Add support for supervising supervisors
+* Ensure unit tests always finish on all concurrent scenarios (dejafu experiment)

@@ -35,10 +35,14 @@ module Control.Concurrent.Capataz
 )
 where
 
-import Control.Concurrent.Internal.Capataz.Core
-    (forkWorker, forkCapataz, terminateWorker)
+import Control.Concurrent.Internal.Capataz.Core  (forkCapataz, forkWorker, terminateWorker)
 import Control.Concurrent.Internal.Capataz.Types
     ( CallbackType (..)
+    , Capataz (..)
+    , CapatazEvent (..)
+    , CapatazOptions (..)
+    , CapatazRestartStrategy (..)
+    , CapatazStatus (..)
     , WorkerAction
     , WorkerError (..)
     , WorkerOptions (..)
@@ -46,14 +50,9 @@ import Control.Concurrent.Internal.Capataz.Types
     , WorkerSpec (..)
     , WorkerTerminationOrder (..)
     , WorkerTerminationPolicy (..)
-    , Capataz (..)
-    , CapatazEvent (..)
-    , CapatazOptions (..)
-    , CapatazRestartStrategy (..)
-    , CapatazStatus (..)
+    , defCapatazOptions
     , defWorkerOptions
     , defWorkerSpec
-    , defCapatazOptions
     )
-import Control.Concurrent.Internal.Capataz.Util (capatazToAsync)
-import Control.Teardown                             (teardown)
+import Control.Concurrent.Internal.Capataz.Util  (capatazToAsync)
+import Control.Teardown                          (teardown)

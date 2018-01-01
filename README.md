@@ -11,7 +11,7 @@
 ## Raison d'etre
 
 As time progresses, I've come to love developing concurrent applications in
-Haskell, its API (stm, mvars, etc.) and light threading RTS bring a lot to the
+Haskell, its API (STM, MVars, etc.) and light threading RTS bring a lot to the
 table. There is another technology that is more famous than Haskell in
 regards to concurrency, and that is Erlang, more specifically its OTP library.
 
@@ -64,13 +64,13 @@ outcome.
 
 ## Documentation
 
-Documentation can be found [here](https://romanandreg.gitbooks.io/haskell-capataz/content/)
+Documentation can be found [here](https://romanandreg.gitbooks.io/capataz/content/)
 
 ## Installation
 
 [![Hackage](https://img.shields.io/hackage/v/capataz.svg)](https://img.shields.io/hackage/v/capataz.svg)
-[![Stackage LTS](https://stackage.org/package/capataz/badge/lts)](http://stackage.org/lts/package/capataz)
-[![Stackage Nightly](https://stackage.org/package/capataz/badge/nightly)](http://stackage.org/nightly/package/capataz)
+[![Stackage LTS](https://www.stackage.org/package/capataz/badge/lts)](http://stackage.org/lts/package/capataz)
+[![Stackage Nightly](https://www.stackage.org/package/capataz/badge/nightly)](http://stackage.org/nightly/package/capataz)
 
 Make sure you include the following entry on your [cabal file's
 dependecies](https://www.haskell.org/cabal/users-guide/developing-packages.html#build-information)
@@ -91,19 +91,12 @@ dependencies:
 ## Development
 
 [![Build Status](https://travis-ci.org/roman/Haskell-capataz.svg?branch=master)](https://travis-ci.org/roman/Haskell-capataz)
-[![Github](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.0.0.1.svg)](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.0.0.1.svg)
-[![Hackage Dependencies\]](https://img.shields.io/hackage-deps/v/capataz.svg)](https://img.shields.io/hackage/v/capataz.svg)
+[![Github](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.0.0.0.svg)](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.0.0.0.svg)
+[![Hackage Dependencies](https://img.shields.io/hackage-deps/v/capataz.svg)](https://img.shields.io/hackage/v/capataz.svg)
 
-### Open Commit Bit
+Follow the [developer guidelines](https://romanandreg.gitbooks.io/capataz/content/developer-guidelines.html)
 
-capataz has an open commit bit policy: Anyone with an accepted pull request
-gets added as a repository collaborator. Please try to follow these simple
-rules:
+## In next release
 
-* Commit directly onto the master branch only for typos, improvements to the
-  README and documentation.
-
-* Create a feature branch and open a pull-request early for any new features to
-  get feedback.
-
-* Make sure you adhere to the general pull request rules above.
+* Add support for supervising supervisors
+* Ensure unit tests always finish on all concurrent scenarios (dejafu experiment)

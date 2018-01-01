@@ -2,6 +2,9 @@
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-| This module contains all logic related to error handling when spawning threads
+  to execute Worker sub-routines
+-}
 module Control.Concurrent.Internal.Capataz.Worker where
 
 import Protolude
@@ -41,7 +44,7 @@ handleWorkerException
   -> IO MonitorEvent
 handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } WorkerSpec { workerName, workerOnFailure, workerOnTermination } workerId restartCount err
   = do
-    workerThreadId    <- myThreadId
+    workerThreadId   <- myThreadId
     monitorEventTime <- getCurrentTime
     case fromException err of
       Just RestartWorkerException ->
@@ -57,8 +60,8 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
           , workerName
           , workerThreadId
           , workerCallbackError = either Just (const Nothing) eErrResult
-          , callbackType       = OnTermination
-          , eventTime          = monitorEventTime
+          , callbackType        = OnTermination
+          , eventTime           = monitorEventTime
           }
 
         case eErrResult of
@@ -69,7 +72,7 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
             , workerError        = toException WorkerCallbackFailed
               { workerId
               , workerCallbackError
-              , callbackType       = OnTermination
+              , callbackType        = OnTermination
               , workerActionError   = Just err
               }
             , workerRestartCount = restartCount
@@ -82,8 +85,8 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
             , workerRestartCount      = restartCount
             }
 
-      Just BrutallyTerminateWorkerException { workerTerminationReason } -> return
-        WorkerTerminated'
+      Just BrutallyTerminateWorkerException { workerTerminationReason } ->
+        return WorkerTerminated'
           { workerId
           , workerName
           , monitorEventTime
@@ -102,8 +105,8 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
           , workerName
           , workerThreadId
           , workerCallbackError = either Just (const Nothing) eErrResult
-          , callbackType       = OnFailure
-          , eventTime          = monitorEventTime
+          , callbackType        = OnFailure
+          , eventTime           = monitorEventTime
           }
 
         case eErrResult of
@@ -115,7 +118,7 @@ handleWorkerException unmask CapatazEnv { capatazId, capatazName, notifyEvent } 
             , workerError        = toException WorkerCallbackFailed
               { workerId
               , workerCallbackError
-              , callbackType       = OnFailure
+              , callbackType        = OnFailure
               , workerActionError   = Just err
               }
             }
@@ -137,7 +140,7 @@ handleWorkerCompletion
   -> IO MonitorEvent
 handleWorkerCompletion unmask CapatazEnv { capatazId, capatazName, notifyEvent } WorkerSpec { workerName, workerOnCompletion } workerId restartCount
   = do
-    workerThreadId    <- myThreadId
+    workerThreadId   <- myThreadId
     monitorEventTime <- getCurrentTime
     eCompResult      <- try $ unmask workerOnCompletion
 
@@ -148,8 +151,8 @@ handleWorkerCompletion unmask CapatazEnv { capatazId, capatazName, notifyEvent }
       , workerName
       , workerThreadId
       , workerCallbackError = either Just (const Nothing) eCompResult
-      , callbackType       = OnCompletion
-      , eventTime          = monitorEventTime
+      , callbackType        = OnCompletion
+      , eventTime           = monitorEventTime
       }
 
     case eCompResult of
@@ -160,7 +163,7 @@ handleWorkerCompletion unmask CapatazEnv { capatazId, capatazName, notifyEvent }
         , workerError        = toException WorkerCallbackFailed
           { workerId
           , workerCallbackError = err
-          , callbackType       = OnCompletion
+          , callbackType        = OnCompletion
           , workerActionError   = Nothing
           }
         , workerRestartCount = restartCount
@@ -202,23 +205,22 @@ notifyWorkerStarted mRestartInfo CapatazEnv { capatazId, capatazName, notifyEven
   = do
     eventTime <- getCurrentTime
     case mRestartInfo of
-      Just (_workerId, workerRestartCount) -> notifyEvent
-        WorkerRestarted
-          { capatazId
-          , capatazName
-          , workerId
-          , workerName
-          , workerRestartCount
-          , workerThreadId     = asyncThreadId workerAsync
-          , eventTime
-          }
+      Just (_workerId, workerRestartCount) -> notifyEvent WorkerRestarted
+        { capatazId
+        , capatazName
+        , workerId
+        , workerName
+        , workerRestartCount
+        , workerThreadId     = asyncThreadId workerAsync
+        , eventTime
+        }
       Nothing -> notifyEvent WorkerStarted
         { capatazId
         , capatazName
         , workerId
         , workerName
         , eventTime
-        , workerThreadId  = asyncThreadId workerAsync
+        , workerThreadId = asyncThreadId workerAsync
         }
 
 -- | Internal function that forks a worker thread on the Capataz thread; note
@@ -229,7 +231,7 @@ forkWorker
 forkWorker env workerSpec mRestartInfo = do
   (workerId, restartCount) <- case mRestartInfo of
     Just (workerId, restartCount) -> pure (workerId, restartCount)
-    Nothing                      -> (,) <$> UUID.nextRandom <*> pure 0
+    Nothing                       -> (,) <$> UUID.nextRandom <*> pure 0
 
   worker <- workerMain env workerSpec workerId restartCount
   notifyWorkerStarted mRestartInfo env worker
@@ -260,7 +262,10 @@ terminateWorker workerTerminationReason CapatazEnv { capatazId, capatazName, not
           threadDelay (millis * 1000)
           cancelWith
             workerAsync
-            BrutallyTerminateWorkerException {workerId , workerTerminationReason }
+            BrutallyTerminateWorkerException
+              { workerId
+              , workerTerminationReason
+              }
         )
         ( cancelWith
           workerAsync
@@ -274,7 +279,7 @@ terminateWorker workerTerminationReason CapatazEnv { capatazId, capatazName, not
       , eventTime
       , workerId
       , workerName
-      , workerThreadId     = asyncThreadId workerAsync
+      , workerThreadId    = asyncThreadId workerAsync
       , terminationReason = workerTerminationReason
       }
 
@@ -285,11 +290,10 @@ terminateWorkers :: Text -> CapatazEnv -> IO ()
 terminateWorkers terminationReason env@CapatazEnv { capatazName, capatazId, capatazWorkerTerminationOrder, notifyEvent }
   = do
     eventTime <- getCurrentTime
-    workerMap  <- readWorkerMap env
+    workerMap <- readWorkerMap env
 
-    let workers = sortWorkersByTerminationOrder
-          capatazWorkerTerminationOrder
-          workerMap
+    let workers =
+          sortWorkersByTerminationOrder capatazWorkerTerminationOrder workerMap
 
     notifyEvent WorkersTerminationStarted
       { capatazName

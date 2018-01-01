@@ -4,4 +4,4 @@
 * Guide
   * [Supervisor Theory](supervisor-theory.md)
 
-* Developer Guidelines
+* [Developer Guidelines](developer-guidelines.md)

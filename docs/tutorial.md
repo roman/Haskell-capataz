@@ -19,9 +19,50 @@ We are going to implement a CLI program that spawns a given amount of processes 
 
 You can find the code for this tutorial in the [`examples` directory](https://github.com/roman/Haskell-capataz/tree/examples/examples) of the project's repository.
 
-## Setting up the stage
+## Setting up the stage - A trivial library for Processes
 
-Let's start by showcasing an `IO` sub-routine that spawns a UNIX process and reads its stdout.
+We are going to have a `Lib` module that contains utility functions to spawn and kill unix processes, first the header:
+
+```haskell
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeOperators     #-}
+module Lib where
+
+import qualified Data.ByteString.Char8 as BS
+import           Data.List             ((!!))
+import qualified Data.Text             as T
+import           Options.Generic       (ParseRecord)
+import           Protolude
+import           System.IO             (hGetLine, hIsEOF)
+import qualified System.Process        as Process
+import qualified System.Random         as Random
+import qualified Turtle
+
+-- (0)
+data Cli =
+  Cli { procNumber :: !Int }
+  deriving (Generic, Show)
+
+instance ParseRecord Cli
+
+-- (1)
+data SimpleProcess =
+  SimpleProcess { readStdOut       :: !(IO (Either ExitCode ByteString))
+                , terminateProcess :: !(IO ())
+                , waitProcess      :: !(IO ExitCode)
+                }
+```
+
+`(0)` First, we have a `Cli` record that we use to gather values for our CLI program. Using the [optparse-generic](https://hackage.haskell.org/package/optparse-generic) library, this becomes a trivial affair. We add an instance for `Generic` and `ParseRecord`.
+
+`(1)` Next, we create a record that will contain all the logic to read `stdout` and to terminate or wait for a process. This utility record reduces the scope around of the things we could do with the Unix Process Haskell API.
+
+
+Next, let's start by showcasing an `IO` sub-routine that spawns a UNIX process and reads its stdout.
 
 ```haskell
 spawnNumbersProcess
@@ -59,7 +100,7 @@ spawnNumbersProcess writeNumber = do
   loop `finally` terminateProcess proc'
 ```
 
-Second, let's have another `IO` sub-routine that lists processes pids, and kills on of them randomly. We use the [`Turtle` library](https://hackage.haskell.org/package/turtle) to run commands, we use a single function (`procStrict`) that returns the stdout and `exitCode` of a process.
+Now, let's have another `IO` sub-routine that lists processes pids, and kills on of them randomly. We use the [`Turtle` library](https://hackage.haskell.org/package/turtle) to run commands, we use a single function (`procStrict`) that returns the stdout and `exitCode` of a process.
 
 ```haskell
 processKiller
@@ -155,12 +196,12 @@ main :: IO ()
 main = do
   n <- getRecord "Counter spawner"
   capataz <-
-    --                     (1)
-    --                      |
+    --                (1)
+    --                 |
     forkCapataz defCapatazOptions { capatazName = "Example Capataz"
-                                        , capatazRestartStrategy = OneForOne -- (2)
-                                        , notifyEvent = pPrint                  -- (3)
-                                        }
+                                  , capatazRestartStrategy = OneForOne -- (2)
+                                  , notifyEvent = pPrint               -- (3)
+                                  }
 
   let numberWriter i a = print (i, a)
       delayMicros = 5000100
@@ -169,8 +210,8 @@ main = do
     --              (4)
     --               |
     void $ forkWorker defWorkerOptions { workerName = "Worker (" <> show i <> ")"
-                                     , workerRestartStrategy = Permanent  -- (5)
-                                     }
+                                       , workerRestartStrategy = Permanent  -- (5)
+                                       }
                      (spawnNumbersProcess (numberWriter i)) -- (6)
                      capataz
 
@@ -181,7 +222,7 @@ main = do
 
   wait (capatazToAsync capataz)  -- (7)
     `finally`
-    (teardown capataz >>= print)    -- (8)
+    (teardown capataz >>= print) -- (8)
 ```
 
 We start the `main` sub-routine building a capataz using the `forkCapataz` function.
@@ -204,11 +245,11 @@ We continue the example by spawning a few worker sub-routines, for this, we use 
 
 `(5)` We are also specifying the `workerRestartStrategy`; this can be:
 
-* Permanent -- The sub-routine will _always_ get restarted, even it finishes without any errors. This strategy is ideal to monitor servers.
+* `Permanent` -- The sub-routine will _always_ get restarted, even it finishes without any errors. This strategy is ideal to monitor servers.
 
-* Transient -- The sub-routine gets restarted, if and only if it fails, if it completes without any errors, the capataz will drop the sub-routine. This strategy is ideal to monitor one time executions.
+* `Transient` -- The sub-routine gets restarted, if and only if it fails, if it completes without any errors, the capataz will drop the sub-routine. This strategy is ideal to monitor one time executions.
 
-* Temporary -- The sub-routine will not be restarted, even in the cause of failure, used for non-important executions.
+* `Temporary` -- The sub-routine will not be restarted, even in the cause of failure, used for non-important executions.
 
 `(6)` Then, we pass an `IO` sub-routine to execute in a monitored thread (in this particular example, our number process spawner). This approach is no different from using `forkIO`. Note the capataz created on step (1) is the last parameter to the `forkWorker` function.
 

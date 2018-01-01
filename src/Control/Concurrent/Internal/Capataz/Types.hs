@@ -3,6 +3,7 @@
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-| This module contains all the types used across all the other modules -}
 module Control.Concurrent.Internal.Capataz.Types where
 
 import Protolude
@@ -33,77 +34,77 @@ data CapatazEvent
   = InvalidCapatazStatusReached {
     capatazId   :: !CapatazId
   , capatazName :: !CapatazName
-  , eventTime      :: !UTCTime
+  , eventTime   :: !UTCTime
   }
   | CapatazStatusChanged {
     capatazId         :: !CapatazId
   , capatazName       :: !CapatazName
   , prevCapatazStatus :: !CapatazStatus
   , newCapatazStatus  :: !CapatazStatus
-  , eventTime            :: !UTCTime
+  , eventTime         :: !UTCTime
   }
   | WorkerTerminated {
-    capatazName    :: !CapatazName
-  , capatazId      :: !CapatazId
-  , workerThreadId     :: !WorkerThreadId
-  , workerId           :: !WorkerId
-  , workerName         :: !WorkerName
+    capatazName       :: !CapatazName
+  , capatazId         :: !CapatazId
+  , workerThreadId    :: !WorkerThreadId
+  , workerId          :: !WorkerId
+  , workerName        :: !WorkerName
   , terminationReason :: !Text
   , eventTime         :: !UTCTime
   }
   | WorkerStarted {
-    capatazName :: !CapatazName
-  , capatazId   :: !CapatazId
-  , workerThreadId  :: !WorkerThreadId
-  , workerId        :: !WorkerId
-  , workerName      :: !WorkerName
+    capatazName    :: !CapatazName
+  , capatazId      :: !CapatazId
+  , workerThreadId :: !WorkerThreadId
+  , workerId       :: !WorkerId
+  , workerName     :: !WorkerName
   , eventTime      :: !UTCTime
   }
   | WorkerRestarted {
-    capatazName    :: !CapatazName
-  , capatazId      :: !CapatazId
+    capatazName        :: !CapatazName
+  , capatazId          :: !CapatazId
   , workerThreadId     :: !WorkerThreadId
   , workerId           :: !WorkerId
   , workerName         :: !WorkerName
   , workerRestartCount :: !Int
-  , eventTime         :: !UTCTime
+  , eventTime          :: !UTCTime
   }
   | WorkerCompleted {
-    capatazName :: !CapatazName
-  , capatazId   :: !CapatazId
-  , workerThreadId  :: !WorkerThreadId
-  , workerId        :: !WorkerId
-  , workerName      :: !WorkerName
+    capatazName    :: !CapatazName
+  , capatazId      :: !CapatazId
+  , workerThreadId :: !WorkerThreadId
+  , workerId       :: !WorkerId
+  , workerName     :: !WorkerName
   , eventTime      :: !UTCTime
   }
   | WorkerFailed {
-    capatazName :: !CapatazName
-  , capatazId   :: !CapatazId
-  , workerThreadId  :: !WorkerThreadId
-  , workerId        :: !WorkerId
-  , workerName      :: !WorkerName
-  , workerError     :: !SomeException
+    capatazName    :: !CapatazName
+  , capatazId      :: !CapatazId
+  , workerThreadId :: !WorkerThreadId
+  , workerId       :: !WorkerId
+  , workerName     :: !WorkerName
+  , workerError    :: !SomeException
   , eventTime      :: !UTCTime
   }
   | WorkerCallbackExecuted {
-    capatazName     :: !CapatazName
-  , capatazId       :: !CapatazId
+    capatazName         :: !CapatazName
+  , capatazId           :: !CapatazId
   , workerThreadId      :: !WorkerThreadId
   , workerId            :: !WorkerId
   , workerName          :: !WorkerName
   , workerCallbackError :: !(Maybe SomeException)
-  , callbackType       :: !CallbackType
-  , eventTime          :: !UTCTime
+  , callbackType        :: !CallbackType
+  , eventTime           :: !UTCTime
   }
   | WorkersTerminationStarted {
-    capatazName    :: !CapatazName
-  , capatazId      :: !CapatazId
+    capatazName       :: !CapatazName
+  , capatazId         :: !CapatazId
   , terminationReason :: !Text
   , eventTime         :: !UTCTime
   }
   | WorkersTerminationFinished {
-    capatazName    :: !CapatazName
-  , capatazId      :: !CapatazId
+    capatazName       :: !CapatazName
+  , capatazId         :: !CapatazId
   , terminationReason :: !Text
   , eventTime         :: !UTCTime
   }
@@ -111,17 +112,17 @@ data CapatazEvent
     capatazName  :: !CapatazName
   , capatazId    :: !CapatazId
   , capatazError :: !SomeException
-  , eventTime       :: !UTCTime
+  , eventTime    :: !UTCTime
   }
   | CapatazTerminated {
     capatazName :: !CapatazName
   , capatazId   :: !CapatazId
-  , eventTime      :: !UTCTime
+  , eventTime   :: !UTCTime
   }
   | CapatazShutdownInvoked {
     capatazName :: !CapatazName
   , capatazId   :: !CapatazId
-  , eventTime      :: !UTCTime
+  , eventTime   :: !UTCTime
   }
   deriving (Generic, Show)
 
@@ -192,23 +193,23 @@ instance NFData CapatazRestartStrategy
 data CapatazOptions
   = CapatazOptions {
     -- | Name of the Capataz (present on "CapatazEvent" records)
-    capatazName                  :: Text
+    capatazName                   :: Text
     -- | How many errors is the Capataz be able to handle; check:
     -- http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
-  , capatazIntensity             :: !Int
+  , capatazIntensity              :: !Int
     -- | Period of time where the Capataz can receive "capatazIntensity" amount
     -- of errors
-  , capatazPeriodSeconds         :: !NominalDiffTime
+  , capatazPeriodSeconds          :: !NominalDiffTime
     -- | What is the "CapatazRestartStrategy" for this Capataz
-  , capatazRestartStrategy       :: !CapatazRestartStrategy
+  , capatazRestartStrategy        :: !CapatazRestartStrategy
     -- | Static set of workers that start as soon as the "Capataz" is created
   , capatazWorkerSpecList         :: ![WorkerSpec]
     -- | In which order the "Capataz" record is going to terminate it's workers
   , capatazWorkerTerminationOrder :: !WorkerTerminationOrder
     -- | Callback used when the error intensity is reached
-  , onCapatazIntensityReached    :: !(IO ())
+  , onCapatazIntensityReached     :: !(IO ())
     -- | Callback used for telemetry purposes
-  , notifyEvent                     :: !(CapatazEvent -> IO ())
+  , notifyEvent                   :: !(CapatazEvent -> IO ())
   }
 
 
@@ -312,7 +313,7 @@ data ControlAction
   }
   | TerminateWorker {
     workerId                :: !WorkerId
-  , terminationReason      :: !Text
+  , terminationReason       :: !Text
   , notifyWorkerTermination :: !(IO ())
   }
   | TerminateCapataz {
@@ -363,7 +364,7 @@ data WorkerError
   = WorkerCallbackFailed {
       workerId            :: !WorkerId
     , workerActionError   :: !(Maybe SomeException)
-    , callbackType       :: !CallbackType
+    , callbackType        :: !CallbackType
     , workerCallbackError :: !SomeException
     }
     deriving (Generic, Show)
@@ -378,23 +379,23 @@ data MonitorEvent
   , workerName              :: !WorkerName
   , workerRestartCount      :: !RestartCount
   , workerTerminationReason :: !Text
-  , monitorEventTime       :: !UTCTime
+  , monitorEventTime        :: !UTCTime
   }
   | WorkerFailed' {
     workerId           :: !WorkerId
   , workerName         :: !WorkerName
   , workerRestartCount :: !RestartCount
   , workerError        :: !SomeException
-  , monitorEventTime  :: !UTCTime
+  , monitorEventTime   :: !UTCTime
   }
   | WorkerCompleted' {
-    workerId          :: !WorkerId
-  , workerName        :: !WorkerName
+    workerId         :: !WorkerId
+  , workerName       :: !WorkerName
   , monitorEventTime :: !UTCTime
   }
   | WorkerForcedRestart {
-    workerId          :: !WorkerId
-  , workerName        :: !WorkerName
+    workerId         :: !WorkerId
+  , workerName       :: !WorkerName
   , monitorEventTime :: !UTCTime
   }
   deriving (Show)
@@ -443,7 +444,7 @@ data CapatazRuntime
   = CapatazRuntime {
     capatazId        :: !CapatazId
   , capatazQueue     :: !(TQueue CapatazMessage)
-  , capatazWorkerMap  :: !(IORef (HashMap WorkerId Worker))
+  , capatazWorkerMap :: !(IORef (HashMap WorkerId Worker))
   , capatazStatusVar :: !(TVar CapatazStatus)
   , capatazOptions   :: !CapatazOptions
   }
@@ -452,20 +453,20 @@ data CapatazRuntime
 -- this is used on internal functions of the Capataz library.
 data CapatazEnv
   = CapatazEnv {
-    capatazId                    :: !CapatazId
-  , capatazName                  :: !CapatazName
-  , capatazQueue                 :: !(TQueue CapatazMessage)
-  , capatazWorkerMap             :: !(IORef (HashMap WorkerId Worker))
-  , capatazStatusVar             :: !(TVar CapatazStatus)
-  , capatazOptions               :: !CapatazOptions
-  , capatazRuntime               :: !CapatazRuntime
-  , capatazIntensity             :: !Int
+    capatazId                     :: !CapatazId
+  , capatazName                   :: !CapatazName
+  , capatazQueue                  :: !(TQueue CapatazMessage)
+  , capatazWorkerMap              :: !(IORef (HashMap WorkerId Worker))
+  , capatazStatusVar              :: !(TVar CapatazStatus)
+  , capatazOptions                :: !CapatazOptions
+  , capatazRuntime                :: !CapatazRuntime
+  , capatazIntensity              :: !Int
     -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
-  , capatazPeriodSeconds         :: !NominalDiffTime
-  , capatazRestartStrategy       :: !CapatazRestartStrategy
+  , capatazPeriodSeconds          :: !NominalDiffTime
+  , capatazRestartStrategy        :: !CapatazRestartStrategy
   , capatazWorkerTerminationOrder :: !WorkerTerminationOrder
-  , onCapatazIntensityReached    :: !(IO ())
-  , notifyEvent                     :: !(CapatazEvent -> IO ())
+  , onCapatazIntensityReached     :: !(IO ())
+  , notifyEvent                   :: !(CapatazEvent -> IO ())
   }
 
 -- | Default options to easily create capataz instances:
@@ -475,7 +476,7 @@ data CapatazEnv
 -- * has a termination order of "OldestFirst"
 defCapatazOptions :: CapatazOptions
 defCapatazOptions = CapatazOptions
-  { capatazName                  = "default-capataz"
+  { capatazName                   = "default-capataz"
 
   -- One (1) restart every five (5) seconds
   , capatazIntensity              = 1

@@ -1,9 +1,9 @@
 name: capataz
-version: '0.0.0.1'
-category: TODO
+version: '0.0.0.0'
+category: Concurrency
 author: Roman Gonzalez
 maintainer: romanandreg@gmail.com
-copyright: © 2017 Roman Gonzalez
+copyright: © 2018 Roman Gonzalez
 license: MIT
 license-file: LICENSE
 github: roman/Haskell-capataz

@@ -8,9 +8,9 @@ module Main where
 import Protolude
 
 import Control.Concurrent.CapatazTest
-import Test.Tasty                        (defaultMainWithIngredients, testGroup)
-import Test.Tasty.Ingredients.Rerun      (rerunningTests)
-import Test.Tasty.Runners                (consoleTestReporter, listingTests)
+import Test.Tasty                     (defaultMainWithIngredients, testGroup)
+import Test.Tasty.Ingredients.Rerun   (rerunningTests)
+import Test.Tasty.Runners             (consoleTestReporter, listingTests)
 
 main :: IO ()
 main = defaultMainWithIngredients

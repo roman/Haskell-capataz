@@ -7,7 +7,7 @@
 ################################################################################
 ## VARIABLE
 
-RESOLVER ?= lts-10.1
+RESOLVER ?= $(shell cat stack.yaml | grep -v '\#' | grep resolver | awk '{print $$2}')
 
 HASKELL_FILES:=$(find . -maxdepth 1 -type d | grep 'src\|test')
 
@@ -87,7 +87,7 @@ test_sdist: untar-sdist
 	cd tmp/$(SDIST_FOLDER) && $(SDIST_INIT) && $(TEST) capataz:capataz-test
 
 format: $(BRITTANY_BIN) $(STYLISH_BIN) ## Normalize style of source files
-	find . -maxdepth 1 -name "*.hs" -exec $(BRITTANY) -exec $(STYLISH) && git diff --exit-code
+	find . -name "*.hs" -exec $(BRITTANY) -exec $(STYLISH) && git diff --exit-code
 
 lint: $(HLINT_BIN) ## Execute linter
 	$(HLINT_BIN) $(HASKELL_FILES)

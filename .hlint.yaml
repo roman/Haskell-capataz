@@ -56,9 +56,9 @@
 - group: {name: generalise, enabled: true}
 
 # Ignore some builtin hints
-- ignore: {name: Reduce duplication, within: Control.Concurrent.SupervisorTest}
+- ignore: {name: Reduce duplication, within: Control.Concurrent.CapatazTest}
 - ignore: {name: Use String}
-- ignore: {name: Use const, within: Control.Concurrent.Internal.Supervisor.Core.terminateChild}
+- ignore: {name: Use const, within: Control.Concurrent.Internal.Capataz.Core.terminateWorker}
 # - ignore: {name: Use const, within: SpecialModule} # Only within certain modules
 
 # Define some custom infix operators

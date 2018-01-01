@@ -261,7 +261,7 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
           Just allEventsAssertion -> do
             events <- reverse <$> readIORef accRef
             assertBool
-              (  "On AFTER-TEST, expected all events to match predicate, but didn't ("
+              ( "On AFTER-TEST, expected all events to match predicate, but didn't ("
               <> show (length events)
               <> " events tried)\n"
               <> ppShow (zip ([0 ..] :: [Int]) events)
@@ -271,23 +271,27 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
   -- Utility functions that runs the readEventLoop function with a timeout
   -- of a second, this way we can guarantee assertions are met without having
   -- to add @threadDelays@ to the test execution
-  runAssertions stageName (eventStream, accRef) pendingCountVar assertions capataz = do
-    raceResult <- race (threadDelay 1000100)
-                       (readEventLoop eventStream pendingCountVar assertions)
-    case raceResult of
-      Left _ -> do
-        events       <- reverse <$> readIORef accRef
-        pendingCount <- readIORef pendingCountVar
-        void $ SUT.teardown capataz
-        assertFailure
-          (  "On " <> stageName <> " stage, expected all assertions to match, but didn't ("
-          <> show pendingCount
-          <> " assertions remaining, "
-          <> show (length events)
-          <> " events tried)\n"
-          <> ppShow (zip ([0 ..] :: [Int]) events)
-          )
-      Right _ -> return ()
+  runAssertions stageName (eventStream, accRef) pendingCountVar assertions capataz
+    = do
+      raceResult <- race
+        (threadDelay 1000100)
+        (readEventLoop eventStream pendingCountVar assertions)
+      case raceResult of
+        Left _ -> do
+          events       <- reverse <$> readIORef accRef
+          pendingCount <- readIORef pendingCountVar
+          void $ SUT.teardown capataz
+          assertFailure
+            (  "On "
+            <> stageName
+            <> " stage, expected all assertions to match, but didn't ("
+            <> show pendingCount
+            <> " assertions remaining, "
+            <> show (length events)
+            <> " events tried)\n"
+            <> ppShow (zip ([0 ..] :: [Int]) events)
+            )
+        Right _ -> return ()
 
 
   -- Sub-routine that accumulates all events that have happened in the Capataz

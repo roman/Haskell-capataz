@@ -16,7 +16,7 @@ BIN_DIR:=./out/bin
 DIST_DIR:=$$(stack path --dist-dir)
 SDIST_TAR:=$$(find $(DIST_DIR) -name "*.tar.gz" | tail -1)
 SDIST_FOLDER:=$$(basename $(SDIST_TAR) .tar.gz)
-SDIST_INIT:=stack init --force --omit-packages
+SDIST_INIT:=stack init --force
 
 TOOLS_DIR=./tools/bin
 BRITTANY_BIN:=$(TOOLS_DIR)/brittany
@@ -32,6 +32,7 @@ STYLISH=$(STYLISH_BIN) -i {} \;
 HLINT=$(HLINT_BIN) --refactor --refactor-options -i {} \;
 
 STACK:=stack --resolver $(RESOLVER) --install-ghc --local-bin-path ./target/bin
+NIGHTLY_STACK:=stack --resolver nightly --install-ghc
 TOOLS_STACK:=stack --stack-yaml .tools.stack.yaml --install-ghc --local-bin-path $(TOOLS_DIR)
 
 ################################################################################
@@ -74,7 +75,7 @@ test: $(EXAMPLE1_BIN) ## Execute test suites
 
 sdist: ## Build a release
 	@mkdir -p target
-	stack sdist . --pvp-bounds both
+	stack --resolver nightly sdist . --pvp-bounds both
 	cp $(SDIST_TAR) target
 
 untar-sdist: sdist
@@ -84,7 +85,7 @@ untar-sdist: sdist
 	mv $(SDIST_FOLDER) tmp
 
 test-sdist: untar-sdist
-	cd tmp/$(SDIST_FOLDER) && $(SDIST_INIT) && $(STACK) test capataz:capataz-test
+	cd tmp/$(SDIST_FOLDER) && $(SDIST_INIT) && $(NIGHTLY_STACK) test capataz:capataz-test
 
 format: $(BRITTANY_BIN) $(STYLISH_BIN) ## Normalize style of source files
 	$(FIND_HASKELL_SOURCES) -exec $(BRITTANY) -exec $(STYLISH) && git diff --exit-code

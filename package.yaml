@@ -1,8 +1,27 @@
 name: capataz
 version: '0.0.0.0'
-category: Concurrency
+synopsis: OTP-like supervision trees in Haskell
+description: |
+  `capataz` enhances the reliability of your concurrent applications by offering
+  supervision of green threads that run in your application.
+
+  Advantages over standard library:
+
+  * Links related long-living processes together under a common capataz
+    supervisor, with restart/shutdown order
+
+  * Set restart strategies (Permanent, Transient, Temporary) on `IO`
+    sub-routines on a granular level
+
+  * Set restart strategies on a pool of long-living worker threads (AllForOne,
+    OneForOne)
+
+  * Complete telemetry on the sub-routine lifecycle of your application (start,
+    error, restarts, shutdown)
+
+category: Control, Concurrency
 author: Roman Gonzalez
-maintainer: romanandreg@gmail.com
+maintainer: capataz@roman-gonzalez.info
 copyright: © 2018 Roman Gonzalez
 license: MIT
 license-file: LICENSE
@@ -47,7 +66,6 @@ tests:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    - -O2
     dependencies:
     - tasty
     - tasty-hunit

@@ -9,7 +9,8 @@
 
 RESOLVER ?= $(shell cat stack.yaml | grep -v '\#' | grep resolver | awk '{print $$2}')
 
-HASKELL_FILES:=$(find . -not -path '*.stack-work*' -name "*.hs" | grep 'src\|test')
+FIND_HASKELL_SOURCES=find . -name "*.hs" -not -path '*.stack-work*'
+HASKELL_FILES:=$(shell $(FIND_HASKELL_SOURCES) | grep 'src\|test')
 
 BIN_DIR:=./out/bin
 DIST_DIR:=$$(stack path --dist-dir)
@@ -68,7 +69,6 @@ $(EXAMPLE2_BIN) : $(EXAMPLE1_BIN)
 
 build: $(EXAMPLE1_BIN)  ## Build library and example binaries
 
-
 test: $(EXAMPLE1_BIN) ## Execute test suites
 	$(STACK) test
 
@@ -87,10 +87,10 @@ test_sdist: untar-sdist
 	cd tmp/$(SDIST_FOLDER) && $(SDIST_INIT) && $(TEST) capataz:capataz-test
 
 format: $(BRITTANY_BIN) $(STYLISH_BIN) ## Normalize style of source files
-	find . -name "*.hs" -not -path '*.stack-work*' -exec $(BRITTANY) -exec $(STYLISH) && git diff --exit-code
+	$(FIND_HASKELL_SOURCES) -exec $(BRITTANY) -exec $(STYLISH) && git diff --exit-code
 
 lint: $(HLINT_BIN) ## Execute linter
-	$(HLINT_BIN) $$(find . -name "*.hs" -not -path '*.stack-work*' | grep 'src\|test')
+	$(HLINT_BIN) $$($(FIND_HASKELL_SOURCES))
 
 repl: $(PPSH_BIN) ## Start project's repl
 	@chmod go-w -R .stack-work

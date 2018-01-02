@@ -92,7 +92,7 @@ dependencies:
 
 [![Build Status](https://travis-ci.org/roman/Haskell-capataz.svg?branch=master)](https://travis-ci.org/roman/Haskell-capataz)
 [![Github](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.0.0.1.svg)](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.0.0.1.svg)
-[![Hackage Dependencies](https://img.shields.io/hackage-deps/v/capataz.svg)](https://img.shields.io/hackage/v/capataz.svg)
+[![Hackage Dependencies](https://img.shields.io/hackage-deps/v/capataz.svg)](http://packdeps.haskellers.com/feed?needle=capataz)
 
 Follow the [developer guidelines](https://romanandreg.gitbooks.io/capataz/content/developer-guidelines.html)
 

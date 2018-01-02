@@ -85,7 +85,7 @@ untar-sdist: sdist
 	mv $(SDIST_FOLDER) tmp
 
 test-sdist: untar-sdist
-	cd tmp/$(SDIST_FOLDER) && $(SDIST_INIT) && $(NIGHTLY_STACK) test capataz:capataz-test
+	cd tmp/$(SDIST_FOLDER) && $(NIGHTLY_STACK) init --force && $(NIGHTLY_STACK) build --test --bench --haddock --no-run-benchmarks
 
 format: $(BRITTANY_BIN) $(STYLISH_BIN) ## Normalize style of source files
 	$(FIND_HASKELL_SOURCES) -exec $(BRITTANY) -exec $(STYLISH) && git diff --exit-code

@@ -16,7 +16,7 @@ BIN_DIR:=./out/bin
 DIST_DIR:=$$(stack path --dist-dir)
 SDIST_TAR:=$$(find $(DIST_DIR) -name "*.tar.gz" | tail -1)
 SDIST_FOLDER:=$$(basename $(SDIST_TAR) .tar.gz)
-SDIST_INIT:=$$(stack init --force)
+SDIST_INIT:=stack init --force --omit-packages
 
 TOOLS_DIR=./tools/bin
 BRITTANY_BIN:=$(TOOLS_DIR)/brittany
@@ -70,7 +70,7 @@ $(EXAMPLE2_BIN) : $(EXAMPLE1_BIN)
 build: $(EXAMPLE1_BIN)  ## Build library and example binaries
 
 test: $(EXAMPLE1_BIN) ## Execute test suites
-	$(STACK) test
+	$(STACK) test --dump-logs
 
 sdist: ## Build a release
 	@mkdir -p target
@@ -83,8 +83,8 @@ untar-sdist: sdist
 	@rm -rf tmp/$(SDIST_FOLDER) || true
 	mv $(SDIST_FOLDER) tmp
 
-test_sdist: untar-sdist
-	cd tmp/$(SDIST_FOLDER) && $(SDIST_INIT) && $(TEST) capataz:capataz-test
+test-sdist: untar-sdist
+	cd tmp/$(SDIST_FOLDER) && $(SDIST_INIT) && $(STACK) test capataz:capataz-test
 
 format: $(BRITTANY_BIN) $(STYLISH_BIN) ## Normalize style of source files
 	$(FIND_HASKELL_SOURCES) -exec $(BRITTANY) -exec $(STYLISH) && git diff --exit-code

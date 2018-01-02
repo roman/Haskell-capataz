@@ -44,7 +44,7 @@ import qualified Turtle
 
 -- (0)
 newtype Cli =
-  Cli { procNumber :: !Int }
+  Cli { procNumber :: Int }
   deriving (Generic, Show)
 
 instance ParseRecord Cli

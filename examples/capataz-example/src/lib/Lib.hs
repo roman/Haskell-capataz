@@ -17,7 +17,7 @@ import qualified System.Random         as Random
 import qualified Turtle
 
 newtype Cli =
-  Cli { procNumber :: !Int }
+  Cli { procNumber :: Int }
   deriving (Generic, Show)
 
 instance ParseRecord Cli

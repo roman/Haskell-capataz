@@ -7,16 +7,17 @@
 ################################################################################
 ## VARIABLE
 
+PROJECT_VERSION:=$(shell cat package.yaml | grep -v '\#' | grep version | awk '{print $$2}' | sed -e "s;'\(.*\)';\1;")
 RESOLVER ?= $(shell cat stack.yaml | grep -v '\#' | grep resolver | awk '{print $$2}')
 
 FIND_HASKELL_SOURCES=find . -name "*.hs" -not -path '*.stack-work*'
 HASKELL_FILES:=$(shell $(FIND_HASKELL_SOURCES) | grep 'src\|test')
 
 BIN_DIR:=./out/bin
-DIST_DIR:=$$(stack path --dist-dir)
-SDIST_TAR:=$$(find $(DIST_DIR) -name "*.tar.gz" | tail -1)
-SDIST_FOLDER:=$$(basename $(SDIST_TAR) .tar.gz)
-SDIST_INIT:=stack init --force
+
+STACK_DIST_DIR:=$(shell stack path --dist-dir)
+SDIST_DIR_NAME:=capataz-$(PROJECT_VERSION)
+INTERNAL_SDIST_TAR:=$(STACK_DIST_DIR)/$(SDIST_DIR_NAME).tar.gz
 
 TOOLS_DIR=./tools/bin
 BRITTANY_BIN:=$(TOOLS_DIR)/brittany
@@ -76,16 +77,16 @@ test: $(EXAMPLE1_BIN) ## Execute test suites
 sdist: clean ## Build a release
 	@mkdir -p target
 	$(NIGHTLY_STACK) sdist . --pvp-bounds both
-	cp $(SDIST_TAR) target
+	cp $(INTERNAL_SDIST_TAR) target
 
 untar-sdist: sdist
 	@mkdir -p tmp
-	tar xzf $(SDIST_TAR)
-	@rm -rf tmp/$(SDIST_FOLDER) || true
-	mv $(SDIST_FOLDER) tmp
+	tar xzf $(INTERNAL_SDIST_TAR)
+	@rm -rf tmp/$(SDIST_DIR_NAME) || true
+	mv $(SDIST_DIR_NAME) tmp
 
 test-sdist: untar-sdist
-	cd tmp/$(SDIST_FOLDER) && $(NIGHTLY_STACK) init --force && $(NIGHTLY_STACK) build --test --bench --haddock --no-run-benchmarks
+	cd tmp/$(SDIST_DIR_NAME) && $(NIGHTLY_STACK) init --force && $(NIGHTLY_STACK) build --test --bench --haddock --no-run-benchmarks
 
 format: $(BRITTANY_BIN) $(STYLISH_BIN) ## Normalize style of source files
 	$(FIND_HASKELL_SOURCES) -exec $(BRITTANY) -exec $(STYLISH) && git diff --exit-code

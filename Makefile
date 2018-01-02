@@ -73,9 +73,9 @@ build: $(EXAMPLE1_BIN)  ## Build library and example binaries
 test: $(EXAMPLE1_BIN) ## Execute test suites
 	$(STACK) test --dump-logs
 
-sdist: ## Build a release
+sdist: clean ## Build a release
 	@mkdir -p target
-	stack --resolver nightly sdist . --pvp-bounds both
+	$(NIGHTLY_STACK) sdist . --pvp-bounds both
 	cp $(SDIST_TAR) target
 
 untar-sdist: sdist
@@ -99,7 +99,9 @@ repl: $(PPSH_BIN) ## Start project's repl
 	stack ghci
 
 clean: ## Clean built artifacts
-	rm $(BIN_DIR)/*
+	rm -f $(BIN_DIR)/*
+	rm -f target/*
+	rm -rf tmp/*
 	stack clean
 
 dev-setup: .make/setup_done ## Install development dependencies

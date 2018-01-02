@@ -1,27 +1,27 @@
 # Basic Tutorial using Unix Processes
 
-In this (contrived) tutorial, we will build a small CLI app that spawns processes through Haskell's Process API, and keep our program running smoothly despite having another thread killing those processes using Unix Signals.
+In this tutorial, we will build a small CLI application that spawns processes through Haskell's Unix Process API. We will keep all our threads running smoothly despite having one of the threads killing the spawned Unix processes through Unix `SIGTERM` signals.
 
-To get started, we are going to implement our CLI program without the capataz library, and we'll add capataz as we work on this.
+We will implement two (2) different versions of our CLI program, one using standard Haskell threading utilities, and another using the Capataz library.
 
-For this tutorial, we assume the reader is familiar with the following:
+For this tutorial, we assume the reader is familiar with:
 
 * [GHC Extensions](https://downloads.haskell.org/~ghc/8.2.2/docs/html/users_guide/glasgow_exts.html)
 * [Stack](https://docs.haskellstack.org/en/stable/README/) projects
 * [OptParse](https://hackage.haskell.org/package/optparse-generic) for CLI programs
 * [Haskell concurrency](http://chimera.labs.oreilly.com/books/1230000000929/pt02.html) (threads and STM)
 
-If you are not familiar with the topics above, we recommend following the links listed.
+If you are not familiar with the topics above, we recommend following along and finding pertinent info from the links provided.
 
 ## Summary of what our program will do
 
-We are going to implement a CLI program that spawns a given amount of processes that executes a bash script that prints a number and increments it in a recurring fashion. Our Haskell program will also run a Haskell thread that will kill one of the many bash script executions.
+Our CLI program will receive an input parameter `procNumber` that will be used to spawn some green threads, each of them generating a Unix process. Each Unix process executes a simple bash script that echoes a number and increments it in an infinite while loop. Our Haskell program will also run a Haskell thread that will kill one of the many bash script executions.
 
-You can find the code for this tutorial in the [`examples` directory](https://github.com/roman/Haskell-capataz/tree/examples/examples) of the project's repository.
+You can find the code for this tutorial in the [`examples`](https://github.com/roman/Haskell-capataz/tree/examples/examples) directory of the project's Github repository.
 
 ## Setting up the stage - A trivial library for Processes
 
-We are going to have a `Lib` module that contains utility functions to spawn and kill unix processes, first the header:
+Let's start by explaining the `Lib` module; it contains utility functions to spawn and kill Unix processes, first the header:
 
 ```haskell
 {-# LANGUAGE DataKinds         #-}
@@ -56,7 +56,7 @@ data SimpleProcess =
                 , waitProcess      :: !(IO ExitCode)
                 }
 
--- (2)
+-- (1)
 spawnSimpleProcess :: Text -> [Text] -> IO SimpleProcess
 spawnSimpleProcess program args = do
   let processSpec = (Process.proc (T.unpack program) (fmap T.unpack args))
@@ -81,13 +81,11 @@ spawnSimpleProcess program args = do
   return SimpleProcess {readStdOut , terminateProcess , waitProcess }
 ```
 
-`(0)` First, we have a `Cli` record that we use to gather values for our CLI program. Using the [optparse-generic](https://hackage.haskell.org/package/optparse-generic) library, this becomes a trivial affair. We add an instance for `Generic` and `ParseRecord`.
+`(0)` We have a `Cli` record that we use to gather values for our CLI program. Using the [optparse-generic](https://hackage.haskell.org/package/optparse-generic) library, this becomes a trivial affair. We make this work by adding an instance for `Generic` and `ParseRecord`.
 
-`(1)` Next, we create a record that will contain all the logic to read `stdout` and to terminate or wait for a process. This utility record reduces the scope around of the things we could do with the Unix Process Haskell API.
+`(1)` We create a `SimpleProcess` record. This record contains the logic to read the `stdout` of the spawned process and provides sub-routines  for _terminating_ or _waiting_ for termination of the Unix process. This utility record limits the scope of the Haskell Unix process API to our small use case.
 
-`(2)` This function creates a `SimpleProcess` record, it translates the vast Haskell Process API into something more specific and digestable.
-
-Next, let's start by showcasing an `IO` sub-routine that spawns a UNIX process and reads its stdout.
+Next, we implement the function that will spawn a Unix process that performs an `echo` of numbers from 1 to infinity in bash:
 
 ```haskell
 spawnNumbersProcess
@@ -105,10 +103,10 @@ spawnNumbersProcess writeNumber = do
         ]
 
   let loop = do
-        -- read number and transform it into a number, this function returns
-        -- an Either where Right value is a an stdout line, and Left value is
-        -- an exit code
-
+        -- read a string from stdout and transform it into a number, this sub-routine
+        -- returns an Either where the Right value is a an stdout line, and the
+        -- Left value is an exit code, in case the exit code is not a success, finish
+        -- with an exception
         case eInput of
           Left exitCode
             | exitCode == ExitSuccess -> return ()
@@ -125,7 +123,7 @@ spawnNumbersProcess writeNumber = do
   loop `finally` terminateProcess proc'
 ```
 
-Now, let's have another `IO` sub-routine that lists processes pids, and kills on of them randomly. We use the [`Turtle` library](https://hackage.haskell.org/package/turtle) to run commands, we use a single function (`procStrict`) that returns the stdout and `exitCode` of a process.
+Now, let's have another `IO` sub-routine that lists Unix processes PIDs and picks at random one of them to send a `SIGTERM` signal. We use the [`Turtle` library](https://hackage.haskell.org/package/turtle) to run bash commands, we use the function (`procStrict`) which returns the `stdout` and `exitCode` of a process.
 
 ```haskell
 processKiller
@@ -152,7 +150,7 @@ processKiller processName = do
 
 ## Example 1 - Running program without supervision
 
-The way we implement a concurrent application using the previous functions would be something like the following:
+Once we have the API that spawns Unix processes, we implement a concurrent application that generates Haskell threads and calls this API; we build each thread using the standard [async](https://hackage.haskell.org/package/async) package:
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
@@ -180,19 +178,21 @@ main = do
   wait killerAsync `finally` mapM_ cancel asyncList
 ```
 
-`(0)` We start by removing the default `Prelude` and use the batteries included [`protolude`](https://hackage.haskell.org/package/protolude) library, this provides most of the used functions from Haskell and some extra useful libraries
+`(0)` We start by removing the default `Prelude` and use the batteries included [`protolude`](https://hackage.haskell.org/package/protolude) library, this provides most of the used functions from Haskell and some extra useful libraries.
 
-`(1)` We use the [`optparse-generic`](https://hackage.haskell.org/package/optparse-generic) library to get a quick CLI optparser that provides us with the number of processes to run
+`(1)` We use the [`optparse-generic`](https://hackage.haskell.org/package/optparse-generic) library to get a quick CLI optparser that provides us with the number of processes to run.
 
-`(2)` We spawn an [async](https://hackage.haskell.org/package/async) (thread) where each of them is going to execute the `spawnProcessNumber` sub-routine
+`(2)` We spawn an [async](https://hackage.haskell.org/package/async) (thread) where each of them is going to execute the `spawnProcessNumber` sub-routine.
 
-`(3)` We spawn another thread that kills Unix processes
+`(3)` We spawn another thread that kills Unix processes.
 
-When executed, this program is going to fail silently, removing the output of each of the threads that fail from the execution of the `killerNumberProcess` sub-routine. The following example will show a similar project that uses our API and adds reliability to the thread execution by restarting threads in case of failure from external factors.
+When we run the previous program, it will fail slowly, removing the output of each of the threads that stop working after receiving an asynchronous exception. The Operative System throws this exception, but it originates from the execution of the `killerNumberProcess` sub-routine which sends a `SIGTERM` signal to the spawned process on each of the running threads.
+
+The next example will show a project that uses the same functions, but relies on our API, which restarts threads in case of failure from external factors (in this case a `SIGTERM` Unix signal).
 
 ## Example 2 - Running program with supervision
 
-Now, let's have a capataz that monitors both a group of threads that execute the `spawnProcessNumber` sub-routine and also another thread that kills process randomly.
+Now, instead of using async, let's build the Haskell threads using a capataz instance that monitors both a group of threads that execute the `spawnProcessNumber` sub-routine and, a thread that terminates particular Unix process in a random fashion.
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
@@ -250,37 +250,37 @@ main = do
     (teardown capataz >>= print) -- (8)
 ```
 
-We start the `main` sub-routine building a capataz using the `forkCapataz` function.
+We start the `main` sub-routine building a capataz instance, using the `forkCapataz` function.
 
-`(0)` We start by importing a lot of symbols from our Capataz library; when using this library, we need to provide many settings that will define the restart mechanisms for the threads we want to keep running despite errors
+`(0)` We import many symbols from our Capataz library; we need to provide some settings that will determine the restart mechanisms for the threads we want to keep running (despite any errors that could happen).
 
-`(1)` its first argument is a set of options for the capataz, in this example, we are overwriting some of them
+`(1)` its first argument is a set of options for the capataz instance, in this example, we are overwriting some default values.
 
-`(2)` One of the options we overwrite is the `capatazRestartStrategy`. Currently, the possible values may be:
+`(2)` One of the options we overwrite is the `capatazRestartStrategy`. Some of the values may be:
 
 * `OneForOne` -- if a monitored sub-routine fails, the capataz will only restart the failing one
 
 * `AllForOne` -- if a monitored sub-routine fails, the capataz will restart all sub-routines that are currently monitoring
 
-`(3)` The `notifyEvent` function will emit a `CapatazEvent` record that emits events that indicate the current status of the capataz, in this simple example, we are using the `pPrint` (pretty print) function to debug it.
+`(3)` We set the `notifyEvent` function, which emits `CapatazEvent` records. They indicate the current status of the capataz instance; in this simple example, we are using the `pPrint` (pretty print) function to debug the capataz instance execution.
 
-We continue the example by spawning a few worker sub-routines, for this, we use the `forkWorker` function.
+We continue the example by spawning a few _workers_ (a.k.a. the supervised `IO ()` sub-routines). For this, we use the `forkWorker` function.
 
-`(4)` As well as the `forkCapataz` function, `forkWorker` receives an options record, in this example, we are setting an explicit name for the workers.
+`(4)` As well as the `forkCapataz` function, `forkWorker` receives an options record. In this example, we are setting an explicit name for the workers.
 
-`(5)` We are also specifying the `workerRestartStrategy`; this can be:
+`(5)` We are also specifying the `workerRestartStrategy` which may be:
 
-* `Permanent` -- The sub-routine will _always_ get restarted, even it finishes without any errors. This strategy is ideal to monitor servers.
+* `Permanent` -- The sub-routine will _always_ get restarted, even it finishes without any errors. This strategy is ideal to monitor long-running servers.
 
-* `Transient` -- The sub-routine gets restarted, if and only if it fails, if it completes without any errors, the capataz will drop the sub-routine. This strategy is ideal to monitor one time executions.
+* `Transient` -- The sub-routine gets restarted, if and only if it fails with an error, if it completes without any errors, the capataz instance will drop the sub-routine from its supervision. This strategy is ideal to monitor one-time execution sub-routines.
 
-* `Temporary` -- The sub-routine will not be restarted, even in the cause of failure, used for non-important executions.
+* `Temporary` -- The sub-routine will not be restarted, even in the cause of failure, used for non-important sub-routines.
 
-`(6)` Then, we pass an `IO` sub-routine to execute in a monitored thread (in this particular example, our number process spawner). This approach is no different from using `forkIO`. Note the capataz created on step (1) is the last parameter to the `forkWorker` function.
+`(6)` We pass our `spawnProcessNumber` sub-routine to execute it in a supervised thread. This approach is no different from using a simple `forkIO`. Note the capataz instance created in step `(1)` is the last parameter to the `forkWorker` function.
 
-`(7)` We can convert the capataz sub-routine into an [`async`](https://hackage.haskell.org/package/async)
+`(7)` We can convert the capataz sub-routine into an [`async`](https://hackage.haskell.org/package/async) to join the supervisor thread to the main thread.
 
-`(8)` We made sure that we cleaned up the capataz and supervised sub-routine threads using the [`teardown`](https://hackage.haskell.org/package/teardown) API.
+`(8)` We make sure that we cleaned up the capataz instance and supervised sub-routine threads using the [`teardown`](https://hackage.haskell.org/package/teardown) API.
 
 ## Try it out!
 

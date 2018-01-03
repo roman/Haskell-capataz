@@ -7,34 +7,37 @@ cache:
   - $HOME/.ghc
   - $HOME/.stack
 
+env:
+- STACK_FLAGS=--system-ghc
+
 matrix:
   include:
   - env: BUILD=nightly
-    compiler: "GHC-8.2.1"
+    ghc: 8.2.2
     addons: {apt: {packages: [libgmp-dev]}}
 
   - env: BUILD=lts-10
-    compiler: "GHC-8.2.1"
+    ghc: 8.2.2
     addons: {apt: {packages: [libgmp-dev]}}
 
   - env: BUILD=lts-9
-    compiler: "GHC-8.0.2"
+    ghc: 8.0.2
     addons: {apt: {packages: [libgmp-dev]}}
 
   - env: BUILD=lts-8
-    compiler: "GHC-8.0.2"
+    ghc: 8.0.2
     addons: {apt: {packages: [libgmp-dev]}}
 
   - env: BUILD=lint
-    compiler: "GHC-8.2.1"
+    ghc: 8.2.2
     addons: {apt: {packages: [libgmp-dev]}}
 
   - env: BUILD=pretty
-    compiler: "GHC-8.2.1"
+    ghc: 8.2.2
     addons: {apt: {packages: [libgmp-dev]}}
 
   - env: BUILD=sdist
-    compiler: "GHC-8.2.1"
+    ghc: 8.2.2
     addons: {apt: {packages: [libgmp-dev]}}
 
 before_install:
@@ -48,7 +51,7 @@ before_install:
 install:
 - |
   set -ex
-  stack setup --upgrade-cabal && stack install --pedantic
+  stack --system-ghc setup --upgrade-cabal && stack --system-ghc install --pedantic
   set +ex
 
 script:

@@ -57,10 +57,10 @@ such initiatives.
 `async` is a fabulous library that allows Applicative composition of small
 asynchronous sub-routines into bigger ones and link errors between them. Given
 this, `async` fits the bill perfectly for small operations that happen
-concurrently, not necessarily for long living threads. This library attempts not
-to replace async's forte, but rather provides ways to make threads reliable in
-situations where the usage of `async` or `forkIO` would give you the same
-outcome.
+concurrently, not necessarily for long living threads that need to be restarted.
+This library attempts not to replace async's forte, but rather provides other
+benefits not found in `async`, like automatically restarting threads with a given
+recipe under error situations.
 
 ## Documentation
 

@@ -51,7 +51,20 @@ before_install:
 install:
 - |
   set -ex
-  stack --system-ghc setup --upgrade-cabal && stack --system-ghc install --pedantic
+  case "$BUILD" in
+    lts-*)
+    stack --resolver $BUILD --system-ghc setup --upgrade-cabal && stack --system-ghc install --pedantic
+    ;;
+    nightly)
+    stack --resolver $BUILD --system-ghc setup --upgrade-cabal && stack --system-ghc install --pedantic
+    ;;
+    sdist)
+    stack --resolver nightly --system-ghc setup --upgrade-cabal && stack --system-ghc install --pedantic
+    ;;
+    *)
+    stack --system-ghc setup --upgrade-cabal && stack --system-ghc install --pedantic
+    ;;
+  esac
   set +ex
 
 script:

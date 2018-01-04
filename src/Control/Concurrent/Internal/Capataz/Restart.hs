@@ -12,12 +12,13 @@ import Protolude
 
 import           Control.Concurrent.Internal.Capataz.Types
 import           Control.Concurrent.Internal.Capataz.Util
-    ( appendWorkerToMap
+    ( appendProcessToMap
     , fetchWorkerEnv
-    , readWorkerMap
+    , getProcessId
+    , readProcessMap
     , removeWorkerFromMap
-    , resetWorkerMap
-    , sortWorkersByTerminationOrder
+    , resetProcessMap
+    , sortProcessesByTerminationOrder
     )
 import qualified Control.Concurrent.Internal.Capataz.Worker as Worker
 import qualified Data.HashMap.Strict                        as HashMap
@@ -50,12 +51,12 @@ execCapatazRestartStrategy :: CapatazEnv -> WorkerEnv -> Int -> IO ()
 execCapatazRestartStrategy capatazEnv@CapatazEnv { capatazRestartStrategy } WorkerEnv { workerId, workerSpec } workerRestartCount
   = case capatazRestartStrategy of
     AllForOne -> do
-      newWorkers <- restartWorkers capatazEnv workerId workerRestartCount
-      let newWorkersMap =
-            newWorkers
-              & fmap (\worker@Worker { workerId = cid } -> (cid, worker))
+      newProcessList <- restartWorkers capatazEnv workerId workerRestartCount
+      let newProcessMap =
+            newProcessList
+              & fmap (\process -> (getProcessId process, process))
               & HashMap.fromList
-      resetWorkerMap capatazEnv (const newWorkersMap)
+      resetProcessMap capatazEnv (const newProcessMap)
 
     OneForOne -> do
       removeWorkerFromMap capatazEnv workerId
@@ -63,7 +64,7 @@ execCapatazRestartStrategy capatazEnv@CapatazEnv { capatazRestartStrategy } Work
                                  workerSpec
                                  workerId
                                  workerRestartCount
-      appendWorkerToMap capatazEnv newWorker
+      appendProcessToMap capatazEnv (WorkerProcess newWorker)
 
 -- | Executes a restart action returned from the invokation of "calcRestartAction"
 execRestartAction :: CapatazEnv -> WorkerEnv -> Int -> IO ()
@@ -94,24 +95,29 @@ execRestartAction capatazEnv@CapatazEnv { onCapatazIntensityReached } workerEnv@
 -- | Restarts _all_ the worker green thread of a Capataz, invoked when one
 -- worker green thread fails and causes sibling worker threads to get restarted
 -- as well
-restartWorkers :: CapatazEnv -> WorkerId -> RestartCount -> IO [Worker]
-restartWorkers capatazEnv@CapatazEnv { capatazWorkerTerminationOrder } failingWorkerId restartCount
+restartWorkers :: CapatazEnv -> WorkerId -> RestartCount -> IO [Process]
+restartWorkers capatazEnv@CapatazEnv { capatazProcessTerminationOrder } failingWorkerId restartCount
   = do
-    workerMap <- readWorkerMap capatazEnv
+    processMap <- readProcessMap capatazEnv
 
-    let workers =
-          sortWorkersByTerminationOrder capatazWorkerTerminationOrder workerMap
+    let processList = sortProcessesByTerminationOrder
+          capatazProcessTerminationOrder
+          processMap
 
-    newWorkers <- forM workers $ \worker@Worker { workerId, workerSpec } -> do
-      unless (failingWorkerId == workerId)
-        $ forceRestartWorker capatazEnv worker
+    newProcessList <- forM processList $ \process -> case process of
+      WorkerProcess worker@Worker { workerId, workerSpec } -> do
+        unless (failingWorkerId == workerId)
+          $ forceRestartWorker capatazEnv worker
 
-      let WorkerSpec { workerRestartStrategy } = workerSpec
-      case workerRestartStrategy of
-        Temporary -> return Nothing
-        _         -> Just <$> restartWorker capatazEnv workerSpec workerId restartCount
+        let WorkerSpec { workerRestartStrategy } = workerSpec
+        case workerRestartStrategy of
+          Temporary -> return Nothing
+          _ ->
+            (Just . WorkerProcess)
+              <$> restartWorker capatazEnv workerSpec workerId restartCount
+      _ -> panic "pending"
 
-    return $ catMaybes newWorkers
+    return $ catMaybes newProcessList
 
 -- | Sub-routine that is used when there is a restart request to a Worker caused
 -- by an "AllForOne" restart from a failing sibling worker.

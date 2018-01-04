@@ -32,55 +32,74 @@ getTidNumber tid = case T.words $ show tid of
 
 --------------------------------------------------------------------------------
 
+getProcessId :: Process -> ProcessId
+getProcessId process = case process of
+  WorkerProcess Worker { workerId } -> workerId
+  CapatazProcess Capataz { capatazRuntime } ->
+    let CapatazRuntime { capatazId } = capatazRuntime in capatazId
+
 -- | Fetches a "Worker" from the "Capataz" instance environment
-fetchWorker :: CapatazEnv -> WorkerId -> IO (Maybe Worker)
-fetchWorker CapatazEnv { capatazWorkerMap } workerId =
-  HashMap.lookup workerId <$> readIORef capatazWorkerMap
+fetchProcess :: CapatazEnv -> ProcessId -> IO (Maybe Process)
+fetchProcess CapatazEnv { capatazProcessMap } processId = do
+  processMap <- readIORef capatazProcessMap
+  case HashMap.lookup processId processMap of
+    Just process -> return $ Just process
+    _            -> return Nothing
 
 -- | Fetches a "WorkerEnv" from the "Capataz" instance environment
 fetchWorkerEnv :: CapatazEnv -> WorkerId -> IO (Maybe WorkerEnv)
-fetchWorkerEnv CapatazEnv { capatazWorkerMap } workerId =
-  ((workerToEnv <$>) . HashMap.lookup workerId) <$> readIORef capatazWorkerMap
+fetchWorkerEnv CapatazEnv { capatazProcessMap } workerId = do
+  processMap <- readIORef capatazProcessMap
+  case HashMap.lookup workerId processMap of
+    Nothing                     -> return Nothing
+    Just (WorkerProcess worker) -> return $ Just $ workerToEnv worker
+    Just _                      -> return Nothing
 
 -- | Appends a new "Worker" to the "Capataz" existing worker map.
-appendWorkerToMap :: CapatazEnv -> Worker -> IO ()
-appendWorkerToMap CapatazEnv { capatazWorkerMap } worker@Worker { workerId } =
-  atomicModifyIORef' capatazWorkerMap
-                     (\workerMap -> (appendWorker workerMap, ()))
-  where appendWorker = HashMap.alter (const $ Just worker) workerId
+appendProcessToMap :: CapatazEnv -> Process -> IO ()
+appendProcessToMap CapatazEnv { capatazProcessMap } process =
+  atomicModifyIORef' capatazProcessMap
+                     (\processMap -> (appendProcess processMap, ()))
+ where
+  appendProcess = HashMap.alter (const $ Just process) (getProcessId process)
 
 -- | Removes a "Worker" from the "Capataz" existing worker map.
 removeWorkerFromMap :: CapatazEnv -> WorkerId -> IO ()
-removeWorkerFromMap CapatazEnv { capatazWorkerMap } workerId =
+removeWorkerFromMap CapatazEnv { capatazProcessMap } workerId =
   atomicModifyIORef'
-    capatazWorkerMap
-    ( \workerMap -> maybe (workerMap, ())
-                          (const (HashMap.delete workerId workerMap, ()))
-                          (HashMap.lookup workerId workerMap)
+    capatazProcessMap
+    ( \processMap -> maybe (processMap, ())
+                           (const (HashMap.delete workerId processMap, ()))
+                           (HashMap.lookup workerId processMap)
     )
 
 -- | Function to modify a "Capataz" worker map using a pure function.
-resetWorkerMap :: CapatazEnv -> (WorkerMap -> WorkerMap) -> IO ()
-resetWorkerMap CapatazEnv { capatazWorkerMap } workerMapFn = atomicModifyIORef'
-  capatazWorkerMap
-  (\workerMap -> (workerMapFn workerMap, ()))
+resetProcessMap :: CapatazEnv -> (ProcessMap -> ProcessMap) -> IO ()
+resetProcessMap CapatazEnv { capatazProcessMap } processMapFn =
+  atomicModifyIORef' capatazProcessMap
+                     (\processMap -> (processMapFn processMap, ()))
 
 -- | Function to get a snapshot of the "Capataz"' worker map
-readWorkerMap :: CapatazEnv -> IO WorkerMap
-readWorkerMap CapatazEnv { capatazWorkerMap } = readIORef capatazWorkerMap
+readProcessMap :: CapatazEnv -> IO ProcessMap
+readProcessMap CapatazEnv { capatazProcessMap } = readIORef capatazProcessMap
 
--- | Returns all worker's of a "Capataz" by "WorkerTerminationOrder". This is
+-- | Returns all worker's of a "Capataz" by "ProcessTerminationOrder". This is
 -- used "AllForOne" restarts and shutdown operations.
-sortWorkersByTerminationOrder :: WorkerTerminationOrder -> WorkerMap -> [Worker]
-sortWorkersByTerminationOrder terminationOrder workerMap =
+sortProcessesByTerminationOrder
+  :: ProcessTerminationOrder -> ProcessMap -> [Process]
+sortProcessesByTerminationOrder terminationOrder processMap =
   case terminationOrder of
     OldestFirst -> workers
     NewestFirst -> reverse workers
  where
     -- NOTE: dissambiguates workerCreationTime field
-  workerCreationTime' Worker { workerCreationTime } = workerCreationTime
+  processCreationTime (WorkerProcess (Worker { workerCreationTime })) =
+    workerCreationTime
+  processCreationTime (CapatazProcess (Capataz { capatazRuntime })) =
+    let CapatazRuntime { capatazCreationTime } = capatazRuntime
+    in  capatazCreationTime
 
-  workers = sortBy (comparing workerCreationTime') (HashMap.elems workerMap)
+  workers = sortBy (comparing processCreationTime) (HashMap.elems processMap)
 
 --------------------------------------------------------------------------------
 

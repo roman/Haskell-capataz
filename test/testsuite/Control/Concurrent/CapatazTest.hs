@@ -216,7 +216,7 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
         [preSetupAssertion, postSetupAssertions, postTeardownAssertions]
       )
 
-    capataz <- SUT.forkCapataz $ (optionModFn SUT.defCapatazOptions)
+    capataz <- SUT.forkMainCapataz $ (optionModFn SUT.defCapatazOptions)
       { SUT.notifyEvent = trackEvent accRef eventStream
       }
 
@@ -370,17 +370,17 @@ tests
                 ]
               ]
               ( \supOptions -> supOptions
-                { SUT.capatazWorkerSpecList = [ SUT.defWorkerSpec
-                                                { SUT.workerName   = "A"
-                                                , SUT.workerAction = forever
-                                                  (threadDelay 10001000)
-                                                }
-                                              , SUT.defWorkerSpec
-                                                { SUT.workerName   = "B"
-                                                , SUT.workerAction = forever
-                                                  (threadDelay 10001000)
-                                                }
-                                              ]
+                { SUT.capatazProcessSpecList = [ SUT.defWorkerSpec
+                                                 { SUT.workerName   = "A"
+                                                 , SUT.workerAction = forever
+                                                   (threadDelay 10001000)
+                                                 }
+                                               , SUT.defWorkerSpec
+                                                 { SUT.workerName   = "B"
+                                                 , SUT.workerAction = forever
+                                                   (threadDelay 10001000)
+                                                 }
+                                               ]
                 }
               )
               (const $ return ())
@@ -1071,8 +1071,8 @@ tests
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy        = SUT.AllForOne
-                , SUT.capatazWorkerTerminationOrder = SUT.OldestFirst
+                { SUT.capatazRestartStrategy         = SUT.AllForOne
+                , SUT.capatazProcessTerminationOrder = SUT.OldestFirst
                 }
               )
               ( \capataz -> do
@@ -1112,8 +1112,8 @@ tests
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy        = SUT.AllForOne
-                , SUT.capatazWorkerTerminationOrder = SUT.OldestFirst
+                { SUT.capatazRestartStrategy         = SUT.AllForOne
+                , SUT.capatazProcessTerminationOrder = SUT.OldestFirst
                 }
               )
               ( \capataz -> do
@@ -1153,8 +1153,8 @@ tests
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy        = SUT.AllForOne
-                , SUT.capatazWorkerTerminationOrder = SUT.NewestFirst
+                { SUT.capatazRestartStrategy         = SUT.AllForOne
+                , SUT.capatazProcessTerminationOrder = SUT.NewestFirst
                 }
               )
               ( \capataz -> do
@@ -1192,8 +1192,8 @@ tests
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy        = SUT.AllForOne
-                , SUT.capatazWorkerTerminationOrder = SUT.OldestFirst
+                { SUT.capatazRestartStrategy         = SUT.AllForOne
+                , SUT.capatazProcessTerminationOrder = SUT.OldestFirst
                 }
               )
               ( \capataz -> do
@@ -1229,8 +1229,8 @@ tests
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy        = SUT.AllForOne
-                , SUT.capatazWorkerTerminationOrder = SUT.OldestFirst
+                { SUT.capatazRestartStrategy         = SUT.AllForOne
+                , SUT.capatazProcessTerminationOrder = SUT.OldestFirst
                 }
               )
               ( \capataz -> do

@@ -14,7 +14,7 @@ module Control.Concurrent.Capataz
 , WorkerOptions (..)
 , WorkerRestartStrategy (..)
 , WorkerSpec (..)
-, WorkerTerminationOrder (..)
+, ProcessTerminationOrder (..)
 , WorkerTerminationPolicy (..)
 , Capataz (..)
 , CapatazEvent (..)
@@ -26,7 +26,7 @@ module Control.Concurrent.Capataz
 , defCapatazOptions
 -- * Core functionality
 , forkWorker
-, forkCapataz
+, forkMainCapataz
 , terminateWorker
 -- * Utility functions
 , capatazToAsync
@@ -35,7 +35,8 @@ module Control.Concurrent.Capataz
 )
 where
 
-import Control.Concurrent.Internal.Capataz.Core  (forkCapataz, forkWorker, terminateWorker)
+import Control.Concurrent.Internal.Capataz.Core
+    (forkMainCapataz, forkWorker, terminateWorker)
 import Control.Concurrent.Internal.Capataz.Types
     ( CallbackType (..)
     , Capataz (..)
@@ -43,12 +44,12 @@ import Control.Concurrent.Internal.Capataz.Types
     , CapatazOptions (..)
     , CapatazRestartStrategy (..)
     , CapatazStatus (..)
+    , ProcessTerminationOrder (..)
     , WorkerAction
     , WorkerError (..)
     , WorkerOptions (..)
     , WorkerRestartStrategy (..)
     , WorkerSpec (..)
-    , WorkerTerminationOrder (..)
     , WorkerTerminationPolicy (..)
     , defCapatazOptions
     , defWorkerOptions

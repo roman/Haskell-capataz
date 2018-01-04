@@ -31,12 +31,12 @@ import qualified Control.Concurrent.Internal.Capataz.Worker  as Worker
 
 import Control.Concurrent.Internal.Capataz.Types
 import Control.Concurrent.Internal.Capataz.Util
-    ( appendWorkerToMap
+    ( appendProcessToMap
     , capatazToEnv
-    , fetchWorker
+    , fetchProcess
     , readCapatazStatus
     , readCapatazStatusSTM
-    , resetWorkerMap
+    , resetProcessMap
     , sendSyncControlMsg
     , workerOptionsToSpec
     , writeCapatazStatus
@@ -50,7 +50,7 @@ haltCapataz :: CapatazEnv -> IO ()
 haltCapataz env = do
   writeCapatazStatus      env                Halting
   Worker.terminateWorkers "capataz shutdown" env
-  resetWorkerMap          env                (const HashMap.empty)
+  resetProcessMap         env                (const HashMap.empty)
   writeCapatazStatus      env                Halted
 
 -- | Handles an event produced by one of the workers this capataz monitors
@@ -82,20 +82,19 @@ handleControlAction :: CapatazEnv -> ControlAction -> IO Bool
 handleControlAction env controlAction = case controlAction of
   ForkWorker { workerSpec, returnWorkerId } -> do
     worker@Worker { workerId } <- Worker.forkWorker env workerSpec Nothing
-    appendWorkerToMap env worker
+    appendProcessToMap env (WorkerProcess worker)
     returnWorkerId workerId
     return True
 
   TerminateWorker { terminationReason, workerId, notifyWorkerTermination } ->
     do
-      mWorker <- fetchWorker env workerId
-      case mWorker of
-        Nothing     -> return True
-        Just worker -> do
+      mProcess <- fetchProcess env workerId
+      case mProcess of
+        Just (WorkerProcess worker) -> do
           Worker.terminateWorker terminationReason env worker
-          -- removeWorkerFromMap env workerId
           notifyWorkerTermination
           return True
+        _ -> return True
 
   TerminateCapataz { notifyCapatazTermination } -> do
     haltCapataz env
@@ -171,17 +170,18 @@ runCapatazLoop unmask env@CapatazEnv { capatazId, capatazName, capatazStatusVar,
 -- | Builds a record that contains runtime values of a "Capataz" (id, queue, status, etc.)
 buildCapatazRuntime :: CapatazOptions -> IO CapatazRuntime
 buildCapatazRuntime capatazOptions = do
-  capatazId        <- UUID.nextRandom
-  capatazQueue     <- newTQueueIO
-  capatazStatusVar <- newTVarIO Initializing
-  capatazWorkerMap <- newIORef HashMap.empty
+  capatazId           <- UUID.nextRandom
+  capatazCreationTime <- getCurrentTime
+  capatazQueue        <- newTQueueIO
+  capatazStatusVar    <- newTVarIO Initializing
+  capatazProcessMap   <- newIORef HashMap.empty
   return CapatazRuntime {..}
 
 -- | Creates a Capataz record, which represents a supervision thread which
 -- monitors failure on worker threads defined in the "CapatazOptions" or worker
 -- threads that are created dynamically using "forkWorker".
-forkCapataz :: CapatazOptions -> IO Capataz
-forkCapataz capatazOptions@CapatazOptions { capatazName, capatazWorkerSpecList, notifyEvent }
+forkMainCapataz :: CapatazOptions -> IO Capataz
+forkMainCapataz capatazOptions@CapatazOptions { capatazName, capatazProcessSpecList, notifyEvent }
   = do
     capatazRuntime <- buildCapatazRuntime capatazOptions
 
@@ -191,10 +191,13 @@ forkCapataz capatazOptions@CapatazOptions { capatazName, capatazWorkerSpecList, 
       $ \unmask -> runCapatazLoop unmask capatazEnv
 
     forM_
-      capatazWorkerSpecList
-      ( \workerSpec -> do
-        worker <- Worker.forkWorker capatazEnv workerSpec Nothing
-        appendWorkerToMap capatazEnv worker
+      capatazProcessSpecList
+      ( \processSpec -> case processSpec of
+        WorkerProcessSpec workerSpec -> do
+          worker <- Worker.forkWorker capatazEnv workerSpec Nothing
+          appendProcessToMap capatazEnv (WorkerProcess worker)
+
+        CapatazProcessSpec _capatazOptions -> panic "pending"
       )
 
     writeCapatazStatus capatazEnv Running

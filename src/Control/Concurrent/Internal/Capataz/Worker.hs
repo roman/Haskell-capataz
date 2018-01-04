@@ -19,7 +19,7 @@ import qualified Data.UUID.V4 as UUID
 
 import Control.Concurrent.Internal.Capataz.Types
 import Control.Concurrent.Internal.Capataz.Util
-    (getTidNumber, readWorkerMap, sortWorkersByTerminationOrder)
+    (getTidNumber, readProcessMap, sortProcessesByTerminationOrder)
 
 -- | Internal functions that overwrites the GHC thread name, for increasing
 -- traceability on GHC internals
@@ -287,13 +287,14 @@ terminateWorker workerTerminationReason CapatazEnv { capatazId, capatazName, not
 -- | Internal sub-routine that terminates workers of a Capataz, used when a
 -- Capataz instance is terminated
 terminateWorkers :: Text -> CapatazEnv -> IO ()
-terminateWorkers terminationReason env@CapatazEnv { capatazName, capatazId, capatazWorkerTerminationOrder, notifyEvent }
+terminateWorkers terminationReason env@CapatazEnv { capatazName, capatazId, capatazProcessTerminationOrder, notifyEvent }
   = do
-    eventTime <- getCurrentTime
-    workerMap <- readWorkerMap env
+    eventTime  <- getCurrentTime
+    processMap <- readProcessMap env
 
-    let workers =
-          sortWorkersByTerminationOrder capatazWorkerTerminationOrder workerMap
+    let processList = sortProcessesByTerminationOrder
+          capatazProcessTerminationOrder
+          processMap
 
     notifyEvent WorkersTerminationStarted
       { capatazName
@@ -302,7 +303,10 @@ terminateWorkers terminationReason env@CapatazEnv { capatazName, capatazId, capa
       , eventTime
       }
 
-    forM_ workers (terminateWorker terminationReason env)
+    forM_ processList $ \process -> do
+      case process of
+        WorkerProcess worker -> terminateWorker terminationReason env worker
+        _                    -> panic "pending"
 
     notifyEvent WorkersTerminationFinished
       { capatazName

@@ -206,7 +206,7 @@ import Control.Concurrent.Capataz -- (0)
   , CapatazOptions(..)
   , WorkerRestartStrategy(..)
   , CapatazRestartStrategy(..)
-  , forkCapataz
+  , forkMainCapataz
   , forkWorker
   , defWorkerOptions
   , defCapatazOptions
@@ -223,7 +223,7 @@ main = do
   capataz <-
     --                (1)
     --                 |
-    forkCapataz defCapatazOptions { capatazName = "Example Capataz"
+    forkMainCapataz defCapatazOptions { capatazName = "Example Capataz"
                                   , capatazRestartStrategy = OneForOne -- (2)
                                   , notifyEvent = pPrint               -- (3)
                                   }
@@ -250,7 +250,7 @@ main = do
     (teardown capataz >>= print) -- (8)
 ```
 
-We start the `main` sub-routine building a capataz instance, using the `forkCapataz` function.
+We start the `main` sub-routine building a capataz instance, using the `forkMainCapataz` function.
 
 `(0)` We import many symbols from our Capataz library; we need to provide some settings that will determine the restart mechanisms for the threads we want to keep running (despite any errors that could happen).
 
@@ -266,7 +266,7 @@ We start the `main` sub-routine building a capataz instance, using the `forkCapa
 
 We continue the example by spawning a few _workers_ (a.k.a. the supervised `IO ()` sub-routines). For this, we use the `forkWorker` function.
 
-`(4)` As well as the `forkCapataz` function, `forkWorker` receives an options record. In this example, we are setting an explicit name for the workers.
+`(4)` As well as the `forkMainCapataz` function, `forkWorker` receives an options record. In this example, we are setting an explicit name for the workers.
 
 `(5)` We are also specifying the `workerRestartStrategy` which may be:
 

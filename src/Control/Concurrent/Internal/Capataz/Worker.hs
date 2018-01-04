@@ -303,7 +303,7 @@ terminateWorkers terminationReason env@CapatazEnv { capatazName, capatazId, capa
       , eventTime
       }
 
-    forM_ processList $ \process -> do
+    forM_ processList $ \process ->
       case process of
         WorkerProcess worker -> terminateWorker terminationReason env worker
         _                    -> panic "pending"

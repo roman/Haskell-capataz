@@ -93,9 +93,9 @@ sortProcessesByTerminationOrder terminationOrder processMap =
     NewestFirst -> reverse workers
  where
     -- NOTE: dissambiguates workerCreationTime field
-  processCreationTime (WorkerProcess (Worker { workerCreationTime })) =
+  processCreationTime (WorkerProcess Worker { workerCreationTime }) =
     workerCreationTime
-  processCreationTime (CapatazProcess (Capataz { capatazRuntime })) =
+  processCreationTime (CapatazProcess Capataz { capatazRuntime }) =
     let CapatazRuntime { capatazCreationTime } = capatazRuntime
     in  capatazCreationTime
 

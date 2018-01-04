@@ -370,16 +370,18 @@ tests
                 ]
               ]
               ( \supOptions -> supOptions
-                { SUT.capatazProcessSpecList = [ SUT.defWorkerSpec
-                                                 { SUT.workerName   = "A"
-                                                 , SUT.workerAction = forever
-                                                   (threadDelay 10001000)
-                                                 }
-                                               , SUT.defWorkerSpec
-                                                 { SUT.workerName   = "B"
-                                                 , SUT.workerAction = forever
-                                                   (threadDelay 10001000)
-                                                 }
+                { SUT.capatazProcessSpecList = [ SUT.WorkerProcessSpec
+                                                 $ SUT.defWorkerSpec
+                                                     { SUT.workerName = "A"
+                                                     , SUT.workerAction = forever
+                                                       (threadDelay 10001000)
+                                                     }
+                                               , SUT.WorkerProcessSpec
+                                                 $ SUT.defWorkerSpec
+                                                     { SUT.workerName = "B"
+                                                     , SUT.workerAction = forever
+                                                       (threadDelay 10001000)
+                                                     }
                                                ]
                 }
               )

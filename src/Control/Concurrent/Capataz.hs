@@ -21,6 +21,7 @@ module Control.Concurrent.Capataz
 , CapatazOptions (..)
 , CapatazRestartStrategy (..)
 , CapatazStatus (..)
+, ProcessSpec (..)
 , defWorkerOptions
 , defWorkerSpec
 , defCapatazOptions
@@ -44,6 +45,7 @@ import Control.Concurrent.Internal.Capataz.Types
     , CapatazOptions (..)
     , CapatazRestartStrategy (..)
     , CapatazStatus (..)
+    , ProcessSpec (..)
     , ProcessTerminationOrder (..)
     , WorkerAction
     , WorkerError (..)

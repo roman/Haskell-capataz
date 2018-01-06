@@ -409,9 +409,8 @@ tests
               , assertCapatazStatusChanged SUT.Initializing SUT.Running
               ]
           ]
-          ( \SUT.Capataz { capatazAsync } -> do
-            threadDelay 100 -- leave enough room for capataz to start
-            cancelWith capatazAsync (ErrorCall "async exception")
+          ( \capataz -> do
+            cancelWith (SUT.capatazToAsync capataz) (ErrorCall "async exception")
           )
           [assertEventType CapatazFailed]
           []

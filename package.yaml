@@ -57,6 +57,11 @@ library:
   source-dirs: src
   exposed-modules:
   - Control.Concurrent.Capataz
+  - Control.Concurrent.Capataz.Internal.Types
+  - Control.Concurrent.Capataz.Internal.Core
+  - Control.Concurrent.Capataz.Internal.Worker
+  - Control.Concurrent.Capataz.Internal.Util
+  - Control.Concurrent.Capataz.Internal.Restart
 
 tests:
   capataz-test:

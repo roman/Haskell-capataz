@@ -40,7 +40,7 @@ import Control.Concurrent.Capataz.Internal.Core
     (forkMainCapataz, forkWorker, terminateWorker)
 import Control.Concurrent.Capataz.Internal.Types
     ( CallbackType (..)
-    , Capataz (..)
+    , Capataz
     , CapatazEvent (..)
     , CapatazOptions (..)
     , CapatazRestartStrategy (..)

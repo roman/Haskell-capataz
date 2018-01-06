@@ -4,7 +4,7 @@
 {-# LANGUAGE NoImplicitPrelude     #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-| This module contains all the types used across all the other modules -}
-module Control.Concurrent.Internal.Capataz.Types where
+module Control.Concurrent.Capataz.Internal.Types where
 
 import Protolude
 
@@ -427,11 +427,11 @@ data CapatazMessage
 
 data Process
   = WorkerProcess  Worker
-  | CapatazProcess Capataz
+  | SupervisorProcess Capataz
 
 data ProcessSpec
   = WorkerProcessSpec WorkerSpec
-  | CapatazProcessSpec CapatazOptions
+  | SupervisorProcessSpec CapatazOptions
 
 -- | Record that contains the environment of a capataz monitor, this is used as
 -- the main record to create workers and to stop the supervisor thread.

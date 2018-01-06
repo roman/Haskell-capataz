@@ -9,7 +9,7 @@
 * Public API utility functions
 
 -}
-module Control.Concurrent.Internal.Capataz.Util where
+module Control.Concurrent.Capataz.Internal.Util where
 
 import Protolude
 
@@ -22,7 +22,7 @@ import           Data.Time.Clock               (getCurrentTime)
 
 import qualified Data.HashMap.Strict as HashMap
 
-import Control.Concurrent.Internal.Capataz.Types
+import Control.Concurrent.Capataz.Internal.Types
 
 -- | Returns only the number of the ThreadId
 getTidNumber :: ThreadId -> Maybe Text
@@ -35,7 +35,7 @@ getTidNumber tid = case T.words $ show tid of
 getProcessId :: Process -> ProcessId
 getProcessId process = case process of
   WorkerProcess Worker { workerId } -> workerId
-  CapatazProcess Capataz { capatazRuntime } ->
+  SupervisorProcess Capataz { capatazRuntime } ->
     let CapatazRuntime { capatazId } = capatazRuntime in capatazId
 
 -- | Fetches a "Worker" from the "Capataz" instance environment
@@ -95,7 +95,7 @@ sortProcessesByTerminationOrder terminationOrder processMap =
     -- NOTE: dissambiguates workerCreationTime field
   processCreationTime (WorkerProcess Worker { workerCreationTime }) =
     workerCreationTime
-  processCreationTime (CapatazProcess Capataz { capatazRuntime }) =
+  processCreationTime (SupervisorProcess Capataz { capatazRuntime }) =
     let CapatazRuntime { capatazCreationTime } = capatazRuntime
     in  capatazCreationTime
 

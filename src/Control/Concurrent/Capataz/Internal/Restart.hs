@@ -4,14 +4,14 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-| This module contains all logic related to the restart of workers -}
-module Control.Concurrent.Internal.Capataz.Restart where
+module Control.Concurrent.Capataz.Internal.Restart where
 
 import Data.Time.Clock (NominalDiffTime, UTCTime, diffUTCTime, getCurrentTime)
 
 import Protolude
 
-import           Control.Concurrent.Internal.Capataz.Types
-import           Control.Concurrent.Internal.Capataz.Util
+import           Control.Concurrent.Capataz.Internal.Types
+import           Control.Concurrent.Capataz.Internal.Util
     ( appendProcessToMap
     , fetchWorkerEnv
     , getProcessId
@@ -20,7 +20,7 @@ import           Control.Concurrent.Internal.Capataz.Util
     , resetProcessMap
     , sortProcessesByTerminationOrder
     )
-import qualified Control.Concurrent.Internal.Capataz.Worker as Worker
+import qualified Control.Concurrent.Capataz.Internal.Worker as Worker
 import qualified Data.HashMap.Strict                        as HashMap
 
 --------------------------------------------------------------------------------

@@ -10,7 +10,7 @@
 * High level message handlers of the supervisor thread loop
 
 -}
-module Control.Concurrent.Internal.Capataz.Core where
+module Control.Concurrent.Capataz.Internal.Core where
 
 import Protolude
 
@@ -26,11 +26,11 @@ import Data.Time.Clock               (getCurrentTime)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.UUID.V4        as UUID (nextRandom)
 
-import qualified Control.Concurrent.Internal.Capataz.Restart as Restart
-import qualified Control.Concurrent.Internal.Capataz.Worker  as Worker
+import qualified Control.Concurrent.Capataz.Internal.Restart as Restart
+import qualified Control.Concurrent.Capataz.Internal.Worker  as Worker
 
-import Control.Concurrent.Internal.Capataz.Types
-import Control.Concurrent.Internal.Capataz.Util
+import Control.Concurrent.Capataz.Internal.Types
+import Control.Concurrent.Capataz.Internal.Util
     ( appendProcessToMap
     , capatazToEnv
     , fetchProcess
@@ -197,7 +197,7 @@ forkMainCapataz capatazOptions@CapatazOptions { capatazName, capatazProcessSpecL
           worker <- Worker.forkWorker capatazEnv workerSpec Nothing
           appendProcessToMap capatazEnv (WorkerProcess worker)
 
-        CapatazProcessSpec _capatazOptions -> panic "pending"
+        SupervisorProcessSpec _capatazOptions -> panic "pending"
       )
 
     writeCapatazStatus capatazEnv Running

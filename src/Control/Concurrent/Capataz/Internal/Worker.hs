@@ -5,7 +5,7 @@
 {-| This module contains all logic related to error handling when spawning threads
   to execute Worker sub-routines
 -}
-module Control.Concurrent.Internal.Capataz.Worker where
+module Control.Concurrent.Capataz.Internal.Worker where
 
 import Protolude
 
@@ -17,8 +17,8 @@ import GHC.Conc                      (labelThread)
 import qualified Data.Text    as T
 import qualified Data.UUID.V4 as UUID
 
-import Control.Concurrent.Internal.Capataz.Types
-import Control.Concurrent.Internal.Capataz.Util
+import Control.Concurrent.Capataz.Internal.Types
+import Control.Concurrent.Capataz.Internal.Util
     (getTidNumber, readProcessMap, sortProcessesByTerminationOrder)
 
 -- | Internal functions that overwrites the GHC thread name, for increasing

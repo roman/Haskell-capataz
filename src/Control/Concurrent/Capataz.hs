@@ -27,7 +27,7 @@ module Control.Concurrent.Capataz
 , defCapatazOptions
 -- * Core functionality
 , forkWorker
-, forkMainCapataz
+, forkCapataz
 , terminateWorker
 -- * Utility functions
 , capatazToAsync
@@ -37,7 +37,7 @@ module Control.Concurrent.Capataz
 where
 
 import Control.Concurrent.Capataz.Internal.Core
-    (forkMainCapataz, forkWorker, terminateWorker)
+    (forkCapataz, forkWorker, terminateWorker)
 import Control.Concurrent.Capataz.Internal.Types
     ( CallbackType (..)
     , Capataz

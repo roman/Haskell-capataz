@@ -216,7 +216,7 @@ testCapatazStreamWithOptions preSetupAssertion optionModFn setupFn postSetupAsse
         [preSetupAssertion, postSetupAssertions, postTeardownAssertions]
       )
 
-    capataz <- SUT.forkMainCapataz $ (optionModFn SUT.defCapatazOptions)
+    capataz <- SUT.forkCapataz $ (optionModFn SUT.defCapatazOptions)
       { SUT.notifyEvent = trackEvent accRef eventStream
       }
 

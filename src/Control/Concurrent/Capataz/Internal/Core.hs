@@ -180,8 +180,8 @@ buildCapatazRuntime capatazOptions = do
 -- | Creates a Capataz record, which represents a supervision thread which
 -- monitors failure on worker threads defined in the "CapatazOptions" or worker
 -- threads that are created dynamically using "forkWorker".
-forkMainCapataz :: CapatazOptions -> IO Capataz
-forkMainCapataz capatazOptions@CapatazOptions { capatazName, capatazProcessSpecList, notifyEvent }
+forkCapataz :: CapatazOptions -> IO Capataz
+forkCapataz capatazOptions@CapatazOptions { capatazName, capatazProcessSpecList, notifyEvent }
   = do
     capatazRuntime <- buildCapatazRuntime capatazOptions
 

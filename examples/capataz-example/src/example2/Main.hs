@@ -10,7 +10,7 @@ import Control.Concurrent.Capataz
     , capatazToAsync
     , defCapatazOptions
     , defWorkerOptions
-    , forkMainCapataz
+    , forkCapataz
     , forkWorker
     , teardown
     )
@@ -23,7 +23,7 @@ import Text.Show.Pretty           (pPrint)
 main :: IO ()
 main = do
   n       <- getRecord "Counter spawner"
-  capataz <- forkMainCapataz defCapatazOptions
+  capataz <- forkCapataz defCapatazOptions
     { capatazName            = "Example Capataz"
     , capatazRestartStrategy = OneForOne
     , notifyEvent            = pPrint

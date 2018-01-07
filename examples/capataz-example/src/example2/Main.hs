@@ -23,11 +23,10 @@ import Text.Show.Pretty           (pPrint)
 main :: IO ()
 main = do
   n       <- getRecord "Counter spawner"
-  capataz <- forkCapataz defCapatazOptions
-    { capatazName            = "Example Capataz"
-    , capatazRestartStrategy = OneForOne
-    , notifyEvent            = pPrint
-    }
+  capataz <- forkCapataz defCapatazOptions { capatazName = "Example Capataz"
+                                           , capatazRestartStrategy = OneForOne
+                                           , notifyEvent = pPrint
+                                           }
 
   let numberWriter i a = print (i, a)
       delayMicros = 5000100

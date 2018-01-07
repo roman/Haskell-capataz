@@ -34,9 +34,8 @@ getTidNumber tid = case T.words $ show tid of
 
 getProcessId :: Process -> ProcessId
 getProcessId process = case process of
-  WorkerProcess Worker { workerId } -> workerId
-  SupervisorProcess Capataz { capatazRuntime } ->
-    let CapatazRuntime { capatazId } = capatazRuntime in capatazId
+  WorkerProcess     Worker { workerId }         -> workerId
+  SupervisorProcess Supervisor { supervisorId } -> supervisorId
 
 -- | Fetches a "Worker" from the "Capataz" instance environment
 fetchProcess :: CapatazEnv -> ProcessId -> IO (Maybe Process)
@@ -95,9 +94,8 @@ sortProcessesByTerminationOrder terminationOrder processMap =
     -- NOTE: dissambiguates workerCreationTime field
   processCreationTime (WorkerProcess Worker { workerCreationTime }) =
     workerCreationTime
-  processCreationTime (SupervisorProcess Capataz { capatazRuntime }) =
-    let CapatazRuntime { capatazCreationTime } = capatazRuntime
-    in  capatazCreationTime
+  processCreationTime (SupervisorProcess Supervisor { supervisorCreationTime })
+    = supervisorCreationTime
 
   workers = sortBy (comparing processCreationTime) (HashMap.elems processMap)
 

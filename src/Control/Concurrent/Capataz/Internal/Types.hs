@@ -305,6 +305,41 @@ data WorkerEnv
   , workerRestartStrategy :: !WorkerRestartStrategy
   }
 
+data SupervisorSpec
+  = SupervisorSpec {
+    -- | Name of the Capataz (present on "CapatazEvent" records)
+    supervisorName                    :: Text
+    -- | How many errors is the Capataz be able to handle; check:
+    -- http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
+  , supervisorIntensity               :: !Int
+    -- | Period of time where the Capataz can receive "capatazIntensity" amount
+    -- of errors
+  , supervisorPeriodSeconds           :: !NominalDiffTime
+    -- | What is the "CapatazRestartStrategy" for this Capataz
+  , supervisorRestartStrategy         :: !CapatazRestartStrategy
+    -- | Static set of workers that start as soon as the "Capataz" is created
+  , supervisorProcessSpecList         :: ![ProcessSpec]
+    -- | In which order the "Capataz" record is going to terminate it's workers
+  , supervisorProcessTerminationOrder :: !ProcessTerminationOrder
+    -- | Callback used when the error intensity is reached
+  , supervisorOnIntensityReached      :: !(IO ())
+  }
+
+data Supervisor
+  = Supervisor {
+    -- | Unique identifier for a worker that is executing
+    supervisorId           :: !WorkerId
+    -- | "Async" thread of a worker, this Async executes the @IO ()@ sub-routine
+  , supervisorAsync        :: !(Async ())
+    -- | Time where this worker was created (used for error intensity checks)
+  , supervisorCreationTime :: !UTCTime
+    -- | Name of the Worker (present on "CapatazEvent" records)
+  , supervisorName         :: !WorkerName
+    -- | "WorkerSpec" contains all the options around restart and termination
+    -- policies
+  , supervisorSpec         :: !WorkerSpec
+  }
+
 -- | Internal record that represents an action being sent from threads using
 -- the Capataz public API.
 data ControlAction
@@ -427,11 +462,11 @@ data CapatazMessage
 
 data Process
   = WorkerProcess  Worker
-  | SupervisorProcess Capataz
+  | SupervisorProcess Supervisor
 
 data ProcessSpec
   = WorkerProcessSpec WorkerSpec
-  | SupervisorProcessSpec CapatazOptions
+  | SupervisorProcessSpec SupervisorSpec
 
 -- | Record that contains the environment of a capataz monitor, this is used as
 -- the main record to create workers and to stop the supervisor thread.
@@ -496,6 +531,24 @@ defCapatazOptions = CapatazOptions
   , capatazProcessTerminationOrder = OldestFirst
   , onCapatazIntensityReached      = return ()
   , notifyEvent                    = const $ return ()
+  }
+
+-- | Default options to easily create supervisor instances:
+-- * name defaults to \"default-capataz\"
+-- * intensity error tolerance is set to 1 error every 5 seconds
+-- * has a "OneForOne " capataz restart strategy
+-- * has a termination order of "OldestFirst"
+defSupervisorSpec :: SupervisorSpec
+defSupervisorSpec = SupervisorSpec
+  { supervisorName                    = "default-supervisor"
+
+  -- One (1) restart every five (5) seconds
+  , supervisorIntensity               = 1
+  , supervisorPeriodSeconds           = 5
+  , supervisorRestartStrategy         = def
+  , supervisorProcessSpecList         = []
+  , supervisorProcessTerminationOrder = OldestFirst
+  , supervisorOnIntensityReached      = return ()
   }
 
 -- | Default options to easily create worker instances:

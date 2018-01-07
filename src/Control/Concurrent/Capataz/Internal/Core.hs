@@ -254,7 +254,7 @@ terminateWorker :: Text -> WorkerId -> Capataz -> IO ()
 terminateWorker terminationReason workerId Capataz { capatazEnv } =
   sendSyncControlMsg
     capatazEnv
-    ( \notifyWorkerTermination -> TerminateWorker
+    ( const TerminateWorker
       { terminationReason
       , workerId
       , notifyWorkerTermination

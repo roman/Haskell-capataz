@@ -4,7 +4,7 @@ module Main where
 
 import Control.Concurrent.Capataz
     ( CapatazOptions (..)
-    , CapatazRestartStrategy (..)
+    , SupervisorRestartStrategy (..)
     , WorkerOptions (..)
     , WorkerRestartStrategy (..)
     , capatazToAsync

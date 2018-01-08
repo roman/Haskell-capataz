@@ -56,15 +56,15 @@ andP predList a = all ($ a) predList
 -- is no conflict happening.
 data EventType
   = InvalidCapatazStatusReached
-  | CapatazStatusChanged
-  | WorkerTerminated
-  | WorkerStarted
-  | WorkerRestarted
-  | WorkerCompleted
-  | WorkerFailed
-  | WorkerCallbackExecuted
-  | WorkersTerminationStarted
-  | WorkersTerminationFinished
+  | SupervisorStatusChanged
+  | ProcessTerminated
+  | ProcessStarted
+  | ProcessRestarted
+  | ProcessCompleted
+  | ProcessFailed
+  | ProcessCallbackExecuted
+  | ProcessTerminationStarted
+  | ProcessTerminationFinished
   | CapatazFailed
   | CapatazTerminated
   deriving (Show)
@@ -76,19 +76,20 @@ assertEventType evType ev = fetchRecordName ev == show evType
 -- | Predicate function to assert "CapatazEvent" worker name
 assertWorkerName :: Text -> SUT.CapatazEvent -> Bool
 assertWorkerName workerName' ev = case ev of
-  SUT.WorkerRestarted { workerName }  -> workerName' == workerName
-  SUT.WorkerFailed { workerName }     -> workerName' == workerName
-  SUT.WorkerTerminated { workerName } -> workerName' == workerName
-  SUT.WorkerStarted { workerName }    -> workerName' == workerName
-  _                                   -> False
+  SUT.ProcessRestarted { processName }  -> workerName' == processName
+  SUT.ProcessFailed { processName }     -> workerName' == processName
+  SUT.ProcessTerminated { processName } -> workerName' == processName
+  SUT.ProcessStarted { processName }    -> workerName' == processName
+  _                                     -> False
 
 -- | Predicate function to assert type of an error inside a "CapatazEvent"
 assertErrorType :: Text -> SUT.CapatazEvent -> Bool
 assertErrorType errType ev = case ev of
-  SUT.WorkerFailed { workerError }   -> fetchRecordName workerError == errType
-  SUT.CapatazFailed { capatazError } -> fetchRecordName capatazError == errType
-  SUT.WorkerCallbackExecuted { workerCallbackError } ->
-    case workerCallbackError of
+  SUT.CapatazFailed { supervisorError } ->
+    fetchRecordName supervisorError == errType
+  SUT.ProcessFailed { processError } -> fetchRecordName processError == errType
+  SUT.ProcessCallbackExecuted { processCallbackError } ->
+    case processCallbackError of
       Nothing            -> False
       Just originalError -> fetchRecordName originalError == errType
   _ -> False
@@ -97,35 +98,37 @@ assertErrorType errType ev = case ev of
 -- "CapatazEvent"
 assertCallbackType :: SUT.CallbackType -> SUT.CapatazEvent -> Bool
 assertCallbackType cbType ev = case ev of
-  SUT.WorkerFailed { workerError } -> case fromException workerError of
-    Just SUT.WorkerCallbackFailed { callbackType } -> cbType == callbackType
-    _                                              -> False
-  SUT.WorkerCallbackExecuted { callbackType } -> cbType == callbackType
+  SUT.ProcessFailed { processError } -> case fromException processError of
+    Just SUT.ProcessCallbackFailed { processCallbackType } ->
+      cbType == processCallbackType
+    _ -> False
+  SUT.ProcessCallbackExecuted { processCallbackType } ->
+    cbType == processCallbackType
   _ -> False
 
 -- | Predicate function to assert restart count inside a "CapatazEvent"
 assertRestartCount :: (Int -> Bool) -> SUT.CapatazEvent -> Bool
 assertRestartCount predFn ev = case ev of
-  SUT.WorkerRestarted { workerRestartCount } -> predFn workerRestartCount
-  _                                          -> False
+  SUT.ProcessRestarted { processRestartCount } -> predFn processRestartCount
+  _                                            -> False
 
 -- | Predicate function to assert a Capataz status change
-assertCapatazStatusChanged
+assertSupervisorStatusChanged
   :: SUT.CapatazStatus -> SUT.CapatazStatus -> SUT.CapatazEvent -> Bool
-assertCapatazStatusChanged fromEv toEv ev = case ev of
-  SUT.CapatazStatusChanged { prevCapatazStatus, newCapatazStatus } ->
-    fromEv == prevCapatazStatus && toEv == newCapatazStatus
+assertSupervisorStatusChanged fromEv toEv ev = case ev of
+  SUT.SupervisorStatusChanged { prevSupervisorStatus, newSupervisorStatus } ->
+    fromEv == prevSupervisorStatus && toEv == newSupervisorStatus
   _ -> False
 
 -- | Predicate function to assert a worker was started
 assertWorkerStarted :: Text -> SUT.CapatazEvent -> Bool
 assertWorkerStarted workerName =
-  andP [assertEventType WorkerStarted, assertWorkerName workerName]
+  andP [assertEventType ProcessStarted, assertWorkerName workerName]
 
 -- | Predicate function to assert a worker was terminated
 assertWorkerTerminated :: Text -> SUT.CapatazEvent -> Bool
 assertWorkerTerminated workerName =
-  andP [assertEventType WorkerTerminated, assertWorkerName workerName]
+  andP [assertEventType ProcessTerminated, assertWorkerName workerName]
 
 -- | Predicate function to assert a capataz thread failed with error type
 assertCapatazFailedWith :: Text -> SUT.CapatazEvent -> Bool
@@ -341,19 +344,19 @@ tests
       "capataz without workerSpecList"
       [ testCase "initialize and teardown works as expected" $ testCapatazStream
           [ andP
-              [ assertEventType CapatazStatusChanged
-              , assertCapatazStatusChanged SUT.Initializing SUT.Running
+              [ assertEventType SupervisorStatusChanged
+              , assertSupervisorStatusChanged SUT.Initializing SUT.Running
               ]
           ]
           (const $ return ())
           []
           [ andP
-            [ assertEventType CapatazStatusChanged
-            , assertCapatazStatusChanged SUT.Running SUT.Halting
+            [ assertEventType SupervisorStatusChanged
+            , assertSupervisorStatusChanged SUT.Running SUT.Halting
             ]
           , andP
-            [ assertEventType CapatazStatusChanged
-            , assertCapatazStatusChanged SUT.Halting SUT.Halted
+            [ assertEventType SupervisorStatusChanged
+            , assertSupervisorStatusChanged SUT.Halting SUT.Halted
             ]
           ]
           Nothing
@@ -365,39 +368,39 @@ tests
               [ assertWorkerStarted "A"
               , assertWorkerStarted "B"
               , andP
-                [ assertEventType CapatazStatusChanged
-                , assertCapatazStatusChanged SUT.Initializing SUT.Running
+                [ assertEventType SupervisorStatusChanged
+                , assertSupervisorStatusChanged SUT.Initializing SUT.Running
                 ]
               ]
               ( \supOptions -> supOptions
-                { SUT.capatazProcessSpecList = [ SUT.WorkerProcessSpec
-                                                 $ SUT.defWorkerSpec
-                                                     { SUT.workerName = "A"
-                                                     , SUT.workerAction = forever
-                                                       (threadDelay 10001000)
-                                                     }
-                                               , SUT.WorkerProcessSpec
-                                                 $ SUT.defWorkerSpec
-                                                     { SUT.workerName = "B"
-                                                     , SUT.workerAction = forever
-                                                       (threadDelay 10001000)
-                                                     }
-                                               ]
+                { SUT.supervisorProcessSpecList = [ SUT.WorkerProcessSpec
+                                                    $ SUT.defWorkerSpec
+                                                        { SUT.workerName = "A"
+                                                        , SUT.workerAction = forever
+                                                          (threadDelay 10001000)
+                                                        }
+                                                  , SUT.WorkerProcessSpec
+                                                    $ SUT.defWorkerSpec
+                                                        { SUT.workerName = "B"
+                                                        , SUT.workerAction = forever
+                                                          (threadDelay 10001000)
+                                                        }
+                                                  ]
                 }
               )
               (const $ return ())
               []
               [ andP
-                [ assertEventType CapatazStatusChanged
-                , assertCapatazStatusChanged SUT.Running SUT.Halting
+                [ assertEventType SupervisorStatusChanged
+                , assertSupervisorStatusChanged SUT.Running SUT.Halting
                 ]
-              , assertEventType WorkersTerminationStarted
+              , assertEventType ProcessTerminationStarted
               , assertWorkerTerminated "A"
               , assertWorkerTerminated "B"
-              , assertEventType WorkersTerminationFinished
+              , assertEventType ProcessTerminationFinished
               , andP
-                [ assertEventType CapatazStatusChanged
-                , assertCapatazStatusChanged SUT.Halting SUT.Halted
+                [ assertEventType SupervisorStatusChanged
+                , assertSupervisorStatusChanged SUT.Halting SUT.Halted
                 ]
               ]
               Nothing
@@ -405,8 +408,8 @@ tests
     , testCase "reports error when capataz thread receives async exception"
       $ testCapatazStream
           [ andP
-              [ assertEventType CapatazStatusChanged
-              , assertCapatazStatusChanged SUT.Initializing SUT.Running
+              [ assertEventType SupervisorStatusChanged
+              , assertSupervisorStatusChanged SUT.Initializing SUT.Running
               ]
           ]
           ( \capataz -> cancelWith (SUT.capatazToAsync capataz)
@@ -423,7 +426,7 @@ tests
           testCapatazStreamWithOptions
             []
             ( \supOptions -> supOptions
-              { SUT.onCapatazIntensityReached = signalIntensityReached
+              { SUT.supervisorOnIntensityReached = signalIntensityReached
               }
             )
             ( \capataz -> do
@@ -432,9 +435,9 @@ tests
                                           capataz
               waitTillIntensityReached
             )
-            [ assertEventType WorkerFailed
-            , assertEventType WorkerFailed
-            , assertEventType WorkerFailed
+            [ assertEventType ProcessFailed
+            , assertEventType ProcessFailed
+            , assertEventType ProcessFailed
             , assertCapatazFailedWith "CapatazIntensityReached"
             ]
             []
@@ -459,10 +462,10 @@ tests
                   return ()
                 )
                 [ andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnCompletion
                   ]
-                , assertEventType WorkerCompleted
+                , assertEventType ProcessCompleted
                 ]
                 []
                 Nothing
@@ -480,14 +483,14 @@ tests
                   return ()
                 )
                 [ andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnFailure
                   ]
-                , assertEventType WorkerFailed
+                , assertEventType ProcessFailed
                 ]
                 [assertEventType CapatazTerminated]
                 ( Just $ not . andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnCompletion
                   ]
                 )
@@ -503,16 +506,16 @@ tests
                     (forever $ threadDelay 1000100)
                     capataz
 
-                  _workerId <- SUT.terminateWorker
+                  _workerId <- SUT.terminateProcess
                     "testing onCompletion callback"
                     workerId
                     capataz
                   return ()
                 )
-                [assertEventType WorkerTerminated]
+                [assertEventType ProcessTerminated]
                 [assertEventType CapatazTerminated]
                 ( Just $ not . andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnCompletion
                   ]
                 )
@@ -532,13 +535,13 @@ tests
                   return ()
                 )
                 [ andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnCompletion
                   , assertErrorType "TimeoutError"
                   ]
                 , andP
-                  [ assertEventType WorkerFailed
-                  , assertErrorType "WorkerCallbackFailed"
+                  [ assertEventType ProcessFailed
+                  , assertErrorType "ProcessCallbackFailed"
                   ]
                 ]
                 []
@@ -560,10 +563,10 @@ tests
                   return ()
                 )
                 [ andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnFailure
                   ]
-                , assertEventType WorkerFailed
+                , assertEventType ProcessFailed
                 ]
                 [assertEventType CapatazTerminated]
                 Nothing
@@ -581,16 +584,16 @@ tests
                   return ()
                 )
                 [ andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnCompletion
                   ]
-                , assertEventType WorkerCompleted
+                , assertEventType ProcessCompleted
                 ]
                 []
                 ( Just
                 $ not
                 . andP
-                    [ assertEventType WorkerCallbackExecuted
+                    [ assertEventType ProcessCallbackExecuted
                     , assertCallbackType SUT.OnFailure
                     ]
                 )
@@ -606,16 +609,16 @@ tests
                     (forever $ threadDelay 1000100)
                     capataz
 
-                  SUT.terminateWorker "testing onFailure callback"
-                                      workerId
-                                      capataz
+                  SUT.terminateProcess "testing onFailure callback"
+                                       workerId
+                                       capataz
                 )
-                [assertEventType WorkerTerminated]
+                [assertEventType ProcessTerminated]
                 []
                 ( Just
                 $ not
                 . andP
-                    [ assertEventType WorkerCallbackExecuted
+                    [ assertEventType ProcessCallbackExecuted
                     , assertCallbackType SUT.OnFailure
                     ]
                 )
@@ -635,13 +638,13 @@ tests
                   return ()
                 )
                 [ andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnFailure
                   , assertErrorType "TimeoutError"
                   ]
                 , andP
-                  [ assertEventType WorkerFailed
-                  , assertErrorType "WorkerCallbackFailed"
+                  [ assertEventType ProcessFailed
+                  , assertErrorType "ProcessCallbackFailed"
                   ]
                 ]
                 []
@@ -664,19 +667,19 @@ tests
                     (forever $ threadDelay 10001000)
                     capataz
 
-                  SUT.terminateWorker "testing workerOnTermination callback"
-                                      workerId
-                                      capataz
+                  SUT.terminateProcess "testing workerOnTermination callback"
+                                       workerId
+                                       capataz
                 )
                 [ andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnTermination
-                  , assertErrorType "BrutallyTerminateWorkerException"
+                  , assertErrorType "BrutallyTerminateProcessException"
                   ]
                 , andP
-                  [ assertEventType WorkerFailed
-                  , assertErrorType "WorkerCallbackFailed"
+                  [ assertEventType ProcessFailed
                   , assertCallbackType SUT.OnTermination
+                  , assertErrorType "ProcessCallbackFailed"
                   ]
                 ]
                 []
@@ -693,15 +696,15 @@ tests
                     (forever $ threadDelay 1000100)
                     capataz
 
-                  SUT.terminateWorker "testing workerOnTermination callback"
-                                      workerId
-                                      capataz
+                  SUT.terminateProcess "testing workerOnTermination callback"
+                                       workerId
+                                       capataz
                 )
                 [ andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnTermination
                   ]
-                , assertEventType WorkerTerminated
+                , assertEventType ProcessTerminated
                 ]
                 [assertEventType CapatazTerminated]
                 Nothing
@@ -718,10 +721,10 @@ tests
                     capataz
                   return ()
                 )
-                [assertEventType WorkerCompleted]
+                [assertEventType ProcessCompleted]
                 []
                 ( Just $ not . andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnTermination
                   ]
                 )
@@ -738,10 +741,10 @@ tests
                     capataz
                   return ()
                 )
-                [assertEventType WorkerFailed]
+                [assertEventType ProcessFailed]
                 []
                 ( Just $ not . andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnTermination
                   ]
                 )
@@ -758,18 +761,18 @@ tests
                     (forever $ threadDelay 10001000)
                     capataz
 
-                  SUT.terminateWorker "testing workerOnTermination callback"
-                                      workerId
-                                      capataz
+                  SUT.terminateProcess "testing workerOnTermination callback"
+                                       workerId
+                                       capataz
                 )
                 [ andP
-                  [ assertEventType WorkerCallbackExecuted
+                  [ assertEventType ProcessCallbackExecuted
                   , assertCallbackType SUT.OnTermination
                   , assertErrorType "TimeoutError"
                   ]
                 , andP
-                  [ assertEventType WorkerFailed
-                  , assertErrorType "WorkerCallbackFailed"
+                  [ assertEventType ProcessFailed
+                  , assertErrorType "ProcessCallbackFailed"
                   ]
                 ]
                 []
@@ -787,9 +790,9 @@ tests
               capataz
             return ()
           )
-          [assertEventType WorkerStarted, assertEventType WorkerCompleted]
+          [assertEventType ProcessStarted, assertEventType ProcessCompleted]
           [assertEventType CapatazTerminated]
-          (Just $ not . assertEventType WorkerRestarted)
+          (Just $ not . assertEventType ProcessRestarted)
         , testCase "does not restart on termination" $ testCapatazStream
           []
           ( \capataz -> do
@@ -797,11 +800,11 @@ tests
               SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Transient }
               (forever $ threadDelay 1000100)
               capataz
-            SUT.terminateWorker "termination test (1)" workerId capataz
+            SUT.terminateProcess "termination test (1)" workerId capataz
           )
-          [assertEventType WorkerTerminated]
+          [assertEventType ProcessTerminated]
           [assertEventType CapatazTerminated]
-          (Just $ not . assertEventType WorkerRestarted)
+          (Just $ not . assertEventType ProcessRestarted)
         , testCase "does restart on failure" $ testCapatazStream
           []
           ( \capataz -> do
@@ -812,9 +815,9 @@ tests
               capataz
             return ()
           )
-          [ assertEventType WorkerStarted
-          , assertEventType WorkerFailed
-          , andP [assertEventType WorkerRestarted, assertRestartCount (== 1)]
+          [ assertEventType ProcessStarted
+          , assertEventType ProcessFailed
+          , andP [assertEventType ProcessRestarted, assertRestartCount (== 1)]
           ]
           []
           Nothing
@@ -832,9 +835,9 @@ tests
                 return ()
               )
               [ andP
-                [assertEventType WorkerRestarted, assertRestartCount (== 1)]
+                [assertEventType ProcessRestarted, assertRestartCount (== 1)]
               , andP
-                [assertEventType WorkerRestarted, assertRestartCount (== 2)]
+                [assertEventType ProcessRestarted, assertRestartCount (== 2)]
               ]
               []
               Nothing
@@ -851,9 +854,9 @@ tests
               capataz
             return ()
           )
-          [ assertEventType WorkerStarted
-          , assertEventType WorkerCompleted
-          , assertEventType WorkerRestarted
+          [ assertEventType ProcessStarted
+          , assertEventType ProcessCompleted
+          , assertEventType ProcessRestarted
           ]
           [assertEventType CapatazTerminated]
           Nothing
@@ -861,7 +864,7 @@ tests
           $ testCapatazStream
               []
               ( \capataz -> do
-            -- Note the number is two (2) given the assertion list has two `WorkerRestarted` assertions
+            -- Note the number is two (2) given the assertion list has two `ProcessRestarted` assertions
                 let expectedRestartCount = 2
                 subRoutineAction <- mkCompletingBeforeNRestartsSubRoutine
                   expectedRestartCount
@@ -874,9 +877,9 @@ tests
                 return ()
               )
               [ andP
-                [assertEventType WorkerRestarted, assertRestartCount (== 1)]
+                [assertEventType ProcessRestarted, assertRestartCount (== 1)]
               , andP
-                [assertEventType WorkerRestarted, assertRestartCount (== 1)]
+                [assertEventType ProcessRestarted, assertRestartCount (== 1)]
               ]
               []
               Nothing
@@ -887,9 +890,9 @@ tests
               SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Permanent }
               (forever $ threadDelay 10001000)
               capataz
-            SUT.terminateWorker "testing termination (1)" workerId capataz
+            SUT.terminateProcess "testing termination (1)" workerId capataz
           )
-          [assertEventType WorkerTerminated, assertEventType WorkerRestarted]
+          [assertEventType ProcessTerminated, assertEventType ProcessRestarted]
           []
           Nothing
         , testCase "does increase restart count on multiple terminations" $ do
@@ -910,15 +913,15 @@ tests
                 (forever $ threadDelay 10001000)
                 capataz
 
-              SUT.terminateWorker "testing termination (1)" workerId capataz
+              SUT.terminateProcess "testing termination (1)" workerId capataz
               waitWorkerTermination 1
-              SUT.terminateWorker "testing termination (2)" workerId capataz
+              SUT.terminateProcess "testing termination (2)" workerId capataz
               waitWorkerTermination 2
             )
-            [ assertEventType WorkerTerminated
-            , andP [assertEventType WorkerRestarted, assertRestartCount (== 1)]
-            , assertEventType WorkerTerminated
-            , andP [assertEventType WorkerRestarted, assertRestartCount (== 2)]
+            [ assertEventType ProcessTerminated
+            , andP [assertEventType ProcessRestarted, assertRestartCount (== 1)]
+            , assertEventType ProcessTerminated
+            , andP [assertEventType ProcessRestarted, assertRestartCount (== 2)]
             ]
             []
             Nothing
@@ -932,9 +935,9 @@ tests
               capataz
             return ()
           )
-          [ assertEventType WorkerStarted
-          , assertEventType WorkerFailed
-          , andP [assertEventType WorkerRestarted, assertRestartCount (== 1)]
+          [ assertEventType ProcessStarted
+          , assertEventType ProcessFailed
+          , andP [assertEventType ProcessRestarted, assertRestartCount (== 1)]
           ]
           []
           Nothing
@@ -952,9 +955,9 @@ tests
                 return ()
               )
               [ andP
-                [assertEventType WorkerRestarted, assertRestartCount (== 1)]
+                [assertEventType ProcessRestarted, assertRestartCount (== 1)]
               , andP
-                [assertEventType WorkerRestarted, assertRestartCount (== 2)]
+                [assertEventType ProcessRestarted, assertRestartCount (== 2)]
               ]
               []
               Nothing
@@ -970,9 +973,9 @@ tests
               capataz
             return ()
           )
-          [assertEventType WorkerStarted, assertEventType WorkerCompleted]
+          [assertEventType ProcessStarted, assertEventType ProcessCompleted]
           [assertEventType CapatazTerminated]
-          (Just $ not . assertEventType WorkerRestarted)
+          (Just $ not . assertEventType ProcessRestarted)
         , testCase "does not restart on termination" $ testCapatazStream
           []
           ( \capataz -> do
@@ -980,12 +983,12 @@ tests
               SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Temporary }
               (forever $ threadDelay 1000100)
               capataz
-            SUT.terminateWorker "termination test (1)" workerId capataz
+            SUT.terminateProcess "termination test (1)" workerId capataz
             threadDelay 100
           )
-          [assertEventType WorkerStarted, assertEventType WorkerTerminated]
+          [assertEventType ProcessStarted, assertEventType ProcessTerminated]
           [assertEventType CapatazTerminated]
-          (Just $ not . assertEventType WorkerRestarted)
+          (Just $ not . assertEventType ProcessRestarted)
         , testCase "does not restart on failure" $ testCapatazStream
           []
           ( \capataz -> do
@@ -995,9 +998,9 @@ tests
               capataz
             threadDelay 100
           )
-          [assertEventType WorkerStarted, assertEventType WorkerFailed]
+          [assertEventType ProcessStarted, assertEventType ProcessFailed]
           [assertEventType CapatazTerminated]
-          (Just $ not . assertEventType WorkerRestarted)
+          (Just $ not . assertEventType ProcessRestarted)
         ]
       ]
     , testGroup
@@ -1023,11 +1026,11 @@ tests
 
               return ()
             )
-            [ andP [assertEventType WorkerStarted, assertWorkerName "A"]
-            , andP [assertEventType WorkerStarted, assertWorkerName "B"]
+            [ andP [assertEventType ProcessStarted, assertWorkerName "A"]
+            , andP [assertEventType ProcessStarted, assertWorkerName "B"]
             ]
-            [ andP [assertEventType WorkerTerminated, assertWorkerName "A"]
-            , andP [assertEventType WorkerTerminated, assertWorkerName "B"]
+            [ andP [assertEventType ProcessTerminated, assertWorkerName "A"]
+            , andP [assertEventType ProcessTerminated, assertWorkerName "B"]
             , assertEventType CapatazTerminated
             ]
             Nothing
@@ -1037,7 +1040,7 @@ tests
             $ testCapatazStreamWithOptions
                 []
                 ( \supOptions ->
-                  supOptions { SUT.capatazRestartStrategy = SUT.OneForOne }
+                  supOptions { SUT.supervisorRestartStrategy = SUT.OneForOne }
                 )
                 ( \capataz -> do
                   _workerA <- SUT.forkWorker
@@ -1060,10 +1063,10 @@ tests
 
                   return ()
                 )
-                [andP [assertEventType WorkerRestarted, assertWorkerName "B"]]
+                [andP [assertEventType ProcessRestarted, assertWorkerName "B"]]
                 []
                 ( Just $ not . andP
-                  [assertEventType WorkerRestarted, assertWorkerName "A"]
+                  [assertEventType ProcessRestarted, assertWorkerName "A"]
                 )
         ]
       , testGroup
@@ -1072,8 +1075,8 @@ tests
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy         = SUT.AllForOne
-                , SUT.capatazProcessTerminationOrder = SUT.OldestFirst
+                { SUT.supervisorRestartStrategy         = SUT.AllForOne
+                , SUT.supervisorProcessTerminationOrder = SUT.OldestFirst
                 }
               )
               ( \capataz -> do
@@ -1100,12 +1103,12 @@ tests
 
                 return ()
               )
-              [ andP [assertEventType WorkerStarted, assertWorkerName "A"]
-              , andP [assertEventType WorkerStarted, assertWorkerName "B"]
-              , andP [assertEventType WorkerFailed, assertWorkerName "A"]
-              , andP [assertEventType WorkerRestarted, assertWorkerName "A"]
-              , andP [assertEventType WorkerTerminated, assertWorkerName "B"]
-              , andP [assertEventType WorkerRestarted, assertWorkerName "B"]
+              [ andP [assertEventType ProcessStarted, assertWorkerName "A"]
+              , andP [assertEventType ProcessStarted, assertWorkerName "B"]
+              , andP [assertEventType ProcessFailed, assertWorkerName "A"]
+              , andP [assertEventType ProcessRestarted, assertWorkerName "A"]
+              , andP [assertEventType ProcessTerminated, assertWorkerName "B"]
+              , andP [assertEventType ProcessRestarted, assertWorkerName "B"]
               ]
               []
               Nothing
@@ -1113,8 +1116,8 @@ tests
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy         = SUT.AllForOne
-                , SUT.capatazProcessTerminationOrder = SUT.OldestFirst
+                { SUT.supervisorRestartStrategy         = SUT.AllForOne
+                , SUT.supervisorProcessTerminationOrder = SUT.OldestFirst
                 }
               )
               ( \capataz -> do
@@ -1140,22 +1143,22 @@ tests
 
                 return ()
               )
-              [ andP [assertEventType WorkerStarted, assertWorkerName "A"]
-              , andP [assertEventType WorkerStarted, assertWorkerName "B"]
-              , andP [assertEventType WorkerFailed, assertWorkerName "A"]
-              , andP [assertEventType WorkerRestarted, assertWorkerName "A"]
-              , andP [assertEventType WorkerTerminated, assertWorkerName "B"]
+              [ andP [assertEventType ProcessStarted, assertWorkerName "A"]
+              , andP [assertEventType ProcessStarted, assertWorkerName "B"]
+              , andP [assertEventType ProcessFailed, assertWorkerName "A"]
+              , andP [assertEventType ProcessRestarted, assertWorkerName "A"]
+              , andP [assertEventType ProcessTerminated, assertWorkerName "B"]
               ]
               []
               ( Just $ not . andP
-                [assertEventType WorkerRestarted, assertWorkerName "B"]
+                [assertEventType ProcessRestarted, assertWorkerName "B"]
               )
         , testCase "restarts sub-routines that are not temporary"
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy         = SUT.AllForOne
-                , SUT.capatazProcessTerminationOrder = SUT.NewestFirst
+                { SUT.supervisorRestartStrategy         = SUT.AllForOne
+                , SUT.supervisorProcessTerminationOrder = SUT.NewestFirst
                 }
               )
               ( \capataz -> do
@@ -1181,8 +1184,8 @@ tests
 
                 return ()
               )
-              [ andP [assertEventType WorkerRestarted, assertWorkerName "B"]
-              , andP [assertEventType WorkerRestarted, assertWorkerName "A"]
+              [ andP [assertEventType ProcessRestarted, assertWorkerName "B"]
+              , andP [assertEventType ProcessRestarted, assertWorkerName "A"]
               ]
               []
               Nothing
@@ -1193,8 +1196,8 @@ tests
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy         = SUT.AllForOne
-                , SUT.capatazProcessTerminationOrder = SUT.OldestFirst
+                { SUT.supervisorRestartStrategy         = SUT.AllForOne
+                , SUT.supervisorProcessTerminationOrder = SUT.OldestFirst
                 }
               )
               ( \capataz -> do
@@ -1221,17 +1224,17 @@ tests
 
                 return ()
               )
-              [andP [assertEventType WorkerRestarted, assertWorkerName "A"]]
+              [andP [assertEventType ProcessRestarted, assertWorkerName "A"]]
               []
               ( Just $ not . andP
-                [assertEventType WorkerRestarted, assertWorkerName "B"]
+                [assertEventType ProcessRestarted, assertWorkerName "B"]
               )
         , testCase "restarts sub-routines that are not temporary"
           $ testCapatazStreamWithOptions
               []
               ( \supOptions -> supOptions
-                { SUT.capatazRestartStrategy         = SUT.AllForOne
-                , SUT.capatazProcessTerminationOrder = SUT.OldestFirst
+                { SUT.supervisorRestartStrategy         = SUT.AllForOne
+                , SUT.supervisorProcessTerminationOrder = SUT.OldestFirst
                 }
               )
               ( \capataz -> do
@@ -1258,8 +1261,8 @@ tests
 
                 return ()
               )
-              [ andP [assertEventType WorkerRestarted, assertWorkerName "A"]
-              , andP [assertEventType WorkerRestarted, assertWorkerName "B"]
+              [ andP [assertEventType ProcessRestarted, assertWorkerName "A"]
+              , andP [assertEventType ProcessRestarted, assertWorkerName "B"]
               ]
               []
               Nothing

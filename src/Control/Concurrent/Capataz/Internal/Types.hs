@@ -19,10 +19,14 @@ import Data.UUID                     (UUID)
 
 type CapatazId = UUID
 type WorkerId = UUID
+type SupervisorId = UUID
+type SupervisorStatus = CapatazStatus
 type ProcessId = UUID
 type WorkerAction = IO ()
-type WorkerThreadId = ThreadId
+type ProcessThreadId = ThreadId
+type ProcessName = Text
 type CapatazName = Text
+type SupervisorName = Text
 type WorkerName = Text
 type RestartCount = Int
 type ProcessMap = HashMap ProcessId Process
@@ -33,97 +37,102 @@ type ProcessMap = HashMap ProcessId Process
 -- for logging, monitoring and testing purposes.
 data CapatazEvent
   = InvalidCapatazStatusReached {
-    capatazId   :: !CapatazId
-  , capatazName :: !CapatazName
-  , eventTime   :: !UTCTime
+    supervisorId   :: !SupervisorId
+  , supervisorName :: !SupervisorName
+  , eventTime      :: !UTCTime
   }
-  | CapatazStatusChanged {
-    capatazId         :: !CapatazId
-  , capatazName       :: !CapatazName
-  , prevCapatazStatus :: !CapatazStatus
-  , newCapatazStatus  :: !CapatazStatus
-  , eventTime         :: !UTCTime
+  | SupervisorStatusChanged {
+    supervisorId         :: !SupervisorId
+  , supervisorName       :: !SupervisorName
+  , prevSupervisorStatus :: !SupervisorStatus
+  , newSupervisorStatus  :: !SupervisorStatus
+  , eventTime            :: !UTCTime
   }
-  | WorkerTerminated {
-    capatazName       :: !CapatazName
-  , capatazId         :: !CapatazId
-  , workerThreadId    :: !WorkerThreadId
-  , workerId          :: !WorkerId
-  , workerName        :: !WorkerName
+  | ProcessTerminated {
+    supervisorId      :: !SupervisorId
+  , supervisorName    :: !SupervisorName
+  , processThreadId   :: !ProcessThreadId
+  , processId         :: !ProcessId
+  , processName       :: !ProcessName
   , terminationReason :: !Text
   , eventTime         :: !UTCTime
   }
-  | WorkerStarted {
-    capatazName    :: !CapatazName
-  , capatazId      :: !CapatazId
-  , workerThreadId :: !WorkerThreadId
-  , workerId       :: !WorkerId
-  , workerName     :: !WorkerName
-  , eventTime      :: !UTCTime
+  | ProcessStarted {
+    supervisorId    :: !SupervisorId
+  , supervisorName  :: !SupervisorName
+  , processThreadId :: !ProcessThreadId
+  , processId       :: !ProcessId
+  , processName     :: !ProcessName
+  , eventTime       :: !UTCTime
   }
-  | WorkerRestarted {
-    capatazName        :: !CapatazName
-  , capatazId          :: !CapatazId
-  , workerThreadId     :: !WorkerThreadId
-  , workerId           :: !WorkerId
-  , workerName         :: !WorkerName
-  , workerRestartCount :: !Int
-  , eventTime          :: !UTCTime
-  }
-  | WorkerCompleted {
-    capatazName    :: !CapatazName
-  , capatazId      :: !CapatazId
-  , workerThreadId :: !WorkerThreadId
-  , workerId       :: !WorkerId
-  , workerName     :: !WorkerName
-  , eventTime      :: !UTCTime
-  }
-  | WorkerFailed {
-    capatazName    :: !CapatazName
-  , capatazId      :: !CapatazId
-  , workerThreadId :: !WorkerThreadId
-  , workerId       :: !WorkerId
-  , workerName     :: !WorkerName
-  , workerError    :: !SomeException
-  , eventTime      :: !UTCTime
-  }
-  | WorkerCallbackExecuted {
-    capatazName         :: !CapatazName
-  , capatazId           :: !CapatazId
-  , workerThreadId      :: !WorkerThreadId
-  , workerId            :: !WorkerId
-  , workerName          :: !WorkerName
-  , workerCallbackError :: !(Maybe SomeException)
-  , callbackType        :: !CallbackType
+  | ProcessRestarted {
+    supervisorId        :: !SupervisorId
+  , supervisorName      :: !SupervisorName
+  , processThreadId     :: !ProcessThreadId
+  , processId           :: !ProcessId
+  , processName         :: !ProcessName
+  , processRestartCount :: !Int
   , eventTime           :: !UTCTime
   }
-  | WorkersTerminationStarted {
-    capatazName       :: !CapatazName
-  , capatazId         :: !CapatazId
+  | ProcessCompleted {
+    supervisorId    :: !SupervisorId
+  , supervisorName  :: !SupervisorName
+  , processThreadId :: !ProcessThreadId
+  , processId       :: !ProcessId
+  , processName     :: !ProcessName
+  , eventTime       :: !UTCTime
+  }
+  | ProcessFailed {
+    supervisorName  :: !SupervisorName
+  , supervisorId    :: !SupervisorId
+  , processThreadId :: !ProcessThreadId
+  , processId       :: !ProcessId
+  , processName     :: !ProcessName
+  , processError    :: !SomeException
+  , eventTime       :: !UTCTime
+  }
+  | ProcessCallbackExecuted {
+    supervisorId         :: !SupervisorId
+  , supervisorName       :: !SupervisorName
+  , processThreadId      :: !ProcessThreadId
+  , processId            :: !ProcessId
+  , processName          :: !ProcessName
+  , processCallbackError :: !(Maybe SomeException)
+  , processCallbackType  :: !CallbackType
+  , eventTime            :: !UTCTime
+  }
+  | ProcessTerminationStarted {
+    supervisorName    :: !SupervisorName
+  , supervisorId      :: !SupervisorId
   , terminationReason :: !Text
   , eventTime         :: !UTCTime
   }
-  | WorkersTerminationFinished {
-    capatazName       :: !CapatazName
-  , capatazId         :: !CapatazId
+  | ProcessTerminationFinished {
+    supervisorName    :: !SupervisorName
+  , supervisorId      :: !SupervisorId
   , terminationReason :: !Text
   , eventTime         :: !UTCTime
+  }
+  | SupervisorTerminated {
+    supervisorName :: !SupervisorName
+  , supervisorId   :: !SupervisorId
+  , eventTime      :: !UTCTime
   }
   | CapatazFailed {
-    capatazName  :: !CapatazName
-  , capatazId    :: !CapatazId
-  , capatazError :: !SomeException
-  , eventTime    :: !UTCTime
+    supervisorId    :: !SupervisorId
+  , supervisorName  :: !SupervisorName
+  , supervisorError :: !SomeException
+  , eventTime       :: !UTCTime
   }
   | CapatazTerminated {
-    capatazName :: !CapatazName
-  , capatazId   :: !CapatazId
-  , eventTime   :: !UTCTime
+    supervisorName :: !SupervisorName
+  , supervisorId   :: !SupervisorId
+  , eventTime      :: !UTCTime
   }
-  | CapatazShutdownInvoked {
-    capatazName :: !CapatazName
-  , capatazId   :: !CapatazId
-  , eventTime   :: !UTCTime
+  | SupervisorShutdownInvoked {
+    supervisorName :: !SupervisorName
+  , supervisorId   :: !SupervisorId
+  , eventTime      :: !UTCTime
   }
   deriving (Generic, Show)
 
@@ -161,12 +170,12 @@ data WorkerRestartAction
 
 instance NFData WorkerRestartAction
 
--- | Specifies how order in which workers should be terminated by a Capataz in
+-- | Specifies how order in which process should be terminated by a Capataz in
 -- case of restart or shutdown; default is "OldestFirst"
 data ProcessTerminationOrder
-  -- | Terminate worker threads from most recent to oldest
+  -- | Terminate process threads from most recent to oldest
   = NewestFirst
-  -- | Terminate worker threads from oldest to most recent
+  -- | Terminate process threads from oldest to most recent
   | OldestFirst
   deriving (Generic, Show, Eq, Ord)
 
@@ -177,7 +186,7 @@ instance NFData ProcessTerminationOrder
 
 -- | Specifies how a Capataz should restart a failing worker. Default is
 -- "OneForOne"
-data CapatazRestartStrategy
+data SupervisorRestartStrategy
   -- | Terminate all workers threads when one fails and restart them all
   = AllForOne
 
@@ -185,32 +194,34 @@ data CapatazRestartStrategy
   | OneForOne
   deriving (Generic, Show, Eq, Ord)
 
-instance Default CapatazRestartStrategy where
+instance Default SupervisorRestartStrategy where
   def = OneForOne
 
-instance NFData CapatazRestartStrategy
+instance NFData SupervisorRestartStrategy
 
 -- | Utility record used to specify options to a "Capataz" instance
 data CapatazOptions
   = CapatazOptions {
     -- | Name of the Capataz (present on "CapatazEvent" records)
-    capatazName                    :: Text
+    supervisorName                    :: Text
     -- | How many errors is the Capataz be able to handle; check:
     -- http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
-  , capatazIntensity               :: !Int
+  , supervisorIntensity               :: !Int
     -- | Period of time where the Capataz can receive "capatazIntensity" amount
     -- of errors
-  , capatazPeriodSeconds           :: !NominalDiffTime
-    -- | What is the "CapatazRestartStrategy" for this Capataz
-  , capatazRestartStrategy         :: !CapatazRestartStrategy
-    -- | Static set of workers that start as soon as the "Capataz" is created
-  , capatazProcessSpecList         :: ![ProcessSpec]
-    -- | In which order the "Capataz" record is going to terminate it's workers
-  , capatazProcessTerminationOrder :: !ProcessTerminationOrder
+  , supervisorPeriodSeconds           :: !NominalDiffTime
+    -- | What is the "SupervisorRestartStrategy" for this Capataz
+  , supervisorRestartStrategy         :: !SupervisorRestartStrategy
+    -- | Static set of processes that start as soon as the "Capataz" is created
+  , supervisorProcessSpecList         :: ![ProcessSpec]
+    -- | In which order the "Capataz" record is going to terminate it's processes
+  , supervisorProcessTerminationOrder :: !ProcessTerminationOrder
     -- | Callback used when the error intensity is reached
-  , onCapatazIntensityReached      :: !(IO ())
+  , supervisorOnIntensityReached      :: !(IO ())
+    -- | ...
+  , supervisorOnFailure               :: !(SomeException -> IO ())
     -- | Callback used for telemetry purposes
-  , notifyEvent                    :: !(CapatazEvent -> IO ())
+  , notifyEvent                       :: !(CapatazEvent -> IO ())
   }
 
 
@@ -315,29 +326,26 @@ data SupervisorSpec
     -- | Period of time where the Capataz can receive "capatazIntensity" amount
     -- of errors
   , supervisorPeriodSeconds           :: !NominalDiffTime
-    -- | What is the "CapatazRestartStrategy" for this Capataz
-  , supervisorRestartStrategy         :: !CapatazRestartStrategy
+    -- | What is the "SupervisorRestartStrategy" for this Capataz
+  , supervisorRestartStrategy         :: !SupervisorRestartStrategy
     -- | Static set of workers that start as soon as the "Capataz" is created
   , supervisorProcessSpecList         :: ![ProcessSpec]
     -- | In which order the "Capataz" record is going to terminate it's workers
   , supervisorProcessTerminationOrder :: !ProcessTerminationOrder
     -- | Callback used when the error intensity is reached
   , supervisorOnIntensityReached      :: !(IO ())
+  , supervisorOnFailure               :: !(SomeException -> IO ())
   }
 
 data Supervisor
   = Supervisor {
-    -- | Unique identifier for a worker that is executing
-    supervisorId           :: !WorkerId
-    -- | "Async" thread of a worker, this Async executes the @IO ()@ sub-routine
-  , supervisorAsync        :: !(Async ())
-    -- | Time where this worker was created (used for error intensity checks)
+    supervisorId           :: !SupervisorId
+  , supervisorName         :: !SupervisorName
   , supervisorCreationTime :: !UTCTime
-    -- | Name of the Worker (present on "CapatazEvent" records)
-  , supervisorName         :: !WorkerName
-    -- | "WorkerSpec" contains all the options around restart and termination
-    -- policies
-  , supervisorSpec         :: !WorkerSpec
+  , supervisorSpec         :: !SupervisorSpec
+  , supervisorAsync        :: !(Async ())
+  , supervisorNotify       :: (SupervisorMessage -> IO ())
+  , supervisorEnv          :: !SupervisorEnv
   }
 
 -- | Internal record that represents an action being sent from threads using
@@ -347,10 +355,10 @@ data ControlAction
     workerSpec     :: !WorkerSpec
   , returnWorkerId :: !(WorkerId -> IO ())
   }
-  | TerminateWorker {
-    workerId                :: !WorkerId
-  , terminationReason       :: !Text
-  , notifyWorkerTermination :: !(IO ())
+  | TerminateProcess {
+    processId                :: !ProcessId
+  , processTerminationReason :: !Text
+  , notifyProcessTermination :: !(IO ())
   }
   | TerminateCapataz {
     notifyCapatazTermination :: !(IO ())
@@ -360,14 +368,15 @@ data ControlAction
 -- | Internal exception thrown to the Capataz loop to indicate termination of
 -- execution
 data CapatazSignal
-  = RestartWorkerException
-  | TerminateWorkerException {
-      workerId                :: !WorkerId
-    , workerTerminationReason :: !Text
+  = CapatazFailure
+  | RestartProcessException
+  | TerminateProcessException {
+      processId                :: !ProcessId
+    , processTerminationReason :: !Text
     }
-  | BrutallyTerminateWorkerException {
-      workerId                :: !WorkerId
-    , workerTerminationReason :: !Text
+  | BrutallyTerminateProcessException {
+      processId                :: !ProcessId
+    , processTerminationReason :: !Text
     }
     deriving (Generic, Show)
 
@@ -378,9 +387,9 @@ instance NFData CapatazSignal
 -- specification
 data CapatazError
   = CapatazIntensityReached {
-    workerId           :: !WorkerId
-  , workerName         :: !WorkerName
-  , workerRestartCount :: !Int
+    processId           :: !ProcessId
+  , processName         :: !ProcessName
+  , processRestartCount :: !Int
   }
   deriving (Generic, Show)
 
@@ -396,42 +405,42 @@ data CallbackType
   deriving (Generic, Show, Eq)
 
 -- | Internal exception triggered when a callback of a Worker fails
-data WorkerError
-  = WorkerCallbackFailed {
-      workerId            :: !WorkerId
-    , workerActionError   :: !(Maybe SomeException)
-    , callbackType        :: !CallbackType
-    , workerCallbackError :: !SomeException
+data ProcessError
+  = ProcessCallbackFailed {
+      processId            :: !WorkerId
+    , processError         :: !(Maybe SomeException)
+    , processCallbackError :: !SomeException
+    , processCallbackType  :: !CallbackType
     }
     deriving (Generic, Show)
 
-instance Exception WorkerError
+instance Exception ProcessError
 
 -- | Internal event delivered from Worker threads to the Capataz thread to
 -- indicate completion, failure or termination
 data MonitorEvent
-  = WorkerTerminated' {
-    workerId                :: !WorkerId
-  , workerName              :: !WorkerName
-  , workerRestartCount      :: !RestartCount
-  , workerTerminationReason :: !Text
-  , monitorEventTime        :: !UTCTime
+  = ProcessTerminated' {
+    processId                :: !ProcessId
+  , processName              :: !ProcessName
+  , processRestartCount      :: !RestartCount
+  , processTerminationReason :: !Text
+  , monitorEventTime         :: !UTCTime
   }
-  | WorkerFailed' {
-    workerId           :: !WorkerId
-  , workerName         :: !WorkerName
-  , workerRestartCount :: !RestartCount
-  , workerError        :: !SomeException
-  , monitorEventTime   :: !UTCTime
+  | ProcessFailed' {
+    processId           :: !WorkerId
+  , processName         :: !WorkerName
+  , processRestartCount :: !RestartCount
+  , processError        :: !SomeException
+  , monitorEventTime    :: !UTCTime
   }
-  | WorkerCompleted' {
-    workerId         :: !WorkerId
-  , workerName       :: !WorkerName
+  | ProcessCompleted' {
+    processId        :: !ProcessId
+  , processName      :: !ProcessName
   , monitorEventTime :: !UTCTime
   }
-  | WorkerForcedRestart {
-    workerId         :: !WorkerId
-  , workerName       :: !WorkerName
+  | ProcessForcedRestart {
+    processId        :: !ProcessId
+  , processName      :: !ProcessName
   , monitorEventTime :: !UTCTime
   }
   deriving (Show)
@@ -455,7 +464,7 @@ instance NFData CapatazStatus
 
 -- | Internal message delivered to a Capataz thread that can either be a call
 -- from public API or an event from a monitored Worker
-data CapatazMessage
+data SupervisorMessage
   = ControlAction !ControlAction
   | MonitorEvent !MonitorEvent
   deriving (Generic)
@@ -472,10 +481,8 @@ data ProcessSpec
 -- the main record to create workers and to stop the supervisor thread.
 data Capataz
   = Capataz {
-    capatazRuntime  :: !CapatazRuntime
-  , capatazEnv      :: !CapatazEnv
-  , capatazAsync    :: !(Async ())
-  , capatazTeardown :: !Teardown
+    capatazSupervisor :: !Supervisor
+  , capatazTeardown   :: !Teardown
   }
 
 instance ITeardown Capataz where
@@ -488,7 +495,7 @@ data CapatazRuntime
   = CapatazRuntime {
     capatazId           :: !CapatazId
   , capatazCreationTime :: !UTCTime
-  , capatazQueue        :: !(TQueue CapatazMessage)
+  , capatazQueue        :: !(TQueue SupervisorMessage)
   , capatazProcessMap   :: !(IORef ProcessMap)
   , capatazStatusVar    :: !(TVar CapatazStatus)
   , capatazOptions      :: !CapatazOptions
@@ -500,7 +507,7 @@ data CapatazEnv
   = CapatazEnv {
     capatazId                      :: !CapatazId
   , capatazName                    :: !CapatazName
-  , capatazQueue                   :: !(TQueue CapatazMessage)
+  , capatazQueue                   :: !(TQueue SupervisorMessage)
   , capatazProcessMap              :: !(IORef ProcessMap)
   , capatazStatusVar               :: !(TVar CapatazStatus)
   , capatazOptions                 :: !CapatazOptions
@@ -508,11 +515,42 @@ data CapatazEnv
   , capatazIntensity               :: !Int
     -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
   , capatazPeriodSeconds           :: !NominalDiffTime
-  , capatazRestartStrategy         :: !CapatazRestartStrategy
+  , capatazRestartStrategy         :: !SupervisorRestartStrategy
   , capatazProcessTerminationOrder :: !ProcessTerminationOrder
-  , onCapatazIntensityReached      :: !(IO ())
+  , capatazOnIntensityReached      :: !(IO ())
   , notifyEvent                    :: !(CapatazEvent -> IO ())
   }
+
+
+data ParentSupervisorEnv
+  = ParentSupervisorEnv {
+    supervisorId     :: !SupervisorId
+  , supervisorName   :: !SupervisorName
+  , supervisorNotify :: !(SupervisorMessage -> IO ())
+  , notifyEvent      :: !(CapatazEvent -> IO ())
+  }
+
+-- | Convenience utility record that contains all values related to a "Capataz";
+-- this is used on internal functions of the Capataz library.
+data SupervisorEnv
+  = SupervisorEnv {
+    supervisorId                      :: !SupervisorId
+  , supervisorName                    :: !SupervisorName
+  , supervisorNotify                  :: !(SupervisorMessage -> IO ())
+  , supervisorGetNotification         :: !(STM SupervisorMessage)
+  , supervisorProcessMap              :: !(IORef ProcessMap)
+  , supervisorStatusVar               :: !(TVar CapatazStatus)
+  , supervisorSpec                    :: !SupervisorSpec
+  , supervisorIntensity               :: !Int
+    -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
+  , supervisorPeriodSeconds           :: !NominalDiffTime
+  , supervisorRestartStrategy         :: !SupervisorRestartStrategy
+  , supervisorProcessTerminationOrder :: !ProcessTerminationOrder
+  , supervisorOnIntensityReached      :: !(IO ())
+  , supervisorOnIntensityReached      :: !(SomeException -> IO ())
+  , notifyEvent                       :: !(CapatazEvent -> IO ())
+  }
+
 
 -- | Default options to easily create capataz instances:
 -- * name defaults to \"default-capataz\"
@@ -521,16 +559,17 @@ data CapatazEnv
 -- * has a termination order of "OldestFirst"
 defCapatazOptions :: CapatazOptions
 defCapatazOptions = CapatazOptions
-  { capatazName                    = "default-capataz"
+  { supervisorName                    = "capataz-root"
 
   -- One (1) restart every five (5) seconds
-  , capatazIntensity               = 1
-  , capatazPeriodSeconds           = 5
-  , capatazRestartStrategy         = def
-  , capatazProcessSpecList         = []
-  , capatazProcessTerminationOrder = OldestFirst
-  , onCapatazIntensityReached      = return ()
-  , notifyEvent                    = const $ return ()
+  , supervisorIntensity               = 1
+  , supervisorPeriodSeconds           = 5
+  , supervisorRestartStrategy         = def
+  , supervisorProcessSpecList         = []
+  , supervisorProcessTerminationOrder = OldestFirst
+  , supervisorOnIntensityReached      = return ()
+  , supervisorOnFailure               = const $ return ()
+  , notifyEvent                       = const $ return ()
   }
 
 -- | Default options to easily create supervisor instances:
@@ -549,6 +588,7 @@ defSupervisorSpec = SupervisorSpec
   , supervisorProcessSpecList         = []
   , supervisorProcessTerminationOrder = OldestFirst
   , supervisorOnIntensityReached      = return ()
+  , supervisorOnFailure               = const $ return ()
   }
 
 -- | Default options to easily create worker instances:

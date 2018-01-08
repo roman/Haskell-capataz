@@ -205,7 +205,7 @@ import Control.Concurrent.Capataz -- (0)
   ( WorkerOptions(..)
   , CapatazOptions(..)
   , WorkerRestartStrategy(..)
-  , CapatazRestartStrategy(..)
+  , SupervisorRestartStrategy(..)
   , forkCapataz
   , forkWorker
   , defWorkerOptions

@@ -13,14 +13,14 @@ module Control.Concurrent.Capataz.Internal.Util where
 
 import Protolude
 
-import           Control.Concurrent.STM        (STM, atomically, retry)
-import           Control.Concurrent.STM.TQueue (writeTQueue)
-import           Control.Concurrent.STM.TVar   (TVar, readTVar, writeTVar)
-import           Data.IORef                    (atomicModifyIORef', readIORef)
-import qualified Data.Text                     as T
-import           Data.Time.Clock               (getCurrentTime)
+import           Control.Concurrent.STM      (STM, atomically, retry)
+import           Control.Concurrent.STM.TVar (TVar, readTVar, writeTVar)
+import           Data.IORef                  (atomicModifyIORef', readIORef)
+import qualified Data.Text                   as T
+import           Data.Time.Clock             (getCurrentTime)
 
 import qualified Data.HashMap.Strict as HashMap
+import           GHC.Conc            (labelThread)
 
 import Control.Concurrent.Capataz.Internal.Types
 
@@ -32,55 +32,69 @@ getTidNumber tid = case T.words $ show tid of
 
 --------------------------------------------------------------------------------
 
+-- | Internal functions that overwrites the GHC thread name, for increasing
+-- traceability on GHC internals
+setProcessThreadName :: WorkerId -> WorkerName -> IO ()
+setProcessThreadName workerId workerName = do
+  tid <- myThreadId
+  let workerIdentifier =
+        T.unpack workerName <> "_" <> show workerId <> "_" <> maybe
+          ""
+          T.unpack
+          (getTidNumber tid)
+  labelThread tid workerIdentifier
+
+
 getProcessId :: Process -> ProcessId
 getProcessId process = case process of
   WorkerProcess     Worker { workerId }         -> workerId
   SupervisorProcess Supervisor { supervisorId } -> supervisorId
 
 -- | Fetches a "Worker" from the "Capataz" instance environment
-fetchProcess :: CapatazEnv -> ProcessId -> IO (Maybe Process)
-fetchProcess CapatazEnv { capatazProcessMap } processId = do
-  processMap <- readIORef capatazProcessMap
+fetchProcess :: SupervisorEnv -> ProcessId -> IO (Maybe Process)
+fetchProcess SupervisorEnv { supervisorProcessMap } processId = do
+  processMap <- readIORef supervisorProcessMap
   case HashMap.lookup processId processMap of
     Just process -> return $ Just process
     _            -> return Nothing
 
 -- | Fetches a "WorkerEnv" from the "Capataz" instance environment
-fetchWorkerEnv :: CapatazEnv -> WorkerId -> IO (Maybe WorkerEnv)
-fetchWorkerEnv CapatazEnv { capatazProcessMap } workerId = do
-  processMap <- readIORef capatazProcessMap
+fetchWorkerEnv :: SupervisorEnv -> WorkerId -> IO (Maybe WorkerEnv)
+fetchWorkerEnv SupervisorEnv { supervisorProcessMap } workerId = do
+  processMap <- readIORef supervisorProcessMap
   case HashMap.lookup workerId processMap of
     Nothing                     -> return Nothing
     Just (WorkerProcess worker) -> return $ Just $ workerToEnv worker
     Just _                      -> return Nothing
 
 -- | Appends a new "Worker" to the "Capataz" existing worker map.
-appendProcessToMap :: CapatazEnv -> Process -> IO ()
-appendProcessToMap CapatazEnv { capatazProcessMap } process =
-  atomicModifyIORef' capatazProcessMap
+appendProcessToMap :: SupervisorEnv -> Process -> IO ()
+appendProcessToMap SupervisorEnv { supervisorProcessMap } process =
+  atomicModifyIORef' supervisorProcessMap
                      (\processMap -> (appendProcess processMap, ()))
  where
   appendProcess = HashMap.alter (const $ Just process) (getProcessId process)
 
 -- | Removes a "Worker" from the "Capataz" existing worker map.
-removeWorkerFromMap :: CapatazEnv -> WorkerId -> IO ()
-removeWorkerFromMap CapatazEnv { capatazProcessMap } workerId =
+removeWorkerFromMap :: SupervisorEnv -> WorkerId -> IO ()
+removeWorkerFromMap SupervisorEnv { supervisorProcessMap } workerId =
   atomicModifyIORef'
-    capatazProcessMap
+    supervisorProcessMap
     ( \processMap -> maybe (processMap, ())
                            (const (HashMap.delete workerId processMap, ()))
                            (HashMap.lookup workerId processMap)
     )
 
 -- | Function to modify a "Capataz" worker map using a pure function.
-resetProcessMap :: CapatazEnv -> (ProcessMap -> ProcessMap) -> IO ()
-resetProcessMap CapatazEnv { capatazProcessMap } processMapFn =
-  atomicModifyIORef' capatazProcessMap
+resetProcessMap :: SupervisorEnv -> (ProcessMap -> ProcessMap) -> IO ()
+resetProcessMap SupervisorEnv { supervisorProcessMap } processMapFn =
+  atomicModifyIORef' supervisorProcessMap
                      (\processMap -> (processMapFn processMap, ()))
 
 -- | Function to get a snapshot of the "Capataz"' worker map
-readProcessMap :: CapatazEnv -> IO ProcessMap
-readProcessMap CapatazEnv { capatazProcessMap } = readIORef capatazProcessMap
+readProcessMap :: SupervisorEnv -> IO ProcessMap
+readProcessMap SupervisorEnv { supervisorProcessMap } =
+  readIORef supervisorProcessMap
 
 -- | Returns all worker's of a "Capataz" by "ProcessTerminationOrder". This is
 -- used "AllForOne" restarts and shutdown operations.
@@ -109,56 +123,50 @@ readCapatazStatusSTM statusVar = do
   if status == Initializing then retry else return status
 
 -- | Sub-routine that returns the "CapatazStatus" on the IO monad
-readCapatazStatus :: CapatazEnv -> IO CapatazStatus
-readCapatazStatus CapatazEnv { capatazStatusVar } =
-  atomically $ readTVar capatazStatusVar
+readCapatazStatus :: SupervisorEnv -> IO CapatazStatus
+readCapatazStatus SupervisorEnv { supervisorStatusVar } =
+  atomically $ readTVar supervisorStatusVar
 
 -- | Modifes the "Capataz" status, this is the only function that should be used
 -- to this end given it has the side-effect of notifying a status change via the
 -- "notifyEvent" sub-routine, given via an attribute of the "CapatazOption"
 -- record.
-writeCapatazStatus :: CapatazEnv -> CapatazStatus -> IO ()
-writeCapatazStatus CapatazEnv { capatazId, capatazName, capatazStatusVar, notifyEvent } newCapatazStatus
+writeSupervisorStatus :: SupervisorEnv -> CapatazStatus -> IO ()
+writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, notifyEvent } newSupervisorStatus
   = do
 
-    prevCapatazStatus <- atomically $ do
-      prevStatus <- readTVar capatazStatusVar
-      writeTVar capatazStatusVar newCapatazStatus
+    prevSupervisorStatus <- atomically $ do
+      prevStatus <- readTVar supervisorStatusVar
+      writeTVar supervisorStatusVar newSupervisorStatus
       return prevStatus
 
     eventTime <- getCurrentTime
-    notifyEvent CapatazStatusChanged
-      { capatazId
-      , capatazName
-      , prevCapatazStatus
-      , newCapatazStatus
+    notifyEvent SupervisorStatusChanged
+      { supervisorId         = supervisorId
+      , supervisorName       = supervisorName
+      , prevSupervisorStatus
+      , newSupervisorStatus
       , eventTime
       }
 
 
 -- | Used from public API functions to send a ControlAction to the Capataz
 -- supervisor thread loop
-sendControlMsg :: CapatazEnv -> ControlAction -> IO ()
-sendControlMsg CapatazEnv { capatazQueue } ctrlMsg =
-  atomically $ writeTQueue capatazQueue (ControlAction ctrlMsg)
+sendControlMsg :: SupervisorEnv -> ControlAction -> IO ()
+sendControlMsg SupervisorEnv { supervisorNotify } ctrlMsg =
+  supervisorNotify (ControlAction ctrlMsg)
 
 -- | Used from public API functions to send a ControlAction to the Capataz
 -- supervisor thread loop, it receives an IO sub-routine that expects an IO
 -- operation that blocks a thread until the message is done.
 sendSyncControlMsg
-  :: CapatazEnv
+  :: SupervisorEnv
   -> (IO () -> ControlAction) -- ^ Blocking sub-routine used from the caller
   -> IO ()
-sendSyncControlMsg CapatazEnv { capatazQueue } mkCtrlMsg = do
+sendSyncControlMsg SupervisorEnv { supervisorNotify } mkCtrlMsg = do
   result <- newEmptyMVar
-  atomically
-    $ writeTQueue capatazQueue (ControlAction $ mkCtrlMsg (putMVar result ()))
+  supervisorNotify (ControlAction $ mkCtrlMsg (putMVar result ()))
   takeMVar result
-
--- | Utility function to transform a "CapatazRuntime" into a "CapatazEnv"
-capatazToEnv :: CapatazRuntime -> CapatazEnv
-capatazToEnv capatazRuntime@CapatazRuntime {..} =
-  let CapatazOptions {..} = capatazOptions in CapatazEnv {..}
 
 -- | Utility function to transform a "Worker" into a "WorkerEnv"
 workerToEnv :: Worker -> WorkerEnv
@@ -169,6 +177,13 @@ workerToEnv Worker {..} =
   in
     WorkerEnv {..}
 
+capatazOptionsToSupervisorSpec :: CapatazOptions -> SupervisorSpec
+capatazOptionsToSupervisorSpec CapatazOptions {..} = SupervisorSpec {..}
+
+toParentSupervisorEnv :: SupervisorEnv -> ParentSupervisorEnv
+toParentSupervisorEnv SupervisorEnv { supervisorId, supervisorName, supervisorNotify, notifyEvent }
+  = ParentSupervisorEnv {..}
+
 -- | Utility function to transform a "WorkerEnv" into a "Worker"
 envToWorker :: WorkerEnv -> Worker
 envToWorker WorkerEnv {..} = Worker {..}
@@ -177,6 +192,6 @@ envToWorker WorkerEnv {..} = Worker {..}
 workerOptionsToSpec :: WorkerOptions -> IO () -> WorkerSpec
 workerOptionsToSpec WorkerOptions {..} workerAction = WorkerSpec {..}
 
--- | Utility function to transform a "Capataz" into an @"Async" ()@
 capatazToAsync :: Capataz -> Async ()
-capatazToAsync = capatazAsync
+capatazToAsync Capataz { capatazSupervisor } =
+  let Supervisor { supervisorAsync } = capatazSupervisor in supervisorAsync

@@ -23,8 +23,8 @@ import Text.Show.Pretty           (pPrint)
 main :: IO ()
 main = do
   n       <- getRecord "Counter spawner"
-  capataz <- forkCapataz defCapatazOptions { capatazName = "Example Capataz"
-                                           , capatazRestartStrategy = OneForOne
+  capataz <- forkCapataz defCapatazOptions { supervisorName = "Example Capataz"
+                                           , supervisorRestartStrategy = OneForOne
                                            , notifyEvent = pPrint
                                            }
 

@@ -113,11 +113,6 @@ data CapatazEvent
   , terminationReason :: !Text
   , eventTime         :: !UTCTime
   }
-  | SupervisorTerminated {
-    supervisorName :: !SupervisorName
-  , supervisorId   :: !SupervisorId
-  , eventTime      :: !UTCTime
-  }
   | CapatazFailed {
     supervisorId    :: !SupervisorId
   , supervisorName  :: !SupervisorName
@@ -125,11 +120,6 @@ data CapatazEvent
   , eventTime       :: !UTCTime
   }
   | CapatazTerminated {
-    supervisorName :: !SupervisorName
-  , supervisorId   :: !SupervisorId
-  , eventTime      :: !UTCTime
-  }
-  | SupervisorShutdownInvoked {
     supervisorName :: !SupervisorName
   , supervisorId   :: !SupervisorId
   , eventTime      :: !UTCTime

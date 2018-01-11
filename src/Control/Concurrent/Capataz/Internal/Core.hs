@@ -82,7 +82,7 @@ forkCapataz capatazOptions@CapatazOptions { notifyEvent } = do
   capatazTeardown <- newTeardown
     "capataz"
     ( do
-      Supervisor.haltSupervisor supervisorEnv
+      Supervisor.haltSupervisor "capataz teardown" supervisorEnv
       eventTime <- getCurrentTime
       notifyEvent CapatazTerminated {supervisorId , supervisorName , eventTime }
     )

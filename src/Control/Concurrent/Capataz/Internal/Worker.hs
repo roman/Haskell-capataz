@@ -71,6 +71,7 @@ notifyWorkerStarted mRestartInfo SupervisorEnv { supervisorId, supervisorName, n
         , supervisorName
         , processId
         , processName
+        , processType = WorkerType
         , processRestartCount
         , processThreadId     = asyncThreadId workerAsync
         , eventTime
@@ -80,6 +81,7 @@ notifyWorkerStarted mRestartInfo SupervisorEnv { supervisorId, supervisorName, n
         , supervisorName
         , processId
         , processName
+        , processType = WorkerType
         , eventTime
         , processThreadId = asyncThreadId workerAsync
         }

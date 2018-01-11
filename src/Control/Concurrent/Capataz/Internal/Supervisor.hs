@@ -103,16 +103,16 @@ handleControlAction env controlAction = case controlAction of
         _ -> return True
 
   TerminateCapataz { notifyCapatazTermination } -> do
-    haltSupervisor env
+    haltSupervisor "capataz termination" env
     notifyCapatazTermination
     return False
 
 -- | Executes the shutdown operation of a Capataz, including the termination of
 -- Workers being supervised by it.
-haltSupervisor :: SupervisorEnv -> IO ()
-haltSupervisor env = do
+haltSupervisor :: Text -> SupervisorEnv -> IO ()
+haltSupervisor reason env = do
   Util.writeSupervisorStatus  env                   Halting
-  Process.terminateProcessMap "supervisor shutdown" env
+  Process.terminateProcessMap reason env
   Util.resetProcessMap        env                   (const HashMap.empty)
   Util.writeSupervisorStatus  env                   Halted
 
@@ -143,6 +143,7 @@ supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorNa
 
     case loopResult of
       Left supervisorError -> do
+        haltSupervisor (show supervisorError) env
         result <- Process.handleProcessException
           unmask
           parentEnv
@@ -166,6 +167,7 @@ supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorNa
           eContinueLoop <- try $ unmask $ handleSupervisorMessage env message
           case eContinueLoop of
             Left supervisorError -> do
+              haltSupervisor (show supervisorError) env
               result <- Process.handleProcessException
                 unmask
                 parentEnv
@@ -186,6 +188,7 @@ supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorNa
                   , processId
                   , processName
                   , processThreadId
+                  , processType       = SupervisorType
                   , terminationReason = "Supervisor normal termination"
                   }
 
@@ -223,7 +226,6 @@ supervisorMain parentEnv@ParentSupervisorEnv { notifyEvent } supervisorSpec@Supe
     supervisorAsync <- asyncWithUnmask $ \unmask -> do
       Util.setProcessThreadName supervisorId supervisorName
       supervisorLoop unmask parentEnv supervisorEnv restartCount
-
 
     forM_
       supervisorProcessSpecList

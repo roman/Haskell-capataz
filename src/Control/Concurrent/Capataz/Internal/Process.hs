@@ -29,6 +29,11 @@ getProcessName procSpec = case procSpec of
   WorkerProcessSpec     (WorkerSpec { workerName }        ) -> workerName
   SupervisorProcessSpec (SupervisorSpec { supervisorName }) -> supervisorName
 
+getProcessType :: ProcessSpec -> ProcessType
+getProcessType processSpec = case processSpec of
+  WorkerProcessSpec {} -> WorkerType
+  SupervisorProcessSpec {} -> SupervisorType
+
 getProcessSpec :: Process -> ProcessSpec
 getProcessSpec process = case process of
   WorkerProcess (Worker { workerSpec }) -> WorkerProcessSpec workerSpec
@@ -62,6 +67,7 @@ notifyProcessStarted mRestartInfo ParentSupervisorEnv { supervisorId, supervisor
         , supervisorName
         , processId           = getProcessId process
         , processName         = getProcessName (getProcessSpec process)
+        , processType         = getProcessType (getProcessSpec process)
         , processThreadId     = getProcessThreadId process
         , processRestartCount
         , eventTime
@@ -71,6 +77,7 @@ notifyProcessStarted mRestartInfo ParentSupervisorEnv { supervisorId, supervisor
         , supervisorName
         , processId       = getProcessId process
         , processName     = getProcessName (getProcessSpec process)
+        , processType     = getProcessType (getProcessSpec process)
         , processThreadId = getProcessThreadId process
         , eventTime
         }
@@ -102,9 +109,10 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
         notifyEvent ProcessCallbackExecuted
           { supervisorId
           , supervisorName
+          , processThreadId
           , processId
           , processName
-          , processThreadId
+          , processType = getProcessType procSpec
           , processCallbackError = either Just (const Nothing) eErrResult
           , processCallbackType  = OnTermination
           , eventTime            = monitorEventTime
@@ -149,6 +157,7 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
           , supervisorName
           , processId
           , processName
+          , processType = getProcessType procSpec
           , processThreadId
           , processCallbackError = either Just (const Nothing) eErrResult
           , processCallbackType  = OnFailure
@@ -196,6 +205,7 @@ handleProcessCompletion unmask ParentSupervisorEnv { supervisorId, supervisorNam
       , supervisorName
       , processId
       , processName
+      , processType = getProcessType procSpec
       , processThreadId
       , processCallbackError = either Just (const Nothing) eCompResult
       , processCallbackType  = OnCompletion
@@ -270,6 +280,7 @@ terminateWorker processTerminationReason SupervisorEnv { supervisorId, superviso
       , supervisorName
       , processId
       , processName
+      , processType       = WorkerType
       , processThreadId   = asyncThreadId workerAsync
       , terminationReason = processTerminationReason
       , eventTime
@@ -281,7 +292,7 @@ terminateSupervisor processTerminationReason SupervisorEnv { supervisorId, super
 
     cancelWith
       supervisorAsync
-      TerminateProcessException {processId , processTerminationReason }
+      TerminateProcessException {processId, processTerminationReason }
 
     eventTime <- getCurrentTime
     notifyEvent ProcessTerminated
@@ -290,6 +301,7 @@ terminateSupervisor processTerminationReason SupervisorEnv { supervisorId, super
       , eventTime
       , processId
       , processName
+      , processType       = SupervisorType
       , processThreadId   = asyncThreadId supervisorAsync
       , terminationReason = processTerminationReason
       }

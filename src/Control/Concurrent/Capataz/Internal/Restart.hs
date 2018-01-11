@@ -128,6 +128,7 @@ forceRestartWorker SupervisorEnv { supervisorId, supervisorName, notifyEvent } W
       , processThreadId   = asyncThreadId workerAsync
       , processId         = workerId
       , processName       = workerName
+      , processType       = WorkerType
       , eventTime
       , terminationReason = "forced restart"
       }
@@ -158,6 +159,7 @@ handleWorkerCompleted env@SupervisorEnv { supervisorId, supervisorName, notifyEv
             , supervisorName
             , processId       = workerId
             , processName     = workerName
+            , processType     = WorkerType
             , processThreadId = asyncThreadId workerAsync
             , eventTime
             }
@@ -189,6 +191,7 @@ handleWorkerFailed env@SupervisorEnv { supervisorId, supervisorName, notifyEvent
             , supervisorName
             , processId       = workerId
             , processName     = workerName
+            , processType     = WorkerType
             , processError    = workerError
             , processThreadId = asyncThreadId workerAsync
             , eventTime
@@ -213,6 +216,7 @@ handleWorkerTerminated env@SupervisorEnv { supervisorId, supervisorName, notifyE
             , supervisorName
             , processId         = workerId
             , processName       = workerName
+            , processType       = WorkerType
             , terminationReason
             , eventTime
             , processThreadId   = asyncThreadId workerAsync

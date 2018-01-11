@@ -54,6 +54,7 @@ data CapatazEvent
   , processThreadId   :: !ProcessThreadId
   , processId         :: !ProcessId
   , processName       :: !ProcessName
+  , processType       :: !ProcessType
   , terminationReason :: !Text
   , eventTime         :: !UTCTime
   }
@@ -63,6 +64,7 @@ data CapatazEvent
   , processThreadId :: !ProcessThreadId
   , processId       :: !ProcessId
   , processName     :: !ProcessName
+  , processType     :: !ProcessType
   , eventTime       :: !UTCTime
   }
   | ProcessRestarted {
@@ -71,6 +73,7 @@ data CapatazEvent
   , processThreadId     :: !ProcessThreadId
   , processId           :: !ProcessId
   , processName         :: !ProcessName
+  , processType     :: !ProcessType
   , processRestartCount :: !Int
   , eventTime           :: !UTCTime
   }
@@ -80,6 +83,7 @@ data CapatazEvent
   , processThreadId :: !ProcessThreadId
   , processId       :: !ProcessId
   , processName     :: !ProcessName
+  , processType     :: !ProcessType
   , eventTime       :: !UTCTime
   }
   | ProcessFailed {
@@ -88,6 +92,7 @@ data CapatazEvent
   , processThreadId :: !ProcessThreadId
   , processId       :: !ProcessId
   , processName     :: !ProcessName
+  , processType     :: !ProcessType
   , processError    :: !SomeException
   , eventTime       :: !UTCTime
   }
@@ -97,6 +102,7 @@ data CapatazEvent
   , processThreadId      :: !ProcessThreadId
   , processId            :: !ProcessId
   , processName          :: !ProcessName
+  , processType     :: !ProcessType
   , processCallbackError :: !(Maybe SomeException)
   , processCallbackType  :: !CallbackType
   , eventTime            :: !UTCTime
@@ -394,6 +400,11 @@ data CallbackType
   | OnTermination
   deriving (Generic, Show, Eq)
 
+data ProcessType
+  = SupervisorType
+  | WorkerType
+  deriving (Show, Eq)
+
 -- | Internal exception triggered when a callback of a Worker fails
 data ProcessError
   = ProcessCallbackFailed {
@@ -540,7 +551,6 @@ data SupervisorEnv
   , supervisorOnIntensityReached      :: !(SomeException -> IO ())
   , notifyEvent                       :: !(CapatazEvent -> IO ())
   }
-
 
 -- | Default options to easily create capataz instances:
 -- * name defaults to \"default-capataz\"

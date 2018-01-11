@@ -1,5 +1,5 @@
 name: capataz
-version: '0.0.0.1'
+version: '0.0.0.2'
 synopsis: OTP-like supervision trees in Haskell
 description: |
   `capataz` enhances the reliability of your concurrent applications by offering

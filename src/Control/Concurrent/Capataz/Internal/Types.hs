@@ -221,24 +221,6 @@ data CapatazOptions
   }
 
 
--- | Utility record used to specify options to a "Worker" instance
-data WorkerOptions
-  = WorkerOptions {
-    -- | Name of the Worker (present on "CapatazEvent" records)
-    workerName              :: !WorkerName
-    -- | Callback used when the worker fails with an error
-  , workerOnFailure         :: !(SomeException -> IO ())
-    -- | Callback used when the worker completes execution without error
-  , workerOnCompletion      :: !(IO ())
-    -- | Callback used when the worker is terminated
-  , workerOnTermination     :: !(IO ())
-    -- | Indicates how a worker should be terminated
-  , workerTerminationPolicy :: !WorkerTerminationPolicy
-    -- | Indicates how a worker should be restarted
-  , workerRestartStrategy   :: !WorkerRestartStrategy
-  }
-  deriving (Generic)
-
 -- | Specifies how a "Worker" should restart on failure. Default is "Transient"
 data WorkerRestartStrategy
   -- | Worker thread is __always__ restarted
@@ -256,11 +238,11 @@ instance NFData WorkerRestartStrategy
 instance Default WorkerRestartStrategy where
   def = Transient
 
--- | WorkerSpec is a representation of the "WorkerOptions" record that embeds
+-- | WorkerOptions is a representation of the "WorkerOptions" record that embeds
 -- the @"IO" ()@ sub-routine of the worker thread. This record is used when we
 -- want to bound worker threads to a "Capataz" instance
-data WorkerSpec
-  = WorkerSpec {
+data WorkerOptions
+  = WorkerOptions {
     -- | An @IO ()@ sub-routine that will be executed when the worker
     -- thread is created, this attribute is lazy given we want to this
     -- value on a worker thread environment.
@@ -291,9 +273,9 @@ data Worker
   , workerCreationTime :: !UTCTime
     -- | Name of the Worker (present on "CapatazEvent" records)
   , workerName         :: !WorkerName
-    -- | "WorkerSpec" contains all the options around restart and termination
+    -- | "WorkerOptions" contains all the options around restart and termination
     -- policies
-  , workerSpec         :: !WorkerSpec
+  , workerOptions      :: !WorkerOptions
   }
 
 -- | Convenience utility record that contains all values related to a "Worker";
@@ -305,7 +287,7 @@ data WorkerEnv
   , workerAsync           :: !(Async ())
   , workerCreationTime    :: !UTCTime
   , workerName            :: !WorkerName
-  , workerSpec            :: !WorkerSpec
+  , workerOptions         :: !WorkerOptions
   , workerOnFailure       :: !(SomeException -> IO ())
   , workerOnCompletion    :: !(IO ())
   , workerOnTermination   :: !(IO ())
@@ -321,8 +303,8 @@ data ProcessEnv
   , processRestartStrategy :: !WorkerRestartStrategy
   }
 
-data SupervisorSpec
-  = SupervisorSpec {
+data SupervisorOptions
+  = SupervisorOptions {
     -- | Name of the Supervisor (present on "CapatazEvent" records)
     supervisorName                    :: Text
     -- | How many errors is the Supervisor be able to handle; check:
@@ -346,8 +328,8 @@ data Supervisor
   = Supervisor {
     supervisorId           :: !SupervisorId
   , supervisorName         :: !SupervisorName
+  , supervisorOptions      :: !SupervisorOptions
   , supervisorCreationTime :: !UTCTime
-  , supervisorSpec         :: !SupervisorSpec
   , supervisorAsync        :: !(Async ())
   , supervisorNotify       :: SupervisorMessage -> IO ()
   , supervisorEnv          :: !SupervisorEnv
@@ -357,7 +339,7 @@ data Supervisor
 -- the Capataz public API.
 data ControlAction
   = ForkWorker {
-    workerSpec     :: !WorkerSpec
+    workerOptions  :: !WorkerOptions
   , returnWorkerId :: !(WorkerId -> IO ())
   }
   | TerminateProcess {
@@ -391,7 +373,7 @@ instance NFData CapatazSignal
 -- | Internal exception triggered when a Worker violates error intensity
 -- specification
 data CapatazError
-  = CapatazIntensityReached {
+  = SupervisorIntensityReached {
     processId           :: !ProcessId
   , processName         :: !ProcessName
   , processRestartCount :: !Int
@@ -484,8 +466,8 @@ data Process
   | SupervisorProcess Supervisor
 
 data ProcessSpec
-  = WorkerProcessSpec WorkerSpec
-  | SupervisorProcessSpec SupervisorSpec
+  = WorkerSpec WorkerOptions
+  | SupervisorSpec SupervisorOptions
 
 -- | Record that contains the environment of a capataz monitor, this is used as
 -- the main record to create workers and to stop the supervisor thread.
@@ -550,7 +532,7 @@ data SupervisorEnv
   , supervisorGetNotification         :: !(STM SupervisorMessage)
   , supervisorProcessMap              :: !(IORef ProcessMap)
   , supervisorStatusVar               :: !(TVar CapatazStatus)
-  , supervisorSpec                    :: !SupervisorSpec
+  , supervisorOptions                 :: !SupervisorOptions
   , supervisorIntensity               :: !Int
     -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
   , supervisorPeriodSeconds           :: !NominalDiffTime
@@ -586,8 +568,8 @@ defCapatazOptions = CapatazOptions
 -- * intensity error tolerance is set to 1 error every 5 seconds
 -- * has a "OneForOne " capataz restart strategy
 -- * has a termination order of "OldestFirst"
-defSupervisorSpec :: SupervisorSpec
-defSupervisorSpec = SupervisorSpec
+defSupervisorOptions :: SupervisorOptions
+defSupervisorOptions = SupervisorOptions
   { supervisorName                    = "default-supervisor"
 
   -- One (1) restart every five (5) seconds
@@ -600,27 +582,13 @@ defSupervisorSpec = SupervisorSpec
   , supervisorOnFailure               = const $ return ()
   }
 
--- | Default options to easily create worker instances:
--- * name defaults to \"default-worker\"
--- * has a "Transient" worker restart strategy
--- * has a termination policy of three (3) seconds
-defWorkerOptions :: WorkerOptions
-defWorkerOptions = WorkerOptions
-  { workerName              = "default-worker"
-  , workerOnFailure         = const $ return ()
-  , workerOnCompletion      = return ()
-  , workerOnTermination     = return ()
-  , workerTerminationPolicy = def
-  , workerRestartStrategy   = def
-  }
-
 -- | Default spec to easily create worker instances:
 -- * @IO ()@ sub-routine simply returns unit
 -- * name defaults to \"default-worker\"
 -- * has a "Transient" worker restart strategy
 -- * has a termination policy of three (3) seconds
-defWorkerSpec :: WorkerSpec
-defWorkerSpec = WorkerSpec
+defWorkerOptions :: WorkerOptions
+defWorkerOptions = WorkerOptions
   { workerName              = "default-worker"
   , workerAction            = return ()
   , workerOnFailure         = const $ return ()

@@ -33,13 +33,13 @@ main = do
       delayMicros = 5000100
 
   _workerIdList <- forM [1 .. procNumber n] $ \i -> forkWorker
-    defWorkerOptions { workerName            = "Worker (" <> show i <> ")"
-                     , workerRestartStrategy = Permanent
-                     }
+    defWorkerOptions { workerRestartStrategy = Permanent }
+    ("Worker (" <> show i <> ")")
     (spawnNumbersProcess (numberWriter i))
     capataz
 
-  void $ forkWorker defWorkerOptions { workerName = "Worker Killer" }
+  void $ forkWorker defWorkerOptions
+                    "worker-killer"
                     (forever $ threadDelay delayMicros >> killNumberProcess)
                     capataz
 

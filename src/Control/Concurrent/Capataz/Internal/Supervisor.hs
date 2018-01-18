@@ -28,17 +28,17 @@ import qualified Control.Concurrent.Capataz.Internal.Worker  as Worker
 -- to the supervisor loop
 forkSupervisor
   :: ParentSupervisorEnv
-  -> SupervisorSpec
+  -> SupervisorOptions
   -> Maybe (ProcessId, RestartCount)
   -> IO Supervisor
-forkSupervisor parentEnv supervisorSpec mRestartInfo = do
+forkSupervisor parentEnv supervisorOptions mRestartInfo = do
   (supervisorId, restartCount) <- case mRestartInfo of
     Just (supervisorId, restartCount) -> pure (supervisorId, restartCount)
     Nothing                           -> (,) <$> UUID.nextRandom <*> pure 0
 
 
   supervisor <- supervisorMain parentEnv
-                               supervisorSpec
+                               supervisorOptions
                                supervisorId
                                restartCount
 
@@ -52,9 +52,9 @@ buildSupervisorEnv
   -> (SupervisorMessage -> IO ())
   -> STM SupervisorMessage
   -> SupervisorId
-  -> SupervisorSpec
+  -> SupervisorOptions
   -> IO SupervisorEnv
-buildSupervisorEnv notifyEvent supervisorNotify supervisorGetNotification supervisorId supervisorSpec@SupervisorSpec {..}
+buildSupervisorEnv notifyEvent supervisorNotify supervisorGetNotification supervisorId supervisorOptions@SupervisorOptions {..}
   = do
     supervisorProcessMap <- newIORef mempty
     supervisorStatusVar  <- newTVarIO Initializing
@@ -87,8 +87,8 @@ handleMonitorEvent env monitorEv = do
 -- | Handles an action triggered by the public API
 handleControlAction :: SupervisorEnv -> ControlAction -> IO Bool
 handleControlAction env controlAction = case controlAction of
-  ForkWorker { workerSpec, returnWorkerId } -> do
-    worker@Worker { workerId } <- Worker.forkWorker env workerSpec Nothing
+  ForkWorker { workerOptions, returnWorkerId } -> do
+    worker@Worker { workerId } <- Worker.forkWorker env workerOptions Nothing
     Util.appendProcessToMap env (WorkerProcess worker)
     returnWorkerId workerId
     return True
@@ -131,7 +131,7 @@ supervisorLoop
   -> SupervisorEnv
   -> RestartCount
   -> IO ()
-supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorName, supervisorNotify = notifyParentSupervisor } env@SupervisorEnv { supervisorId = processId, supervisorName = processName, supervisorSpec, supervisorStatusVar, supervisorGetNotification, notifyEvent } restartCount
+supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorName, supervisorNotify = notifyParentSupervisor } env@SupervisorEnv { supervisorId = processId, supervisorName = processName, supervisorOptions, supervisorStatusVar, supervisorGetNotification, notifyEvent } restartCount
   = do
     processThreadId <- myThreadId
     loopResult      <-
@@ -148,7 +148,7 @@ supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorNa
         result <- Process.handleProcessException
           unmask
           parentEnv
-          (SupervisorProcessSpec supervisorSpec)
+          (SupervisorSpec supervisorOptions)
           processId
           restartCount
           supervisorError
@@ -172,7 +172,7 @@ supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorNa
               result <- Process.handleProcessException
                 unmask
                 parentEnv
-                (SupervisorProcessSpec supervisorSpec)
+                (SupervisorSpec supervisorOptions)
                 processId
                 restartCount
                 supervisorError
@@ -205,11 +205,11 @@ supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorNa
 -- | Decorates the given @IO ()@ sub-routine with failure handling
 supervisorMain
   :: ParentSupervisorEnv
-  -> SupervisorSpec
+  -> SupervisorOptions
   -> SupervisorId
   -> RestartCount
   -> IO Supervisor
-supervisorMain parentEnv@ParentSupervisorEnv { notifyEvent } supervisorSpec@SupervisorSpec { supervisorName, supervisorProcessSpecList } supervisorId restartCount
+supervisorMain parentEnv@ParentSupervisorEnv { notifyEvent } supervisorOptions@SupervisorOptions { supervisorName, supervisorProcessSpecList } supervisorId restartCount
   = do
     supervisorCreationTime <- getCurrentTime
 
@@ -222,7 +222,7 @@ supervisorMain parentEnv@ParentSupervisorEnv { notifyEvent } supervisorSpec@Supe
       supervisorNotify
       supervisorGetNotification
       supervisorId
-      supervisorSpec
+      supervisorOptions
 
     supervisorAsync <- asyncWithUnmask $ \unmask -> do
       Util.setProcessThreadName supervisorId supervisorName
@@ -231,14 +231,14 @@ supervisorMain parentEnv@ParentSupervisorEnv { notifyEvent } supervisorSpec@Supe
     forM_
       supervisorProcessSpecList
       ( \processSpec -> case processSpec of
-        WorkerProcessSpec workerSpec -> do
-          worker <- Worker.forkWorker supervisorEnv workerSpec Nothing
+        WorkerSpec workerOptions -> do
+          worker <- Worker.forkWorker supervisorEnv workerOptions Nothing
           Util.appendProcessToMap supervisorEnv (WorkerProcess worker)
 
-        SupervisorProcessSpec childSupervisorSpec -> do
+        SupervisorSpec childSupervisorOptions -> do
           supervisor <- forkSupervisor
             (Util.toParentSupervisorEnv supervisorEnv)
-            childSupervisorSpec
+            childSupervisorOptions
             Nothing
           Util.appendProcessToMap supervisorEnv (SupervisorProcess supervisor)
       )
@@ -249,7 +249,7 @@ supervisorMain parentEnv@ParentSupervisorEnv { notifyEvent } supervisorSpec@Supe
       { supervisorId
       , supervisorName
       , supervisorAsync
-      , supervisorSpec
+      , supervisorOptions
       , supervisorEnv
       , supervisorNotify
       , supervisorCreationTime
@@ -301,12 +301,14 @@ execCapatazRestartStrategy supervisorEnv@SupervisorEnv { supervisorRestartStrate
     OneForOne -> do
       Util.removeProcessFromMap supervisorEnv processId
       newProcess <- case processSpec of
-        WorkerProcessSpec workerSpec ->
-          restartWorker supervisorEnv workerSpec processId processRestartCount
+        WorkerSpec workerOptions -> restartWorker supervisorEnv
+                                                  workerOptions
+                                                  processId
+                                                  processRestartCount
 
-        SupervisorProcessSpec supervisorSpec -> restartSupervisor
+        SupervisorSpec supervisorOptions -> restartSupervisor
           (Util.toParentSupervisorEnv supervisorEnv)
-          supervisorSpec
+          supervisorOptions
           processId
           processRestartCount
 
@@ -330,7 +332,7 @@ execRestartAction supervisorEnv@SupervisorEnv { supervisorOnIntensityReached } p
       HaltSupervisor -> do
         -- skip exceptions on callback
         (_ :: Either SomeException ()) <- try supervisorOnIntensityReached
-        throwIO CapatazIntensityReached
+        throwIO SupervisorIntensityReached
           { processId
           , processName
           , processRestartCount
@@ -365,18 +367,21 @@ restartProcessList supervisorEnv@SupervisorEnv { supervisorProcessTerminationOrd
         $ forceRestartProcess supervisorEnv process
 
       case process of
-        WorkerProcess Worker { workerId, workerSpec } -> do
-          let WorkerSpec { workerRestartStrategy } = workerSpec
+        WorkerProcess Worker { workerId, workerOptions } -> do
+          let WorkerOptions { workerRestartStrategy } = workerOptions
           case workerRestartStrategy of
             Temporary -> return Nothing
             _ ->
               Just
-                <$> restartWorker supervisorEnv workerSpec workerId restartCount
+                <$> restartWorker supervisorEnv
+                                  workerOptions
+                                  workerId
+                                  restartCount
 
-        SupervisorProcess Supervisor { supervisorId, supervisorSpec } ->
+        SupervisorProcess Supervisor { supervisorId, supervisorOptions } ->
           Just
             <$> restartSupervisor (Util.toParentSupervisorEnv supervisorEnv)
-                                  supervisorSpec
+                                  supervisorOptions
                                   supervisorId
                                   restartCount
 
@@ -393,21 +398,21 @@ forceRestartProcess env process = do
 -- | Starts a new worker thread taking into account an existing "WorkerId" and
 -- keeping a "RestartCount" to manage Capataz error intensity.
 restartWorker
-  :: SupervisorEnv -> WorkerSpec -> WorkerId -> RestartCount -> IO Process
-restartWorker supervisorEnv workerSpec workerId restartCount =
+  :: SupervisorEnv -> WorkerOptions -> WorkerId -> RestartCount -> IO Process
+restartWorker supervisorEnv workerOptions workerId restartCount =
   WorkerProcess <$> Worker.forkWorker supervisorEnv
-                                      workerSpec
+                                      workerOptions
                                       (Just (workerId, restartCount))
 
 restartSupervisor
   :: ParentSupervisorEnv
-  -> SupervisorSpec
+  -> SupervisorOptions
   -> ProcessId
   -> RestartCount
   -> IO Process
-restartSupervisor parentEnv supervisorSpec processId restartCount =
+restartSupervisor parentEnv supervisorOptions processId restartCount =
   SupervisorProcess <$> forkSupervisor parentEnv
-                                       supervisorSpec
+                                       supervisorOptions
                                        (Just (processId, restartCount))
 
 
@@ -415,8 +420,8 @@ restartSupervisor parentEnv supervisorSpec processId restartCount =
 
 handleWorkerCompleted :: SupervisorEnv -> Worker -> IO ()
 handleWorkerCompleted env worker = do
-  let Worker { workerId, workerSpec, workerCreationTime } = worker
-      WorkerSpec { workerName, workerRestartStrategy }    = workerSpec
+  let Worker { workerId, workerOptions, workerCreationTime } = worker
+      WorkerOptions { workerName, workerRestartStrategy }    = workerOptions
   case workerRestartStrategy of
     Permanent -> do
       -- NOTE: Completed workers should never account as errors happening on
@@ -427,7 +432,7 @@ handleWorkerCompleted env worker = do
       let restartCount = 0
       execRestartAction env
                         workerId
-                        (WorkerProcessSpec workerSpec)
+                        (WorkerSpec workerOptions)
                         workerName
                         workerCreationTime
                         restartCount
@@ -446,8 +451,7 @@ handleProcessCompleted env processId completionTime = do
     Just process -> do
       Process.notifyProcessCompleted env process completionTime
       case process of
-        WorkerProcess worker ->
-          handleWorkerCompleted env worker
+        WorkerProcess worker -> handleWorkerCompleted env worker
         _ ->
           panic
             $  "ERROR: Supervisor ("
@@ -456,25 +460,25 @@ handleProcessCompleted env processId completionTime = do
 
 handleWorkerFailed :: SupervisorEnv -> Worker -> Int -> IO ()
 handleWorkerFailed env worker restartCount = do
-  let Worker { workerId, workerCreationTime, workerSpec } = worker
-      WorkerSpec { workerName, workerRestartStrategy }    = workerSpec
+  let Worker { workerId, workerCreationTime, workerOptions } = worker
+      WorkerOptions { workerName, workerRestartStrategy }    = workerOptions
   case workerRestartStrategy of
     Temporary -> Util.removeProcessFromMap env workerId
     _         -> execRestartAction env
                                    workerId
-                                   (WorkerProcessSpec workerSpec)
+                                   (WorkerSpec workerOptions)
                                    workerName
                                    workerCreationTime
                                    restartCount
 
 handleSupervisorFailed :: SupervisorEnv -> Supervisor -> Int -> IO ()
 handleSupervisorFailed env supervisor restartCount = do
-  let Supervisor { supervisorId, supervisorCreationTime, supervisorSpec } =
+  let Supervisor { supervisorId, supervisorCreationTime, supervisorOptions } =
         supervisor
-      SupervisorSpec { supervisorName } = supervisorSpec
+      SupervisorOptions { supervisorName } = supervisorOptions
   execRestartAction env
                     supervisorId
-                    (SupervisorProcessSpec supervisorSpec)
+                    (SupervisorSpec supervisorOptions)
                     supervisorName
                     supervisorCreationTime
                     restartCount
@@ -490,21 +494,20 @@ handleProcessFailed env processId processError restartCount = do
     Just process -> do
       Process.notifyProcessFailed env process processError
       case process of
-        WorkerProcess worker ->
-          handleWorkerFailed env worker restartCount
+        WorkerProcess worker -> handleWorkerFailed env worker restartCount
 
         SupervisorProcess supervisor ->
           handleSupervisorFailed env supervisor restartCount
 
 handleWorkerTerminated :: SupervisorEnv -> Worker -> Int -> IO ()
 handleWorkerTerminated env worker restartCount = do
-  let Worker { workerId, workerCreationTime, workerSpec } = worker
-      WorkerSpec { workerName, workerRestartStrategy }    = workerSpec
+  let Worker { workerId, workerCreationTime, workerOptions } = worker
+      WorkerOptions { workerName, workerRestartStrategy }    = workerOptions
 
   case workerRestartStrategy of
     Permanent -> execRestartAction env
                                    workerId
-                                   (WorkerProcessSpec workerSpec)
+                                   (WorkerSpec workerOptions)
                                    workerName
                                    workerCreationTime
                                    restartCount
@@ -513,12 +516,12 @@ handleWorkerTerminated env worker restartCount = do
 
 handleSupervisorTerminated :: SupervisorEnv -> Supervisor -> Int -> IO ()
 handleSupervisorTerminated env supervisor restartCount = do
-  let Supervisor { supervisorId, supervisorCreationTime, supervisorSpec } =
+  let Supervisor { supervisorId, supervisorCreationTime, supervisorOptions } =
         supervisor
-      SupervisorSpec { supervisorName } = supervisorSpec
+      SupervisorOptions { supervisorName } = supervisorOptions
   execRestartAction env
                     supervisorId
-                    (SupervisorProcessSpec supervisorSpec)
+                    (SupervisorSpec supervisorOptions)
                     supervisorName
                     supervisorCreationTime
                     restartCount

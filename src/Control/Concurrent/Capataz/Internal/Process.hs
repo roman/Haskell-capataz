@@ -27,19 +27,19 @@ getProcessId process = case process of
 
 getProcessName :: ProcessSpec -> ProcessName
 getProcessName procSpec = case procSpec of
-  WorkerProcessSpec     WorkerSpec { workerName } -> workerName
-  SupervisorProcessSpec SupervisorSpec { supervisorName } -> supervisorName
+  WorkerSpec     WorkerOptions { workerName }         -> workerName
+  SupervisorSpec SupervisorOptions { supervisorName } -> supervisorName
 
 getProcessType :: ProcessSpec -> ProcessType
 getProcessType processSpec = case processSpec of
-  WorkerProcessSpec{}     -> WorkerType
-  SupervisorProcessSpec{} -> SupervisorType
+  WorkerSpec{}     -> WorkerType
+  SupervisorSpec{} -> SupervisorType
 
 getProcessSpec :: Process -> ProcessSpec
 getProcessSpec process = case process of
-  WorkerProcess Worker { workerSpec } -> WorkerProcessSpec workerSpec
-  SupervisorProcess Supervisor { supervisorSpec } ->
-    SupervisorProcessSpec supervisorSpec
+  WorkerProcess Worker { workerOptions } -> WorkerSpec workerOptions
+  SupervisorProcess Supervisor { supervisorOptions } ->
+    SupervisorSpec supervisorOptions
 
 notifyProcessFailed :: SupervisorEnv -> Process -> SomeException -> IO ()
 notifyProcessFailed SupervisorEnv { supervisorId, supervisorName, notifyEvent } process processError
@@ -73,33 +73,32 @@ notifyProcessTerminated SupervisorEnv { supervisorId, supervisorName, notifyEven
 
 notifyProcessCompleted :: SupervisorEnv -> Process -> UTCTime -> IO ()
 notifyProcessCompleted SupervisorEnv { supervisorId, supervisorName, notifyEvent } process eventTime
-  =
-    notifyEvent ProcessCompleted
-  { supervisorId
-  , supervisorName
-  , processId       = getProcessId process
-  , processName     = getProcessName (getProcessSpec process)
-  , processType     = getProcessType (getProcessSpec process)
-  , processThreadId = getProcessThreadId process
-  , eventTime
-  }
+  = notifyEvent ProcessCompleted
+    { supervisorId
+    , supervisorName
+    , processId       = getProcessId process
+    , processName     = getProcessName (getProcessSpec process)
+    , processType     = getProcessType (getProcessSpec process)
+    , processThreadId = getProcessThreadId process
+    , eventTime
+    }
 
 
 callProcessOnCompletion :: ProcessSpec -> IO ()
 callProcessOnCompletion procSpec = case procSpec of
-  WorkerProcessSpec WorkerSpec { workerOnCompletion } -> workerOnCompletion
-  _                                                     -> return ()
+  WorkerSpec WorkerOptions { workerOnCompletion } -> workerOnCompletion
+  _                                               -> return ()
 
 callProcessOnFailure :: ProcessSpec -> SomeException -> IO ()
 callProcessOnFailure procSpec err = case procSpec of
-  WorkerProcessSpec WorkerSpec { workerOnFailure } -> workerOnFailure err
-  SupervisorProcessSpec SupervisorSpec { supervisorOnFailure } ->
+  WorkerSpec WorkerOptions { workerOnFailure } -> workerOnFailure err
+  SupervisorSpec SupervisorOptions { supervisorOnFailure } ->
     supervisorOnFailure err
 
 callProcessOnTermination :: ProcessSpec -> IO ()
 callProcessOnTermination procSpec = case procSpec of
-  WorkerProcessSpec WorkerSpec { workerOnTermination } -> workerOnTermination
-  _                                                      -> return ()
+  WorkerSpec WorkerOptions { workerOnTermination } -> workerOnTermination
+  _                                                -> return ()
 
 notifyProcessStarted
   :: Maybe (ProcessId, RestartCount) -> ParentSupervisorEnv -> Process -> IO ()
@@ -287,11 +286,11 @@ terminateProcess processTerminationReason env process = case process of
 -- this is different from the public @forkWorker@ function which sends a message
 -- to the capataz loop
 terminateWorker :: Text -> SupervisorEnv -> Worker -> IO ()
-terminateWorker processTerminationReason SupervisorEnv { supervisorId, supervisorName, notifyEvent } Worker { workerId, workerName, workerSpec, workerAsync }
+terminateWorker processTerminationReason SupervisorEnv { supervisorId, supervisorName, notifyEvent } Worker { workerId, workerName, workerOptions, workerAsync }
   = do
-    let processId                              = workerId
-        processName                            = workerName
-        WorkerSpec { workerTerminationPolicy } = workerSpec
+    let processId   = workerId
+        processName = workerName
+        WorkerOptions { workerTerminationPolicy } = workerOptions
     case workerTerminationPolicy of
       Infinity -> cancelWith
         workerAsync

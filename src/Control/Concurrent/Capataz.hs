@@ -13,8 +13,7 @@ module Control.Concurrent.Capataz
 , ProcessError (..)
 , WorkerOptions (..)
 , WorkerRestartStrategy (..)
-, SupervisorSpec (..)
-, WorkerSpec (..)
+, SupervisorOptions (..)
 , ProcessTerminationOrder (..)
 , WorkerTerminationPolicy (..)
 , Capataz
@@ -24,8 +23,7 @@ module Control.Concurrent.Capataz
 , CapatazStatus (..)
 , ProcessSpec (..)
 , ProcessType (..)
-, defSupervisorSpec
-, defWorkerSpec
+, defSupervisorOptions
 , defWorkerOptions
 , defCapatazOptions
 -- * Core functionality
@@ -50,17 +48,15 @@ import Control.Concurrent.Capataz.Internal.Types
     , ProcessSpec (..)
     , ProcessTerminationOrder (..)
     , ProcessType (..)
+    , SupervisorOptions (..)
     , SupervisorRestartStrategy (..)
-    , SupervisorSpec (..)
     , WorkerAction
     , WorkerOptions (..)
     , WorkerRestartStrategy (..)
-    , WorkerSpec (..)
     , WorkerTerminationPolicy (..)
     , defCapatazOptions
-    , defSupervisorSpec
+    , defSupervisorOptions
     , defWorkerOptions
-    , defWorkerSpec
     )
 import Control.Concurrent.Capataz.Internal.Util  (capatazToAsync)
 import Control.Teardown                          (teardown)

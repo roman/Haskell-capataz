@@ -38,24 +38,23 @@ forkCapataz capatazOptions@CapatazOptions { notifyEvent } = do
   capatazId    <- UUID.nextRandom
   supervisorId <- UUID.nextRandom
   let
-    supervisorSpec@SupervisorSpec { supervisorName } =
-      Util.capatazOptionsToSupervisorSpec capatazOptions
+    supervisorOptions@SupervisorOptions { supervisorName } =
+      Util.capatazOptionsToSupervisorOptions capatazOptions
     parentSupervisorEnv = ParentSupervisorEnv
       { supervisorId     = capatazId
       , supervisorName   = "capataz-root"
       , supervisorNotify = \supervisorEvent -> do
         eventTime <- getCurrentTime
         case supervisorEvent of
-          MonitorEvent ProcessFailed' { processError } ->
-            notifyEvent CapatazFailed
-            { supervisorId
-            , supervisorName
-            , eventTime
-            , supervisorError = processError
-            }
+          MonitorEvent ProcessFailed' { processError } -> notifyEvent
+            CapatazFailed
+              { supervisorId
+              , supervisorName
+              , eventTime
+              , supervisorError = processError
+              }
 
-          MonitorEvent ProcessTerminated'{} ->
-            notifyEvent CapatazTerminated
+          MonitorEvent ProcessTerminated'{} -> notifyEvent CapatazTerminated
             { supervisorId
             , supervisorName
             , eventTime
@@ -75,7 +74,7 @@ forkCapataz capatazOptions@CapatazOptions { notifyEvent } = do
 
   capatazSupervisor@Supervisor { supervisorEnv } <- Supervisor.supervisorMain
     parentSupervisorEnv
-    supervisorSpec
+    supervisorOptions
     supervisorId
     0
 
@@ -87,25 +86,27 @@ forkCapataz capatazOptions@CapatazOptions { notifyEvent } = do
       notifyEvent CapatazTerminated {supervisorId , supervisorName , eventTime }
     )
 
-  return Capataz {..}
+  return Capataz {capatazSupervisor , capatazTeardown }
 
 -- | Creates a worker green thread "IO ()" sub-routine, and depending in options
 -- defined in the "WorkerOptions" record, it will restart the Worker sub-routine
 -- in case of failures
 forkWorker
   :: WorkerOptions -- ^ Worker options (restart, name, callbacks, etc)
+  -> Text          -- ^ Worker Name
   -> IO ()         -- ^ IO sub-routine that will be executed on worker thread
   -> Capataz       -- ^ "Capataz" instance that supervises the worker
   -> IO WorkerId   -- ^ An identifier that can be used to terminate the "Worker"
-forkWorker workerOptions workerAction Capataz { capatazSupervisor = supervisor }
+forkWorker WorkerOptions {..} wName wAction Capataz { capatazSupervisor = supervisor }
   = do
-    let workerSpec = Util.workerOptionsToSpec workerOptions workerAction
+    let workerOptions =
+          WorkerOptions {workerName = wName, workerAction = wAction, ..}
         Supervisor { supervisorNotify } = supervisor
 
     workerIdVar <- newEmptyMVar
     supervisorNotify
       ( ControlAction ForkWorker
-        { workerSpec
+        { workerOptions
         , returnWorkerId = putMVar workerIdVar
         }
       )

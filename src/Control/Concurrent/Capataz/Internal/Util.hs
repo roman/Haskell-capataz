@@ -163,13 +163,13 @@ sendSyncControlMsg SupervisorEnv { supervisorNotify } mkCtrlMsg = do
 workerToEnv :: Worker -> WorkerEnv
 workerToEnv Worker {..} =
   let
-    WorkerSpec { workerAction, workerOnFailure, workerOnCompletion, workerOnTermination, workerRestartStrategy }
-      = workerSpec
+    WorkerOptions { workerAction, workerOnFailure, workerOnCompletion, workerOnTermination, workerRestartStrategy }
+      = workerOptions
   in
     WorkerEnv {..}
 
-capatazOptionsToSupervisorSpec :: CapatazOptions -> SupervisorSpec
-capatazOptionsToSupervisorSpec CapatazOptions {..} = SupervisorSpec {..}
+capatazOptionsToSupervisorOptions :: CapatazOptions -> SupervisorOptions
+capatazOptionsToSupervisorOptions CapatazOptions {..} = SupervisorOptions {..}
 
 toParentSupervisorEnv :: SupervisorEnv -> ParentSupervisorEnv
 toParentSupervisorEnv SupervisorEnv { supervisorId, supervisorName, supervisorNotify, notifyEvent }
@@ -178,10 +178,6 @@ toParentSupervisorEnv SupervisorEnv { supervisorId, supervisorName, supervisorNo
 -- | Utility function to transform a "WorkerEnv" into a "Worker"
 envToWorker :: WorkerEnv -> Worker
 envToWorker WorkerEnv {..} = Worker {..}
-
--- | Utility function to transform a "WorkerOptions" into a "WorkerSpec"
-workerOptionsToSpec :: WorkerOptions -> IO () -> WorkerSpec
-workerOptionsToSpec WorkerOptions {..} workerAction = WorkerSpec {..}
 
 capatazToAsync :: Capataz -> Async ()
 capatazToAsync Capataz { capatazSupervisor } =

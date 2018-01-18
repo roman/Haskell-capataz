@@ -17,19 +17,19 @@ tests = testGroup
   [ testCase "initialize and teardown of supervision tree works as expected"
     $ testCapatazStreamWithOptions
         ( \supOptions -> supOptions
-          { SUT.supervisorProcessSpecList = [ SUT.SupervisorProcessSpec
-                                              $ SUT.defSupervisorSpec
+          { SUT.supervisorProcessSpecList = [ SUT.SupervisorSpec
+                                              $ SUT.defSupervisorOptions
                                                   { SUT.supervisorName = "tree-1"
-                                                  , SUT.supervisorProcessSpecList = [ SUT.WorkerProcessSpec
-                                                                                      $ SUT.defWorkerSpec
+                                                  , SUT.supervisorProcessSpecList = [ SUT.WorkerSpec
+                                                                                      $ SUT.defWorkerOptions
                                                                                           { SUT.workerName = "1-A"
                                                                                           , SUT.workerAction = forever
                                                                                             ( threadDelay
                                                                                               10001000
                                                                                             )
                                                                                           }
-                                                                                    , SUT.WorkerProcessSpec
-                                                                                      $ SUT.defWorkerSpec
+                                                                                    , SUT.WorkerSpec
+                                                                                      $ SUT.defWorkerOptions
                                                                                           { SUT.workerName = "1-B"
                                                                                           , SUT.workerAction = forever
                                                                                             ( threadDelay
@@ -38,19 +38,19 @@ tests = testGroup
                                                                                           }
                                                                                     ]
                                                   }
-                                            , SUT.SupervisorProcessSpec
-                                              $ SUT.defSupervisorSpec
+                                            , SUT.SupervisorSpec
+                                              $ SUT.defSupervisorOptions
                                                   { SUT.supervisorName = "tree-2"
-                                                  , SUT.supervisorProcessSpecList = [ SUT.WorkerProcessSpec
-                                                                                      $ SUT.defWorkerSpec
+                                                  , SUT.supervisorProcessSpecList = [ SUT.WorkerSpec
+                                                                                      $ SUT.defWorkerOptions
                                                                                           { SUT.workerName = "2-A"
                                                                                           , SUT.workerAction = forever
                                                                                             ( threadDelay
                                                                                               10001000
                                                                                             )
                                                                                           }
-                                                                                    , SUT.WorkerProcessSpec
-                                                                                      $ SUT.defWorkerSpec
+                                                                                    , SUT.WorkerSpec
+                                                                                      $ SUT.defWorkerOptions
                                                                                           { SUT.workerName = "2-B"
                                                                                           , SUT.workerAction = forever
                                                                                             ( threadDelay
@@ -113,13 +113,13 @@ tests = testGroup
     testCapatazStreamWithOptions
       ( \supOptions -> supOptions
         { SUT.supervisorIntensity       = 3
-        , SUT.supervisorProcessSpecList = [ SUT.SupervisorProcessSpec
-                                              SUT.defSupervisorSpec
+        , SUT.supervisorProcessSpecList = [ SUT.SupervisorSpec
+                                              SUT.defSupervisorOptions
                                                 { SUT.supervisorName = "tree-1"
                                                 , SUT.supervisorIntensity = 1
                                                 , SUT.supervisorPeriodSeconds = 10
-                                                , SUT.supervisorProcessSpecList = [ SUT.WorkerProcessSpec
-                                                                                      SUT.defWorkerSpec
+                                                , SUT.supervisorProcessSpecList = [ SUT.WorkerSpec
+                                                                                      SUT.defWorkerOptions
                                                                                         { SUT.workerName = "failing-worker"
                                                                                         , SUT.workerAction = failingAction
                                                                                         }
@@ -143,27 +143,27 @@ tests = testGroup
       ( \supOptions -> supOptions
         { SUT.supervisorIntensity       = 3
         , SUT.supervisorRestartStrategy = SUT.AllForOne
-        , SUT.supervisorProcessSpecList = [ SUT.SupervisorProcessSpec
-                                            SUT.defSupervisorSpec
+        , SUT.supervisorProcessSpecList = [ SUT.SupervisorSpec
+                                            SUT.defSupervisorOptions
                                               { SUT.supervisorName = "tree-1"
                                               , SUT.supervisorIntensity = 1
                                               , SUT.supervisorPeriodSeconds = 10
-                                              , SUT.supervisorProcessSpecList = [ SUT.WorkerProcessSpec
-                                                                                    SUT.defWorkerSpec
+                                              , SUT.supervisorProcessSpecList = [ SUT.WorkerSpec
+                                                                                    SUT.defWorkerOptions
                                                                                       { SUT.workerName = "failing-worker"
                                                                                       , SUT.workerAction = failingAction
                                                                                       }
                                                                                 ]
                                               }
-                                          , SUT.SupervisorProcessSpec
-                                            SUT.defSupervisorSpec
+                                          , SUT.SupervisorSpec
+                                            SUT.defSupervisorOptions
                                               { SUT.supervisorName = "tree-2"
-                                              , SUT.supervisorProcessSpecList = [ SUT.WorkerProcessSpec
-                                                                                    SUT.defWorkerSpec
+                                              , SUT.supervisorProcessSpecList = [ SUT.WorkerSpec
+                                                                                    SUT.defWorkerOptions
                                                                                       { SUT.workerName = "stable-worker"
                                                                                       , SUT.workerAction = forever
-                                                                                                           $ threadDelay
-                                                                                                               1000100
+                                                                                        $ threadDelay
+                                                                                            1000100
                                                                                       }
                                                                                 ]
                                               }

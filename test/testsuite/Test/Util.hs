@@ -1,15 +1,15 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
 module Test.Util where
 
 import Protolude
 
 import Control.Concurrent.STM.TQueue (newTQueueIO, readTQueue, writeTQueue)
-import Data.IORef       (atomicModifyIORef', newIORef, readIORef, writeIORef)
-import Test.Tasty.HUnit (assertBool, assertFailure)
-import Text.Show.Pretty (ppShow)
+import Data.IORef                    (atomicModifyIORef', newIORef, readIORef, writeIORef)
+import Test.Tasty.HUnit              (assertBool, assertFailure)
+import Text.Show.Pretty              (ppShow)
 
 import qualified Data.Text as T
 
@@ -50,20 +50,19 @@ data EventType
   deriving (Show, Eq)
 
 toEventType :: SUT.CapatazEvent -> EventType
-toEventType ev =
-  case ev of
-    SUT.InvalidCapatazStatusReached {} -> InvalidCapatazStatusReached
-    SUT.SupervisorStatusChanged {} -> SupervisorStatusChanged
-    SUT.ProcessTerminated {} -> ProcessTerminated
-    SUT.ProcessStarted {} -> ProcessStarted
-    SUT.ProcessRestarted {} -> ProcessRestarted
-    SUT.ProcessCompleted {} -> ProcessCompleted
-    SUT.ProcessFailed {} -> ProcessFailed
-    SUT.ProcessCallbackExecuted {} -> ProcessCallbackExecuted
-    SUT.ProcessTerminationStarted {} -> ProcessTerminationStarted
-    SUT.ProcessTerminationFinished {} -> ProcessTerminationFinished
-    SUT.CapatazFailed {} -> CapatazFailed
-    SUT.CapatazTerminated {} -> CapatazTerminated
+toEventType ev = case ev of
+  SUT.InvalidCapatazStatusReached{} -> InvalidCapatazStatusReached
+  SUT.SupervisorStatusChanged{}     -> SupervisorStatusChanged
+  SUT.ProcessTerminated{}           -> ProcessTerminated
+  SUT.ProcessStarted{}              -> ProcessStarted
+  SUT.ProcessRestarted{}            -> ProcessRestarted
+  SUT.ProcessCompleted{}            -> ProcessCompleted
+  SUT.ProcessFailed{}               -> ProcessFailed
+  SUT.ProcessCallbackExecuted{}     -> ProcessCallbackExecuted
+  SUT.ProcessTerminationStarted{}   -> ProcessTerminationStarted
+  SUT.ProcessTerminationFinished{}  -> ProcessTerminationFinished
+  SUT.CapatazFailed{}               -> CapatazFailed
+  SUT.CapatazTerminated{}           -> CapatazTerminated
 
 -- | Predicate function to assert "CapatazEvent" types
 assertEventType :: EventType -> SUT.CapatazEvent -> Bool
@@ -71,14 +70,13 @@ assertEventType evType ev = toEventType ev == evType
 
 -- | Predicate function to assert "CapatazEvent" process type
 assertProcessType :: SUT.ProcessType -> SUT.CapatazEvent -> Bool
-assertProcessType processTy ev =
-  case ev of
-    SUT.ProcessFailed {processType} -> processTy == processType
-    SUT.ProcessTerminated {processType} -> processTy == processType
-    SUT.ProcessStarted {processType} -> processTy == processType
-    SUT.ProcessCallbackExecuted {processType} -> processTy == processType
-    SUT.ProcessRestarted {processType} -> processTy == processType
-    _ -> False
+assertProcessType processTy ev = case ev of
+  SUT.ProcessFailed { processType }           -> processTy == processType
+  SUT.ProcessTerminated { processType }       -> processTy == processType
+  SUT.ProcessStarted { processType }          -> processTy == processType
+  SUT.ProcessCallbackExecuted { processType } -> processTy == processType
+  SUT.ProcessRestarted { processType }        -> processTy == processType
+  _                                           -> False
 
 -- | Predicate function to assert "CapatazEvent" worker name
 assertProcessName :: Text -> SUT.CapatazEvent -> Bool
@@ -129,75 +127,81 @@ assertSupervisorStatusChanged fromEv toEv ev = case ev of
 
 -- | Predicate function to assert process was supervised by a a supervisor
 -- indicated by name
-assertSupervisorName
-  :: Text -> SUT.CapatazEvent -> Bool
-assertSupervisorName supervisorName' ev =
-  case ev of
-    SUT.SupervisorStatusChanged { supervisorName } -> supervisorName' == supervisorName
-    SUT.ProcessStarted {supervisorName} -> supervisorName' == supervisorName
-    SUT.ProcessTerminated {supervisorName} -> supervisorName' == supervisorName
-    SUT.ProcessRestarted {supervisorName} -> supervisorName' == supervisorName
-    SUT.ProcessCompleted {supervisorName} -> supervisorName' == supervisorName
-    SUT.ProcessCallbackExecuted {supervisorName} -> supervisorName' == supervisorName
-    SUT.ProcessTerminationStarted { supervisorName } -> supervisorName' == supervisorName
-    SUT.ProcessTerminationFinished { supervisorName } -> supervisorName' == supervisorName
-    _ -> False
+assertSupervisorName :: Text -> SUT.CapatazEvent -> Bool
+assertSupervisorName supervisorName' ev = case ev of
+  SUT.SupervisorStatusChanged { supervisorName } ->
+    supervisorName' == supervisorName
+  SUT.ProcessStarted { supervisorName }    -> supervisorName' == supervisorName
+  SUT.ProcessTerminated { supervisorName } -> supervisorName' == supervisorName
+  SUT.ProcessRestarted { supervisorName }  -> supervisorName' == supervisorName
+  SUT.ProcessCompleted { supervisorName }  -> supervisorName' == supervisorName
+  SUT.ProcessCallbackExecuted { supervisorName } ->
+    supervisorName' == supervisorName
+  SUT.ProcessTerminationStarted { supervisorName } ->
+    supervisorName' == supervisorName
+  SUT.ProcessTerminationFinished { supervisorName } ->
+    supervisorName' == supervisorName
+  _ -> False
 
 -- | Predicate function to assert a supervisor was started
 assertSupervisorStarted :: Text -> SUT.CapatazEvent -> Bool
-assertSupervisorStarted supervisorName =
-  andP [ assertEventType ProcessStarted
-       , assertProcessType SUT.SupervisorType
-       , assertProcessName supervisorName
-       ]
+assertSupervisorStarted supervisorName = andP
+  [ assertEventType ProcessStarted
+  , assertProcessType SUT.SupervisorType
+  , assertProcessName supervisorName
+  ]
 
 -- | Predicate function to assert a supervisor was terminated
 assertSupervisorTerminated :: Text -> SUT.CapatazEvent -> Bool
-assertSupervisorTerminated supervisorName =
-  andP [ assertEventType ProcessTerminated
-       , assertProcessType SUT.SupervisorType
-       , assertProcessName supervisorName
-       ]
+assertSupervisorTerminated supervisorName = andP
+  [ assertEventType ProcessTerminated
+  , assertProcessType SUT.SupervisorType
+  , assertProcessName supervisorName
+  ]
 
 assertSupervisorFailed :: Text -> SUT.CapatazEvent -> Bool
-assertSupervisorFailed supervisorName =
-  andP [ assertEventType ProcessFailed
-       , assertProcessType SUT.SupervisorType
-       , assertProcessName supervisorName ]
+assertSupervisorFailed supervisorName = andP
+  [ assertEventType ProcessFailed
+  , assertProcessType SUT.SupervisorType
+  , assertProcessName supervisorName
+  ]
 
 assertSupervisorRestarted :: Text -> SUT.CapatazEvent -> Bool
-assertSupervisorRestarted supervisorName =
-  andP [ assertEventType ProcessRestarted
-       , assertProcessType SUT.SupervisorType
-       , assertProcessName supervisorName ]
+assertSupervisorRestarted supervisorName = andP
+  [ assertEventType ProcessRestarted
+  , assertProcessType SUT.SupervisorType
+  , assertProcessName supervisorName
+  ]
 
 -- | Predicate function to assert a worker was started
 assertWorkerStarted :: Text -> SUT.CapatazEvent -> Bool
-assertWorkerStarted workerName =
-  andP [ assertEventType ProcessStarted
-       , assertProcessType SUT.WorkerType
-       , assertProcessName workerName
-       ]
+assertWorkerStarted workerName = andP
+  [ assertEventType ProcessStarted
+  , assertProcessType SUT.WorkerType
+  , assertProcessName workerName
+  ]
 
 -- | Predicate function to assert a worker was terminated
 assertWorkerTerminated :: Text -> SUT.CapatazEvent -> Bool
-assertWorkerTerminated workerName =
-  andP [ assertEventType ProcessTerminated
-       , assertProcessType SUT.WorkerType
-       , assertProcessName workerName
-       ]
+assertWorkerTerminated workerName = andP
+  [ assertEventType ProcessTerminated
+  , assertProcessType SUT.WorkerType
+  , assertProcessName workerName
+  ]
 
 assertWorkerFailed :: Text -> SUT.CapatazEvent -> Bool
-assertWorkerFailed workerName =
-  andP [ assertEventType ProcessFailed
-       , assertProcessType SUT.WorkerType
-       , assertProcessName workerName ]
+assertWorkerFailed workerName = andP
+  [ assertEventType ProcessFailed
+  , assertProcessType SUT.WorkerType
+  , assertProcessName workerName
+  ]
 
 assertWorkerRestarted :: Text -> SUT.CapatazEvent -> Bool
-assertWorkerRestarted workerName =
-  andP [ assertEventType ProcessRestarted
-       , assertProcessType SUT.WorkerType
-       , assertProcessName workerName ]
+assertWorkerRestarted workerName = andP
+  [ assertEventType ProcessRestarted
+  , assertProcessType SUT.WorkerType
+  , assertProcessName workerName
+  ]
 
 -- | Predicate function to assert a capataz thread failed with error type
 assertCapatazFailedWith :: Text -> SUT.CapatazEvent -> Bool

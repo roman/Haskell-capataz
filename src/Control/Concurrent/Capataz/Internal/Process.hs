@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
-{-# LANGUAGE OverloadedStrings     #-}
+
 -- | Process => Supervisor | Worker common code
 module Control.Concurrent.Capataz.Internal.Process where
 
@@ -10,14 +10,15 @@ import Protolude
 import Control.Concurrent.Capataz.Internal.Types
 import Control.Concurrent.Capataz.Internal.Util
     (readProcessMap, sortProcessesByTerminationOrder)
-import Data.Time.Clock                           (getCurrentTime)
+import Data.Time.Clock                           (UTCTime, getCurrentTime)
+
+getProcessAsync :: Process -> Async ()
+getProcessAsync process = case process of
+  WorkerProcess     Worker { workerAsync }         -> workerAsync
+  SupervisorProcess Supervisor { supervisorAsync } -> supervisorAsync
 
 getProcessThreadId :: Process -> ThreadId
-getProcessThreadId process =
-  let procAsync = case process of
-        WorkerProcess     Worker { workerAsync }         -> workerAsync
-        SupervisorProcess Supervisor { supervisorAsync } -> supervisorAsync
-  in  asyncThreadId procAsync
+getProcessThreadId = asyncThreadId . getProcessAsync
 
 getProcessId :: Process -> ProcessId
 getProcessId process = case process of
@@ -26,34 +27,78 @@ getProcessId process = case process of
 
 getProcessName :: ProcessSpec -> ProcessName
 getProcessName procSpec = case procSpec of
-  WorkerProcessSpec     (WorkerSpec { workerName }        ) -> workerName
-  SupervisorProcessSpec (SupervisorSpec { supervisorName }) -> supervisorName
+  WorkerProcessSpec     WorkerSpec { workerName } -> workerName
+  SupervisorProcessSpec SupervisorSpec { supervisorName } -> supervisorName
 
 getProcessType :: ProcessSpec -> ProcessType
 getProcessType processSpec = case processSpec of
-  WorkerProcessSpec {} -> WorkerType
-  SupervisorProcessSpec {} -> SupervisorType
+  WorkerProcessSpec{}     -> WorkerType
+  SupervisorProcessSpec{} -> SupervisorType
 
 getProcessSpec :: Process -> ProcessSpec
 getProcessSpec process = case process of
-  WorkerProcess (Worker { workerSpec }) -> WorkerProcessSpec workerSpec
-  SupervisorProcess (Supervisor { supervisorSpec }) ->
+  WorkerProcess Worker { workerSpec } -> WorkerProcessSpec workerSpec
+  SupervisorProcess Supervisor { supervisorSpec } ->
     SupervisorProcessSpec supervisorSpec
+
+notifyProcessFailed :: SupervisorEnv -> Process -> SomeException -> IO ()
+notifyProcessFailed SupervisorEnv { supervisorId, supervisorName, notifyEvent } process processError
+  = do
+    eventTime <- getCurrentTime
+    notifyEvent ProcessFailed
+      { supervisorId
+      , supervisorName
+      , processId       = getProcessId process
+      , processName     = getProcessName (getProcessSpec process)
+      , processType     = getProcessType (getProcessSpec process)
+      , processThreadId = getProcessThreadId process
+      , processError
+      , eventTime
+      }
+
+notifyProcessTerminated :: SupervisorEnv -> Process -> Text -> IO ()
+notifyProcessTerminated SupervisorEnv { supervisorId, supervisorName, notifyEvent } process terminationReason
+  = do
+    eventTime <- getCurrentTime
+    notifyEvent ProcessTerminated
+      { supervisorId
+      , supervisorName
+      , processId         = getProcessId process
+      , processName       = getProcessName (getProcessSpec process)
+      , processType       = getProcessType (getProcessSpec process)
+      , processThreadId   = getProcessThreadId process
+      , terminationReason
+      , eventTime
+      }
+
+notifyProcessCompleted :: SupervisorEnv -> Process -> UTCTime -> IO ()
+notifyProcessCompleted SupervisorEnv { supervisorId, supervisorName, notifyEvent } process eventTime
+  =
+    notifyEvent ProcessCompleted
+  { supervisorId
+  , supervisorName
+  , processId       = getProcessId process
+  , processName     = getProcessName (getProcessSpec process)
+  , processType     = getProcessType (getProcessSpec process)
+  , processThreadId = getProcessThreadId process
+  , eventTime
+  }
+
 
 callProcessOnCompletion :: ProcessSpec -> IO ()
 callProcessOnCompletion procSpec = case procSpec of
-  WorkerProcessSpec (WorkerSpec { workerOnCompletion }) -> workerOnCompletion
+  WorkerProcessSpec WorkerSpec { workerOnCompletion } -> workerOnCompletion
   _                                                     -> return ()
 
 callProcessOnFailure :: ProcessSpec -> SomeException -> IO ()
 callProcessOnFailure procSpec err = case procSpec of
-  WorkerProcessSpec (WorkerSpec { workerOnFailure }) -> workerOnFailure err
-  SupervisorProcessSpec (SupervisorSpec { supervisorOnFailure }) ->
+  WorkerProcessSpec WorkerSpec { workerOnFailure } -> workerOnFailure err
+  SupervisorProcessSpec SupervisorSpec { supervisorOnFailure } ->
     supervisorOnFailure err
 
 callProcessOnTermination :: ProcessSpec -> IO ()
 callProcessOnTermination procSpec = case procSpec of
-  WorkerProcessSpec (WorkerSpec { workerOnTermination }) -> workerOnTermination
+  WorkerProcessSpec WorkerSpec { workerOnTermination } -> workerOnTermination
   _                                                      -> return ()
 
 notifyProcessStarted
@@ -112,7 +157,7 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
           , processThreadId
           , processId
           , processName
-          , processType = getProcessType procSpec
+          , processType          = getProcessType procSpec
           , processCallbackError = either Just (const Nothing) eErrResult
           , processCallbackType  = OnTermination
           , eventTime            = monitorEventTime
@@ -157,7 +202,7 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
           , supervisorName
           , processId
           , processName
-          , processType = getProcessType procSpec
+          , processType          = getProcessType procSpec
           , processThreadId
           , processCallbackError = either Just (const Nothing) eErrResult
           , processCallbackType  = OnFailure
@@ -205,7 +250,7 @@ handleProcessCompletion unmask ParentSupervisorEnv { supervisorId, supervisorNam
       , supervisorName
       , processId
       , processName
-      , processType = getProcessType procSpec
+      , processType          = getProcessType procSpec
       , processThreadId
       , processCallbackError = either Just (const Nothing) eCompResult
       , processCallbackType  = OnCompletion
@@ -292,7 +337,7 @@ terminateSupervisor processTerminationReason SupervisorEnv { supervisorId, super
 
     cancelWith
       supervisorAsync
-      TerminateProcessException {processId, processTerminationReason }
+      TerminateProcessException {processId , processTerminationReason }
 
     eventTime <- getCurrentTime
     notifyEvent ProcessTerminated

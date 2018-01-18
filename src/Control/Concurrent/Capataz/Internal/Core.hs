@@ -46,20 +46,20 @@ forkCapataz capatazOptions@CapatazOptions { notifyEvent } = do
       , supervisorNotify = \supervisorEvent -> do
         eventTime <- getCurrentTime
         case supervisorEvent of
-          MonitorEvent ProcessFailed' { processError } -> do
+          MonitorEvent ProcessFailed' { processError } ->
             notifyEvent CapatazFailed
-              { supervisorId
-              , supervisorName
-              , eventTime
-              , supervisorError = processError
-              }
+            { supervisorId
+            , supervisorName
+            , eventTime
+            , supervisorError = processError
+            }
 
-          MonitorEvent ProcessTerminated'{} -> do
+          MonitorEvent ProcessTerminated'{} ->
             notifyEvent CapatazTerminated
-              { supervisorId
-              , supervisorName
-              , eventTime
-              }
+            { supervisorId
+            , supervisorName
+            , eventTime
+            }
 
           MonitorEvent ProcessCompleted'{} ->
             panic "Capataz completed; this should never happen"
@@ -124,7 +124,7 @@ terminateProcess processTerminationReason processId Capataz { capatazSupervisor 
     let Supervisor { supervisorNotify } = supervisor
     result <- newEmptyMVar
     supervisorNotify
-      ( ControlAction $ TerminateProcess
+      ( ControlAction TerminateProcess
         { processId
         , processTerminationReason
         , notifyProcessTermination = putMVar result ()

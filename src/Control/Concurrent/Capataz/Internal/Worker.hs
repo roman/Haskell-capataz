@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
-{-# LANGUAGE OverloadedStrings     #-}
+
 {-| This module contains all logic related to error handling when spawning threads
   to execute Worker sub-routines
 -}
@@ -71,7 +71,7 @@ notifyWorkerStarted mRestartInfo SupervisorEnv { supervisorId, supervisorName, n
         , supervisorName
         , processId
         , processName
-        , processType = WorkerType
+        , processType         = WorkerType
         , processRestartCount
         , processThreadId     = asyncThreadId workerAsync
         , eventTime
@@ -81,7 +81,7 @@ notifyWorkerStarted mRestartInfo SupervisorEnv { supervisorId, supervisorName, n
         , supervisorName
         , processId
         , processName
-        , processType = WorkerType
+        , processType     = WorkerType
         , eventTime
         , processThreadId = asyncThreadId workerAsync
         }

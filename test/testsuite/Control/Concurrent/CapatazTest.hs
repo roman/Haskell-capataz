@@ -25,7 +25,7 @@ import Protolude
 import Test.Tasty       (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase)
 
-import Control.Concurrent.STM.TVar   (modifyTVar', newTVarIO, readTVar)
+import Control.Concurrent.STM.TVar (modifyTVar', newTVarIO, readTVar)
 
 import qualified Control.Concurrent.Capataz as SUT
 
@@ -34,15 +34,56 @@ import Test.Util
 --------------------------------------------------------------------------------
 -- Actual Tests
 
-tests :: [TestTree]
-tests
-  = [ testGroup
-      "capataz without workerSpecList"
-      [ testCase "initialize and teardown works as expected" $ testCapatazStream
-          [ andP
-              [ assertEventType SupervisorStatusChanged
-              , assertSupervisorStatusChanged SUT.Initializing SUT.Running
-              ]
+tests :: TestTree
+tests = testGroup
+  "capataz core"
+  [ testGroup
+    "capataz without workerSpecList"
+    [ testCase "initialize and teardown works as expected" $ testCapatazStream
+        [ andP
+            [ assertEventType SupervisorStatusChanged
+            , assertSupervisorStatusChanged SUT.Initializing SUT.Running
+            ]
+        ]
+        (const $ return ())
+        []
+        [ andP
+          [ assertEventType SupervisorStatusChanged
+          , assertSupervisorStatusChanged SUT.Running SUT.Halting
+          ]
+        , andP
+          [ assertEventType SupervisorStatusChanged
+          , assertSupervisorStatusChanged SUT.Halting SUT.Halted
+          ]
+        ]
+        Nothing
+    ]
+  , testGroup
+    "capataz with processSpecList"
+    [ testCase "initialize and teardown of workers works as expected"
+      $ testCapatazStreamWithOptions
+          ( \supOptions -> supOptions
+            { SUT.supervisorProcessSpecList = [ SUT.WorkerProcessSpec
+                                                $ SUT.defWorkerSpec
+                                                    { SUT.workerName   = "A"
+                                                    , SUT.workerAction = forever
+                                                      (threadDelay 10001000)
+                                                    }
+                                              , SUT.WorkerProcessSpec
+                                                $ SUT.defWorkerSpec
+                                                    { SUT.workerName   = "B"
+                                                    , SUT.workerAction = forever
+                                                      (threadDelay 10001000)
+                                                    }
+                                              ]
+            }
+          )
+          [ assertWorkerStarted "A"
+          , assertWorkerStarted "B"
+          , andP
+            [ assertEventType SupervisorStatusChanged
+            , assertSupervisorStatusChanged SUT.Initializing SUT.Running
+            ]
           ]
           (const $ return ())
           []
@@ -50,140 +91,16 @@ tests
             [ assertEventType SupervisorStatusChanged
             , assertSupervisorStatusChanged SUT.Running SUT.Halting
             ]
+          , assertEventType ProcessTerminationStarted
+          , assertWorkerTerminated "A"
+          , assertWorkerTerminated "B"
+          , assertEventType ProcessTerminationFinished
           , andP
             [ assertEventType SupervisorStatusChanged
             , assertSupervisorStatusChanged SUT.Halting SUT.Halted
             ]
           ]
           Nothing
-      ]
-    , testGroup
-      "capataz with processSpecList"
-      [ testCase "initialize and teardown of workers works as expected"
-          $ testCapatazStreamWithOptions
-              ( \supOptions -> supOptions
-                { SUT.supervisorProcessSpecList = [ SUT.WorkerProcessSpec
-                                                    $ SUT.defWorkerSpec
-                                                        { SUT.workerName = "A"
-                                                        , SUT.workerAction = forever
-                                                          (threadDelay 10001000)
-                                                        }
-                                                  , SUT.WorkerProcessSpec
-                                                    $ SUT.defWorkerSpec
-                                                        { SUT.workerName = "B"
-                                                        , SUT.workerAction = forever
-                                                          (threadDelay 10001000)
-                                                        }
-                                                  ]
-                }
-              )
-              [ assertWorkerStarted "A"
-              , assertWorkerStarted "B"
-              , andP
-                [ assertEventType SupervisorStatusChanged
-                , assertSupervisorStatusChanged SUT.Initializing SUT.Running
-                ]
-              ]
-              (const $ return ())
-              []
-              [ andP
-                [ assertEventType SupervisorStatusChanged
-                , assertSupervisorStatusChanged SUT.Running SUT.Halting
-                ]
-              , assertEventType ProcessTerminationStarted
-              , assertWorkerTerminated "A"
-              , assertWorkerTerminated "B"
-              , assertEventType ProcessTerminationFinished
-              , andP
-                [ assertEventType SupervisorStatusChanged
-                , assertSupervisorStatusChanged SUT.Halting SUT.Halted
-                ]
-              ]
-              Nothing
-
-      , testCase "initialize and teardown of supervision tree works as expected"
-          $ testCapatazStreamWithOptions
-              ( \supOptions -> supOptions
-                { SUT.supervisorProcessSpecList =
-                  [ SUT.SupervisorProcessSpec
-                    $ SUT.defSupervisorSpec
-                    { SUT.supervisorName = "tree-1"
-                    , SUT.supervisorProcessSpecList =
-                      [
-                        SUT.WorkerProcessSpec
-                        $ SUT.defWorkerSpec
-                        { SUT.workerName = "1-A"
-                        , SUT.workerAction = forever (threadDelay 10001000)
-                        }
-                      , SUT.WorkerProcessSpec
-                        $ SUT.defWorkerSpec
-                        { SUT.workerName = "1-B"
-                        , SUT.workerAction = forever (threadDelay 10001000)
-                        }
-                      ]
-                    }
-                  , SUT.SupervisorProcessSpec
-                    $ SUT.defSupervisorSpec
-                    { SUT.supervisorName = "tree-2"
-                    , SUT.supervisorProcessSpecList =
-                      [
-                        SUT.WorkerProcessSpec
-                        $ SUT.defWorkerSpec
-                        { SUT.workerName = "2-A"
-                        , SUT.workerAction = forever (threadDelay 10001000)
-                        }
-                      , SUT.WorkerProcessSpec
-                        $ SUT.defWorkerSpec
-                        { SUT.workerName = "2-B"
-                        , SUT.workerAction = forever (threadDelay 10001000)
-                        }
-                      ]
-                    }
-                  ]
-                }
-              )
-              [ andP [assertSupervisorName "tree-1", assertWorkerStarted "1-A"]
-              , andP [assertSupervisorName "tree-1", assertWorkerStarted "1-B"]
-              , andP
-                [ assertSupervisorName "tree-1"
-                , assertEventType SupervisorStatusChanged
-                , assertSupervisorStatusChanged SUT.Initializing SUT.Running
-                ]
-              , andP [assertSupervisorName "tree-2", assertWorkerStarted "2-A"]
-              , andP [assertSupervisorName "tree-2", assertWorkerStarted "2-B"]
-              , andP
-                [ assertSupervisorName "tree-2"
-                , assertEventType SupervisorStatusChanged
-                , assertSupervisorStatusChanged SUT.Initializing SUT.Running
-                ]
-              , andP
-                [ assertSupervisorName "capataz-root"
-                , assertEventType SupervisorStatusChanged
-                , assertSupervisorStatusChanged SUT.Initializing SUT.Running
-                ]
-              ]
-              (const $ return ())
-              []
-              [ andP
-                [ assertSupervisorName "capataz-root"
-                , assertEventType SupervisorStatusChanged
-                , assertSupervisorStatusChanged SUT.Running SUT.Halting
-                ]
-              , andP [assertSupervisorName "capataz-root", assertEventType ProcessTerminationStarted]
-              , andP [assertSupervisorName "tree-1", assertWorkerTerminated "1-A"]
-              , andP [assertSupervisorName "tree-1", assertWorkerTerminated "1-B"]
-              , andP [assertSupervisorName "tree-2", assertWorkerTerminated "2-A"]
-              , andP [assertSupervisorName "tree-2", assertWorkerTerminated "2-B"]
-
-              , andP [assertSupervisorName "capataz-root", assertEventType ProcessTerminationFinished]
-              , andP
-                [ assertSupervisorName "capataz-root"
-                , assertEventType SupervisorStatusChanged
-                , assertSupervisorStatusChanged SUT.Halting SUT.Halted
-                ]
-              ]
-              Nothing
-      ]
     , testCase "reports error when capataz thread receives async exception"
       $ testCapatazStream
           [ andP
@@ -227,7 +144,8 @@ tests
         "callbacks"
         [ testGroup
           "workerOnCompletion"
-          [ testCase "does execute callback when worker sub-routine is completed"
+          [ testCase
+              "does execute callback when worker sub-routine is completed"
             $ testCapatazStream
                 []
                 ( \capataz -> do
@@ -273,7 +191,8 @@ tests
                   , assertCallbackType SUT.OnCompletion
                   ]
                 )
-          , testCase "does not execute callback when worker sub-routine is terminated"
+          , testCase
+              "does not execute callback when worker sub-routine is terminated"
             $ testCapatazStream
                 []
                 ( \capataz -> do
@@ -349,7 +268,8 @@ tests
                 ]
                 [assertEventType CapatazTerminated]
                 Nothing
-          , testCase "does not execute callback when worker sub-routine is completed"
+          , testCase
+              "does not execute callback when worker sub-routine is completed"
             $ testCapatazStream
                 []
                 ( \capataz -> do
@@ -376,7 +296,8 @@ tests
                     , assertCallbackType SUT.OnFailure
                     ]
                 )
-          , testCase "does not execute callback when worker sub-routine is terminated"
+          , testCase
+              "does not execute callback when worker sub-routine is terminated"
             $ testCapatazStream
                 []
                 ( \capataz -> do
@@ -463,7 +384,8 @@ tests
                 ]
                 []
                 Nothing
-          , testCase "does execute callback when worker sub-routine is terminated"
+          , testCase
+              "does execute callback when worker sub-routine is terminated"
             $ testCapatazStream
                 []
                 ( \capataz -> do
@@ -487,7 +409,8 @@ tests
                 ]
                 [assertEventType CapatazTerminated]
                 Nothing
-          , testCase "does not execute callback when worker sub-routine is completed"
+          , testCase
+              "does not execute callback when worker sub-routine is completed"
             $ testCapatazStream
                 []
                 ( \capataz -> do
@@ -639,11 +562,12 @@ tests
           ]
           [assertEventType CapatazTerminated]
           Nothing
-        , testCase "does not increase restart count on multiple worker completions"
+        , testCase
+            "does not increase restart count on multiple worker completions"
           $ testCapatazStream
               []
               ( \capataz -> do
-            -- Note the number is two (2) given the assertion list has two `ProcessRestarted` assertions
+              -- Note the number is two (2) given the assertion list has two `ProcessRestarted` assertions
                 let expectedRestartCount = 2
                 subRoutineAction <- mkCompletingBeforeNRestartsSubRoutine
                   expectedRestartCount
@@ -674,36 +598,43 @@ tests
           [assertEventType ProcessTerminated, assertEventType ProcessRestarted]
           []
           Nothing
-        , testCase "does increase restart count on multiple worker terminations" $ do
-          terminationCountVar <- newTVarIO (0 :: Int)
-          let signalWorkerTermination =
-                atomically (modifyTVar' terminationCountVar (+ 1))
-              waitWorkerTermination i = atomically $ do
-                n <- readTVar terminationCountVar
-                when (n /= i) retry
-          testCapatazStream
-            []
-            ( \capataz -> do
-              workerId <- SUT.forkWorker
-                SUT.defWorkerOptions
-                  { SUT.workerRestartStrategy = SUT.Permanent
-                  , SUT.workerOnTermination   = signalWorkerTermination
-                  }
-                (forever $ threadDelay 10001000)
-                capataz
+        , testCase "does increase restart count on multiple worker terminations"
+          $ do
+              terminationCountVar <- newTVarIO (0 :: Int)
+              let signalWorkerTermination =
+                    atomically (modifyTVar' terminationCountVar (+ 1))
+                  waitWorkerTermination i = atomically $ do
+                    n <- readTVar terminationCountVar
+                    when (n /= i) retry
+              testCapatazStream
+                []
+                ( \capataz -> do
+                  workerId <- SUT.forkWorker
+                    SUT.defWorkerOptions
+                      { SUT.workerRestartStrategy = SUT.Permanent
+                      , SUT.workerOnTermination   = signalWorkerTermination
+                      }
+                    (forever $ threadDelay 10001000)
+                    capataz
 
-              SUT.terminateProcess "testing termination (1)" workerId capataz
-              waitWorkerTermination 1
-              SUT.terminateProcess "testing termination (2)" workerId capataz
-              waitWorkerTermination 2
-            )
-            [ assertEventType ProcessTerminated
-            , andP [assertEventType ProcessRestarted, assertRestartCount (== 1)]
-            , assertEventType ProcessTerminated
-            , andP [assertEventType ProcessRestarted, assertRestartCount (== 2)]
-            ]
-            []
-            Nothing
+                  SUT.terminateProcess "testing termination (1)"
+                                       workerId
+                                       capataz
+                  waitWorkerTermination 1
+                  SUT.terminateProcess "testing termination (2)"
+                                       workerId
+                                       capataz
+                  waitWorkerTermination 2
+                )
+                [ assertEventType ProcessTerminated
+                , andP
+                  [assertEventType ProcessRestarted, assertRestartCount (== 1)]
+                , assertEventType ProcessTerminated
+                , andP
+                  [assertEventType ProcessRestarted, assertRestartCount (== 2)]
+                ]
+                []
+                Nothing
         , testCase "does restart on worker failure" $ testCapatazStream
           []
           ( \capataz -> do
@@ -1048,3 +979,4 @@ tests
         ]
       ]
     ]
+  ]

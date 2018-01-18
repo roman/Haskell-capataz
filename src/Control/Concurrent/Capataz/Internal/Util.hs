@@ -58,15 +58,6 @@ fetchProcess SupervisorEnv { supervisorProcessMap } processId = do
     Just process -> return $ Just process
     _            -> return Nothing
 
--- | Fetches a "WorkerEnv" from the "Capataz" instance environment
-fetchWorkerEnv :: SupervisorEnv -> WorkerId -> IO (Maybe WorkerEnv)
-fetchWorkerEnv SupervisorEnv { supervisorProcessMap } workerId = do
-  processMap <- readIORef supervisorProcessMap
-  case HashMap.lookup workerId processMap of
-    Nothing                     -> return Nothing
-    Just (WorkerProcess worker) -> return $ Just $ workerToEnv worker
-    Just _                      -> return Nothing
-
 -- | Appends a new "Worker" to the "Capataz" existing worker map.
 appendProcessToMap :: SupervisorEnv -> Process -> IO ()
 appendProcessToMap SupervisorEnv { supervisorProcessMap } process =
@@ -76,13 +67,13 @@ appendProcessToMap SupervisorEnv { supervisorProcessMap } process =
   appendProcess = HashMap.alter (const $ Just process) (getProcessId process)
 
 -- | Removes a "Worker" from the "Capataz" existing worker map.
-removeWorkerFromMap :: SupervisorEnv -> WorkerId -> IO ()
-removeWorkerFromMap SupervisorEnv { supervisorProcessMap } workerId =
+removeProcessFromMap :: SupervisorEnv -> ProcessId -> IO ()
+removeProcessFromMap SupervisorEnv { supervisorProcessMap } processId =
   atomicModifyIORef'
     supervisorProcessMap
     ( \processMap -> maybe (processMap, ())
-                           (const (HashMap.delete workerId processMap, ()))
-                           (HashMap.lookup workerId processMap)
+                           (const (HashMap.delete processId processMap, ()))
+                           (HashMap.lookup processId processMap)
     )
 
 -- | Function to modify a "Capataz" worker map using a pure function.

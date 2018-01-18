@@ -73,7 +73,7 @@ data CapatazEvent
   , processThreadId     :: !ProcessThreadId
   , processId           :: !ProcessId
   , processName         :: !ProcessName
-  , processType     :: !ProcessType
+  , processType         :: !ProcessType
   , processRestartCount :: !Int
   , eventTime           :: !UTCTime
   }
@@ -102,7 +102,7 @@ data CapatazEvent
   , processThreadId      :: !ProcessThreadId
   , processId            :: !ProcessId
   , processName          :: !ProcessName
-  , processType     :: !ProcessType
+  , processType          :: !ProcessType
   , processCallbackError :: !(Maybe SomeException)
   , processCallbackType  :: !CallbackType
   , eventTime            :: !UTCTime
@@ -161,7 +161,7 @@ data WorkerRestartAction
   | IncreaseRestartCount
 
   -- | The error intensity has been reached
-  | HaltCapataz
+  | HaltSupervisor
   deriving (Generic, Show, Eq)
 
 instance NFData WorkerRestartAction
@@ -312,21 +312,30 @@ data WorkerEnv
   , workerRestartStrategy :: !WorkerRestartStrategy
   }
 
+data ProcessEnv
+  = ProcessEnv {
+    processId              :: !ProcessId
+  , processName            :: !ProcessName
+  , processAsync           :: !(Async ())
+  , processCreationTime    :: !UTCTime
+  , processRestartStrategy :: !WorkerRestartStrategy
+  }
+
 data SupervisorSpec
   = SupervisorSpec {
-    -- | Name of the Capataz (present on "CapatazEvent" records)
+    -- | Name of the Supervisor (present on "CapatazEvent" records)
     supervisorName                    :: Text
-    -- | How many errors is the Capataz be able to handle; check:
+    -- | How many errors is the Supervisor be able to handle; check:
     -- http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
   , supervisorIntensity               :: !Int
-    -- | Period of time where the Capataz can receive "capatazIntensity" amount
+    -- | Period of time where the Supervisor can receive "supervisorIntensity" amount
     -- of errors
   , supervisorPeriodSeconds           :: !NominalDiffTime
     -- | What is the "SupervisorRestartStrategy" for this Capataz
   , supervisorRestartStrategy         :: !SupervisorRestartStrategy
     -- | Static set of workers that start as soon as the "Capataz" is created
   , supervisorProcessSpecList         :: ![ProcessSpec]
-    -- | In which order the "Capataz" record is going to terminate it's workers
+    -- | In which order the "Supervisor" record is going to terminate it's workers
   , supervisorProcessTerminationOrder :: !ProcessTerminationOrder
     -- | Callback used when the error intensity is reached
   , supervisorOnIntensityReached      :: !(IO ())
@@ -340,7 +349,7 @@ data Supervisor
   , supervisorCreationTime :: !UTCTime
   , supervisorSpec         :: !SupervisorSpec
   , supervisorAsync        :: !(Async ())
-  , supervisorNotify       :: (SupervisorMessage -> IO ())
+  , supervisorNotify       :: SupervisorMessage -> IO ()
   , supervisorEnv          :: !SupervisorEnv
   }
 
@@ -562,7 +571,7 @@ defCapatazOptions = CapatazOptions
   { supervisorName                    = "capataz-root"
 
   -- One (1) restart every five (5) seconds
-  , supervisorIntensity               = 1
+  , supervisorIntensity               = 2
   , supervisorPeriodSeconds           = 5
   , supervisorRestartStrategy         = def
   , supervisorProcessSpecList         = []
@@ -582,7 +591,7 @@ defSupervisorSpec = SupervisorSpec
   { supervisorName                    = "default-supervisor"
 
   -- One (1) restart every five (5) seconds
-  , supervisorIntensity               = 1
+  , supervisorIntensity               = 2
   , supervisorPeriodSeconds           = 5
   , supervisorRestartStrategy         = def
   , supervisorProcessSpecList         = []

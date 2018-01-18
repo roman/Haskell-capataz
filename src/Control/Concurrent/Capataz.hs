@@ -48,18 +48,18 @@ import Control.Concurrent.Capataz.Internal.Types
     , CapatazStatus (..)
     , ProcessError (..)
     , ProcessSpec (..)
-    , ProcessType (..)
     , ProcessTerminationOrder (..)
+    , ProcessType (..)
     , SupervisorRestartStrategy (..)
+    , SupervisorSpec (..)
     , WorkerAction
     , WorkerOptions (..)
     , WorkerRestartStrategy (..)
-    , WorkerTerminationPolicy (..)
     , WorkerSpec (..)
-    , SupervisorSpec (..)
+    , WorkerTerminationPolicy (..)
     , defCapatazOptions
-    , defWorkerOptions
     , defSupervisorSpec
+    , defWorkerOptions
     , defWorkerSpec
     )
 import Control.Concurrent.Capataz.Internal.Util  (capatazToAsync)

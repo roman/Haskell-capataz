@@ -51,18 +51,18 @@ data EventType
 
 toEventType :: SUT.CapatazEvent -> EventType
 toEventType ev = case ev of
-  SUT.InvalidCapatazStatusReached{} -> InvalidCapatazStatusReached
-  SUT.SupervisorStatusChanged{}     -> SupervisorStatusChanged
-  SUT.ProcessTerminated{}           -> ProcessTerminated
-  SUT.ProcessStarted{}              -> ProcessStarted
-  SUT.ProcessRestarted{}            -> ProcessRestarted
-  SUT.ProcessCompleted{}            -> ProcessCompleted
-  SUT.ProcessFailed{}               -> ProcessFailed
-  SUT.ProcessCallbackExecuted{}     -> ProcessCallbackExecuted
-  SUT.ProcessTerminationStarted{}   -> ProcessTerminationStarted
-  SUT.ProcessTerminationFinished{}  -> ProcessTerminationFinished
-  SUT.CapatazFailed{}               -> CapatazFailed
-  SUT.CapatazTerminated{}           -> CapatazTerminated
+  SUT.InvalidSupervisorStatusReached{} -> InvalidCapatazStatusReached
+  SUT.SupervisorStatusChanged{}        -> SupervisorStatusChanged
+  SUT.ProcessTerminated{}              -> ProcessTerminated
+  SUT.ProcessStarted{}                 -> ProcessStarted
+  SUT.ProcessRestarted{}               -> ProcessRestarted
+  SUT.ProcessCompleted{}               -> ProcessCompleted
+  SUT.ProcessFailed{}                  -> ProcessFailed
+  SUT.ProcessCallbackExecuted{}        -> ProcessCallbackExecuted
+  SUT.ProcessTerminationStarted{}      -> ProcessTerminationStarted
+  SUT.ProcessTerminationFinished{}     -> ProcessTerminationFinished
+  SUT.CapatazFailed{}                  -> CapatazFailed
+  SUT.CapatazTerminated{}              -> CapatazTerminated
 
 -- | Predicate function to assert "CapatazEvent" types
 assertEventType :: EventType -> SUT.CapatazEvent -> Bool
@@ -119,7 +119,7 @@ assertRestartCount predFn ev = case ev of
 
 -- | Predicate function to assert a Capataz status change
 assertSupervisorStatusChanged
-  :: SUT.CapatazStatus -> SUT.CapatazStatus -> SUT.CapatazEvent -> Bool
+  :: SUT.SupervisorStatus -> SUT.SupervisorStatus -> SUT.CapatazEvent -> Bool
 assertSupervisorStatusChanged fromEv toEv ev = case ev of
   SUT.SupervisorStatusChanged { prevSupervisorStatus, newSupervisorStatus } ->
     fromEv == prevSupervisorStatus && toEv == newSupervisorStatus

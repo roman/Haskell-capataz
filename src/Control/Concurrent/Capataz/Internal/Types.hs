@@ -20,7 +20,6 @@ import Data.UUID                     (UUID)
 type CapatazId = UUID
 type WorkerId = UUID
 type SupervisorId = UUID
-type SupervisorStatus = CapatazStatus
 type ProcessId = UUID
 type WorkerAction = IO ()
 type ProcessThreadId = ThreadId
@@ -30,13 +29,14 @@ type SupervisorName = Text
 type WorkerName = Text
 type RestartCount = Int
 type ProcessMap = HashMap ProcessId Process
+type ParentSupervisor = Supervisor
 
 -- | Event passed to the "notifyEvent" callback sub-routine, this events can be
 -- used to monitor the capataz system and understanding what is doing. This
 -- provides high levels of telemetry for the Capataz instance, so is mainly used
 -- for logging, monitoring and testing purposes.
 data CapatazEvent
-  = InvalidCapatazStatusReached {
+  = InvalidSupervisorStatusReached {
     supervisorId   :: !SupervisorId
   , supervisorName :: !SupervisorName
   , eventTime      :: !UTCTime
@@ -152,7 +152,7 @@ instance Default WorkerTerminationPolicy where
 instance NFData WorkerTerminationPolicy
 
 -- | Helper record to assess if the capataz error intensity has been breached
-data WorkerRestartAction
+data ProcessRestartAction
   -- | The capataz will restart the failed worker and reset the restart count
   -- given intensity period has passed
   = ResetRestartCount
@@ -164,7 +164,7 @@ data WorkerRestartAction
   | HaltSupervisor
   deriving (Generic, Show, Eq)
 
-instance NFData WorkerRestartAction
+instance NFData ProcessRestartAction
 
 -- | Specifies how order in which process should be terminated by a Capataz in
 -- case of restart or shutdown; default is "OldestFirst"
@@ -278,22 +278,6 @@ data Worker
   , workerOptions      :: !WorkerOptions
   }
 
--- | Convenience utility record that contains all values related to a "Worker";
--- this is used on internal functions of the Capataz library.
-data WorkerEnv
-  = WorkerEnv {
-    workerAction          :: WorkerAction
-  , workerId              :: !WorkerId
-  , workerAsync           :: !(Async ())
-  , workerCreationTime    :: !UTCTime
-  , workerName            :: !WorkerName
-  , workerOptions         :: !WorkerOptions
-  , workerOnFailure       :: !(SomeException -> IO ())
-  , workerOnCompletion    :: !(IO ())
-  , workerOnTermination   :: !(IO ())
-  , workerRestartStrategy :: !WorkerRestartStrategy
-  }
-
 data ProcessEnv
   = ProcessEnv {
     processId              :: !ProcessId
@@ -342,13 +326,14 @@ data ControlAction
     workerOptions  :: !WorkerOptions
   , returnWorkerId :: !(WorkerId -> IO ())
   }
+  | ForkSupervisor {
+    supervisorOptions :: !SupervisorOptions
+  , returnSupervisor  :: !(Supervisor -> IO ())
+  }
   | TerminateProcess {
     processId                :: !ProcessId
   , processTerminationReason :: !Text
   , notifyProcessTermination :: !(IO ())
-  }
-  | TerminateCapataz {
-    notifyCapatazTermination :: !(IO ())
   }
   deriving (Generic)
 
@@ -438,7 +423,7 @@ data MonitorEvent
   deriving (Show)
 
 -- | Internal state machine record that indicates the state of a Capataz
-data CapatazStatus
+data SupervisorStatus
   -- | This state is set when Worker is created and it spawn static worker
   -- threads
   = Initializing
@@ -452,7 +437,7 @@ data CapatazStatus
   | Halted
   deriving (Generic, Show, Eq)
 
-instance NFData CapatazStatus
+instance NFData SupervisorStatus
 
 -- | Internal message delivered to a Capataz thread that can either be a call
 -- from public API or an event from a monitored Worker
@@ -489,7 +474,7 @@ data CapatazRuntime
   , capatazCreationTime :: !UTCTime
   , capatazQueue        :: !(TQueue SupervisorMessage)
   , capatazProcessMap   :: !(IORef ProcessMap)
-  , capatazStatusVar    :: !(TVar CapatazStatus)
+  , capatazStatusVar    :: !(TVar SupervisorStatus)
   , capatazOptions      :: !CapatazOptions
   }
 
@@ -501,7 +486,7 @@ data CapatazEnv
   , capatazName                    :: !CapatazName
   , capatazQueue                   :: !(TQueue SupervisorMessage)
   , capatazProcessMap              :: !(IORef ProcessMap)
-  , capatazStatusVar               :: !(TVar CapatazStatus)
+  , capatazStatusVar               :: !(TVar SupervisorStatus)
   , capatazOptions                 :: !CapatazOptions
   , capatazRuntime                 :: !CapatazRuntime
   , capatazIntensity               :: !Int
@@ -531,7 +516,7 @@ data SupervisorEnv
   , supervisorNotify                  :: !(SupervisorMessage -> IO ())
   , supervisorGetNotification         :: !(STM SupervisorMessage)
   , supervisorProcessMap              :: !(IORef ProcessMap)
-  , supervisorStatusVar               :: !(TVar CapatazStatus)
+  , supervisorStatusVar               :: !(TVar SupervisorStatus)
   , supervisorOptions                 :: !SupervisorOptions
   , supervisorIntensity               :: !Int
     -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity

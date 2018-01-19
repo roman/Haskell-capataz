@@ -8,7 +8,8 @@
 module Control.Concurrent.Capataz
 (
 -- * Types
-  CallbackType (..)
+  HasSupervisor (..)
+, CallbackType (..)
 , WorkerAction
 , ProcessError (..)
 , WorkerOptions (..)
@@ -19,8 +20,9 @@ module Control.Concurrent.Capataz
 , Capataz
 , CapatazEvent (..)
 , CapatazOptions (..)
+, Supervisor
 , SupervisorRestartStrategy (..)
-, CapatazStatus (..)
+, SupervisorStatus (..)
 , ProcessSpec (..)
 , ProcessType (..)
 , defSupervisorOptions
@@ -31,25 +33,29 @@ module Control.Concurrent.Capataz
 , forkCapataz
 , terminateProcess
 -- * Utility functions
+, getSupervisorProcessId
 , capatazToAsync
+, supervisorToAsync
 -- * Teardown (re-exported)
 , teardown
 )
 where
 
-import Control.Concurrent.Capataz.Internal.Core  (forkCapataz, forkWorker, terminateProcess)
+import Control.Concurrent.Capataz.Internal.Core
+    (HasSupervisor (..), forkCapataz, forkWorker, getSupervisorProcessId, terminateProcess)
 import Control.Concurrent.Capataz.Internal.Types
     ( CallbackType (..)
     , Capataz
     , CapatazEvent (..)
     , CapatazOptions (..)
-    , CapatazStatus (..)
     , ProcessError (..)
     , ProcessSpec (..)
     , ProcessTerminationOrder (..)
     , ProcessType (..)
+    , Supervisor
     , SupervisorOptions (..)
     , SupervisorRestartStrategy (..)
+    , SupervisorStatus (..)
     , WorkerAction
     , WorkerOptions (..)
     , WorkerRestartStrategy (..)
@@ -58,5 +64,5 @@ import Control.Concurrent.Capataz.Internal.Types
     , defSupervisorOptions
     , defWorkerOptions
     )
-import Control.Concurrent.Capataz.Internal.Util  (capatazToAsync)
+import Control.Concurrent.Capataz.Internal.Util  (capatazToAsync, supervisorToAsync)
 import Control.Teardown                          (teardown)

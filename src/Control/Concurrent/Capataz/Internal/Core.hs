@@ -6,7 +6,6 @@
 {-| This module contains:
 
 * Functions exported on the public API
-* The supervisor thread loop
 * High level message handlers of the supervisor thread loop
 
 -}
@@ -20,9 +19,6 @@ import Data.Time.Clock         (getCurrentTime)
 
 import qualified Data.UUID.V4 as UUID (nextRandom)
 
--- import qualified Control.Concurrent.Capataz.Internal.Restart as Restart
--- import qualified Control.Concurrent.Capataz.Internal.Worker  as Worker
--- import qualified Control.Concurrent.Capataz.Internal.Process as Process
 import qualified Control.Concurrent.Capataz.Internal.Supervisor as Supervisor
 
 import           Control.Concurrent.Capataz.Internal.Types
@@ -30,9 +26,18 @@ import qualified Control.Concurrent.Capataz.Internal.Util  as Util
 
 --------------------------------------------------------------------------------
 
--- | Creates a Capataz record, which represents a supervision thread which
--- monitors failure on worker threads defined in the "CapatazOptions" or worker
--- threads that are created dynamically using "forkWorker".
+class HasSupervisor a where
+  getSupervisor :: a -> Supervisor
+
+instance HasSupervisor Capataz where
+  getSupervisor (Capataz {capatazSupervisor}) = capatazSupervisor
+
+instance HasSupervisor Supervisor where
+  getSupervisor = identity
+
+-- | Creates a Capataz record, which holds a root Supervisor; this Supervisor
+-- monitors failures on process threads defined in the "CapatazOptions" or
+-- created dynamically using "forkWorker" or "forkSupervisor".
 forkCapataz :: CapatazOptions -> IO Capataz
 forkCapataz capatazOptions@CapatazOptions { notifyEvent } = do
   capatazId    <- UUID.nextRandom
@@ -92,43 +97,67 @@ forkCapataz capatazOptions@CapatazOptions { notifyEvent } = do
 -- defined in the "WorkerOptions" record, it will restart the Worker sub-routine
 -- in case of failures
 forkWorker
-  :: WorkerOptions -- ^ Worker options (restart, name, callbacks, etc)
+  :: HasSupervisor supervisor
+  => WorkerOptions -- ^ Worker options (restart, name, callbacks, etc)
   -> Text          -- ^ Worker Name
   -> IO ()         -- ^ IO sub-routine that will be executed on worker thread
-  -> Capataz       -- ^ "Capataz" instance that supervises the worker
+  -> supervisor    -- ^ "Supervisor" that supervises the worker
   -> IO WorkerId   -- ^ An identifier that can be used to terminate the "Worker"
-forkWorker WorkerOptions {..} wName wAction Capataz { capatazSupervisor = supervisor }
-  = do
-    let workerOptions =
-          WorkerOptions {workerName = wName, workerAction = wAction, ..}
-        Supervisor { supervisorNotify } = supervisor
+forkWorker WorkerOptions {..} wName wAction sup = do
+  let Supervisor { supervisorNotify } = getSupervisor sup
+      workerOptions =
+        WorkerOptions {workerName = wName, workerAction = wAction, ..}
 
-    workerIdVar <- newEmptyMVar
-    supervisorNotify
-      ( ControlAction ForkWorker
-        { workerOptions
-        , returnWorkerId = putMVar workerIdVar
-        }
-      )
-    takeMVar workerIdVar
+  workerIdVar <- newEmptyMVar
+  supervisorNotify
+    ( ControlAction ForkWorker
+      { workerOptions
+      , returnWorkerId = putMVar workerIdVar
+      }
+    )
+  takeMVar workerIdVar
 
--- | Stops the execution of a worker green thread being supervised by the given
--- "Capataz" instance, if the WorkerId does not belong to the Capataz, the
--- operation does not perform any side-effect.
+-- | Creates a Supervisor, which can create other processes.
+forkSupervisor
+  :: HasSupervisor parentSupervisor
+  => SupervisorOptions -- ^ Supervisor options
+  -> Text              -- ^ Supervisor Name
+  -> parentSupervisor  -- ^ Parent supervisor instance that supervises new supervisor
+  -> IO Supervisor     -- ^ A Supervisor record to dynamically create and
+                       -- supervise other processes
+forkSupervisor SupervisorOptions {..} supName parentSup = do
+  let Supervisor { supervisorNotify } = getSupervisor parentSup
+      supervisorOptions = SupervisorOptions {supervisorName = supName, ..}
+  supervisorVar <- newEmptyMVar
+  supervisorNotify
+    ( ControlAction ForkSupervisor
+      { supervisorOptions
+      , returnSupervisor  = putMVar supervisorVar
+      }
+    )
+  takeMVar supervisorVar
+
+-- | Stops the execution of a process green thread being supervised by the given
+-- "Supervisor" instance, if the "ProcessId" does not belong to the given
+-- Supervisor, the operation does not perform any side-effect.
 --
--- Note: If your worker has a "Permanent" worker restart strategy, the worker
--- thread __will be restarted again__; so use a "Transient" restart strategy
--- instead.
-terminateProcess :: Text -> ProcessId -> Capataz -> IO ()
-terminateProcess processTerminationReason processId Capataz { capatazSupervisor = supervisor }
-  = do
-    let Supervisor { supervisorNotify } = supervisor
-    result <- newEmptyMVar
-    supervisorNotify
-      ( ControlAction TerminateProcess
-        { processId
-        , processTerminationReason
-        , notifyProcessTermination = putMVar result ()
-        }
-      )
-    takeMVar result
+-- Note: If ProcessId maps to a worker that has a "Permanent" restart strategy,
+-- the worker thread __will be restarted again__; so use a "Transient" restart
+-- strategy for the worker instead.
+terminateProcess
+  :: HasSupervisor supervisor => Text -> ProcessId -> supervisor -> IO ()
+terminateProcess processTerminationReason processId supervisor = do
+  let Supervisor { supervisorNotify } = getSupervisor supervisor
+  result <- newEmptyMVar
+  supervisorNotify
+    ( ControlAction TerminateProcess
+      { processId
+      , processTerminationReason
+      , notifyProcessTermination = putMVar result ()
+      }
+    )
+  takeMVar result
+
+-- | Gets the process identifier of a Supervisor (normally used for termination)
+getSupervisorProcessId :: Supervisor -> ProcessId
+getSupervisorProcessId (Supervisor { supervisorId }) = supervisorId

@@ -106,23 +106,23 @@ sortProcessesByTerminationOrder terminationOrder processMap =
 
 --------------------------------------------------------------------------------
 
--- | Sub-routine that returns the "CapatazStatus", this sub-routine will block
+-- | Sub-routine that returns the "SupervisorStatus", this sub-routine will block
 -- until the "Capataz" has a status different from "Initializing".
-readCapatazStatusSTM :: TVar CapatazStatus -> STM CapatazStatus
-readCapatazStatusSTM statusVar = do
+readSupervisorStatusSTM :: TVar SupervisorStatus -> STM SupervisorStatus
+readSupervisorStatusSTM statusVar = do
   status <- readTVar statusVar
   if status == Initializing then retry else return status
 
--- | Sub-routine that returns the "CapatazStatus" on the IO monad
-readCapatazStatus :: SupervisorEnv -> IO CapatazStatus
-readCapatazStatus SupervisorEnv { supervisorStatusVar } =
+-- | Sub-routine that returns the "SupervisorStatus" on the IO monad
+readSupervisorStatus :: SupervisorEnv -> IO SupervisorStatus
+readSupervisorStatus SupervisorEnv { supervisorStatusVar } =
   atomically $ readTVar supervisorStatusVar
 
 -- | Modifes the "Capataz" status, this is the only function that should be used
 -- to this end given it has the side-effect of notifying a status change via the
 -- "notifyEvent" sub-routine, given via an attribute of the "CapatazOption"
 -- record.
-writeSupervisorStatus :: SupervisorEnv -> CapatazStatus -> IO ()
+writeSupervisorStatus :: SupervisorEnv -> SupervisorStatus -> IO ()
 writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, notifyEvent } newSupervisorStatus
   = do
 
@@ -159,15 +159,6 @@ sendSyncControlMsg SupervisorEnv { supervisorNotify } mkCtrlMsg = do
   supervisorNotify (ControlAction $ mkCtrlMsg (putMVar result ()))
   takeMVar result
 
--- | Utility function to transform a "Worker" into a "WorkerEnv"
-workerToEnv :: Worker -> WorkerEnv
-workerToEnv Worker {..} =
-  let
-    WorkerOptions { workerAction, workerOnFailure, workerOnCompletion, workerOnTermination, workerRestartStrategy }
-      = workerOptions
-  in
-    WorkerEnv {..}
-
 capatazOptionsToSupervisorOptions :: CapatazOptions -> SupervisorOptions
 capatazOptionsToSupervisorOptions CapatazOptions {..} = SupervisorOptions {..}
 
@@ -175,10 +166,9 @@ toParentSupervisorEnv :: SupervisorEnv -> ParentSupervisorEnv
 toParentSupervisorEnv SupervisorEnv { supervisorId, supervisorName, supervisorNotify, notifyEvent }
   = ParentSupervisorEnv {..}
 
--- | Utility function to transform a "WorkerEnv" into a "Worker"
-envToWorker :: WorkerEnv -> Worker
-envToWorker WorkerEnv {..} = Worker {..}
-
 capatazToAsync :: Capataz -> Async ()
 capatazToAsync Capataz { capatazSupervisor } =
   let Supervisor { supervisorAsync } = capatazSupervisor in supervisorAsync
+
+supervisorToAsync :: Supervisor -> Async ()
+supervisorToAsync Supervisor { supervisorAsync } = supervisorAsync

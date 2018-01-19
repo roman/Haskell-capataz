@@ -26,7 +26,10 @@ import qualified Control.Concurrent.Capataz.Internal.Util  as Util
 
 --------------------------------------------------------------------------------
 
+-- | Utility typeclass to call public supervision API with types
+-- that contain a supervisor (e.g. Capataz record)
 class HasSupervisor a where
+  -- | Fetches a supervisor from a record internals
   getSupervisor :: a -> Supervisor
 
 instance HasSupervisor Capataz where
@@ -158,6 +161,14 @@ terminateProcess processTerminationReason processId supervisor = do
     )
   takeMVar result
 
+-- | Gets the async of a Supervisor thread
+getSupervisorAsync :: HasSupervisor supervisor => supervisor -> Async ()
+getSupervisorAsync supervisor =
+  let Supervisor { supervisorAsync } = getSupervisor supervisor
+  in supervisorAsync
+
 -- | Gets the process identifier of a Supervisor (normally used for termination)
-getSupervisorProcessId :: Supervisor -> ProcessId
-getSupervisorProcessId (Supervisor { supervisorId }) = supervisorId
+getSupervisorProcessId :: HasSupervisor supervisor => supervisor -> ProcessId
+getSupervisorProcessId supervisor =
+  let Supervisor { supervisorId } = getSupervisor supervisor
+  in supervisorId

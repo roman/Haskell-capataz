@@ -7,7 +7,7 @@ import Control.Concurrent.Capataz
     , SupervisorRestartStrategy (..)
     , WorkerOptions (..)
     , WorkerRestartStrategy (..)
-    , capatazToAsync
+    , getSupervisorAsync
     , defCapatazOptions
     , defWorkerOptions
     , forkCapataz
@@ -43,4 +43,4 @@ main = do
                     (forever $ threadDelay delayMicros >> killNumberProcess)
                     capataz
 
-  wait (capatazToAsync capataz) `finally` (teardown capataz >>= print)
+  wait (getSupervisorAsync capataz) `finally` (teardown capataz >>= print)

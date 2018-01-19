@@ -34,15 +34,14 @@ module Control.Concurrent.Capataz
 , terminateProcess
 -- * Utility functions
 , getSupervisorProcessId
-, capatazToAsync
-, supervisorToAsync
+, getSupervisorAsync
 -- * Teardown (re-exported)
 , teardown
 )
 where
 
 import Control.Concurrent.Capataz.Internal.Core
-    (HasSupervisor (..), forkCapataz, forkWorker, getSupervisorProcessId, terminateProcess)
+    (HasSupervisor (..), forkCapataz, forkWorker, getSupervisorProcessId, getSupervisorAsync, terminateProcess)
 import Control.Concurrent.Capataz.Internal.Types
     ( CallbackType (..)
     , Capataz
@@ -64,5 +63,4 @@ import Control.Concurrent.Capataz.Internal.Types
     , defSupervisorOptions
     , defWorkerOptions
     )
-import Control.Concurrent.Capataz.Internal.Util  (capatazToAsync, supervisorToAsync)
 import Control.Teardown                          (teardown)

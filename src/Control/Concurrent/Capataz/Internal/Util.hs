@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards       #-}
 {-| This module contains:
 
-* Functions to manipulate the state of the Capataz record
+* Functions to manipulate the state of the Supervisor record
 * Utility functions used for communication between threads
 * Public API utility functions
 
@@ -44,13 +44,13 @@ setProcessThreadName workerId workerName = do
           (getTidNumber tid)
   labelThread tid workerIdentifier
 
-
+-- | Returns the ProcessId of both a Worker or Supervisor process
 getProcessId :: Process -> ProcessId
 getProcessId process = case process of
   WorkerProcess     Worker { workerId }         -> workerId
   SupervisorProcess Supervisor { supervisorId } -> supervisorId
 
--- | Fetches a "Worker" from the "Capataz" instance environment
+-- | Fetches a "Process" from a "Supervisor" instance
 fetchProcess :: SupervisorEnv -> ProcessId -> IO (Maybe Process)
 fetchProcess SupervisorEnv { supervisorProcessMap } processId = do
   processMap <- readIORef supervisorProcessMap
@@ -58,7 +58,7 @@ fetchProcess SupervisorEnv { supervisorProcessMap } processId = do
     Just process -> return $ Just process
     _            -> return Nothing
 
--- | Appends a new "Worker" to the "Capataz" existing worker map.
+-- | Appends a new "Process" to the "Supervisor" existing process map.
 appendProcessToMap :: SupervisorEnv -> Process -> IO ()
 appendProcessToMap SupervisorEnv { supervisorProcessMap } process =
   atomicModifyIORef' supervisorProcessMap
@@ -66,7 +66,7 @@ appendProcessToMap SupervisorEnv { supervisorProcessMap } process =
  where
   appendProcess = HashMap.alter (const $ Just process) (getProcessId process)
 
--- | Removes a "Worker" from the "Capataz" existing worker map.
+-- | Removes a "Process" from a "Supervisor" existing process map.
 removeProcessFromMap :: SupervisorEnv -> ProcessId -> IO ()
 removeProcessFromMap SupervisorEnv { supervisorProcessMap } processId =
   atomicModifyIORef'
@@ -76,19 +76,19 @@ removeProcessFromMap SupervisorEnv { supervisorProcessMap } processId =
                            (HashMap.lookup processId processMap)
     )
 
--- | Function to modify a "Capataz" worker map using a pure function.
+-- | Function to modify a "Supervisor" process map using a pure function.
 resetProcessMap :: SupervisorEnv -> (ProcessMap -> ProcessMap) -> IO ()
 resetProcessMap SupervisorEnv { supervisorProcessMap } processMapFn =
   atomicModifyIORef' supervisorProcessMap
                      (\processMap -> (processMapFn processMap, ()))
 
--- | Function to get a snapshot of the "Capataz"' worker map
+-- | Function to get a snapshot of a "Supervisor" process map
 readProcessMap :: SupervisorEnv -> IO ProcessMap
 readProcessMap SupervisorEnv { supervisorProcessMap } =
   readIORef supervisorProcessMap
 
--- | Returns all worker's of a "Capataz" by "ProcessTerminationOrder". This is
--- used "AllForOne" restarts and shutdown operations.
+-- | Returns all processes of a "Supervisor" by "ProcessTerminationOrder". This
+-- is used "AllForOne" restarts and shutdown operations.
 sortProcessesByTerminationOrder
   :: ProcessTerminationOrder -> ProcessMap -> [Process]
 sortProcessesByTerminationOrder terminationOrder processMap =
@@ -106,8 +106,9 @@ sortProcessesByTerminationOrder terminationOrder processMap =
 
 --------------------------------------------------------------------------------
 
--- | Sub-routine that returns the "SupervisorStatus", this sub-routine will block
--- until the "Capataz" has a status different from "Initializing".
+-- | Sub-routine that returns the "SupervisorStatus", this sub-routine will
+-- block until its associated "Supervisor" has a status different from
+-- "Initializing".
 readSupervisorStatusSTM :: TVar SupervisorStatus -> STM SupervisorStatus
 readSupervisorStatusSTM statusVar = do
   status <- readTVar statusVar
@@ -118,10 +119,10 @@ readSupervisorStatus :: SupervisorEnv -> IO SupervisorStatus
 readSupervisorStatus SupervisorEnv { supervisorStatusVar } =
   atomically $ readTVar supervisorStatusVar
 
--- | Modifes the "Capataz" status, this is the only function that should be used
--- to this end given it has the side-effect of notifying a status change via the
--- "notifyEvent" sub-routine, given via an attribute of the "CapatazOption"
--- record.
+-- | Modifes the "Supervisor" status, this is the only function that should be
+-- used for this purpose given it has the side-effect of notifying a status
+-- change via the "notifyEvent" sub-routine, orginally provided in the
+-- "CapatazOption" record.
 writeSupervisorStatus :: SupervisorEnv -> SupervisorStatus -> IO ()
 writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, notifyEvent } newSupervisorStatus
   = do
@@ -140,15 +141,14 @@ writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorSt
       , eventTime
       }
 
-
--- | Used from public API functions to send a ControlAction to the Capataz
--- supervisor thread loop
+-- | Used from public API functions to send ControlAction messages to a
+-- Supervisor thread loop
 sendControlMsg :: SupervisorEnv -> ControlAction -> IO ()
 sendControlMsg SupervisorEnv { supervisorNotify } ctrlMsg =
   supervisorNotify (ControlAction ctrlMsg)
 
--- | Used from public API functions to send a ControlAction to the Capataz
--- supervisor thread loop, it receives an IO sub-routine that expects an IO
+-- | Used from public API functions to send ControlAction messages to the a
+-- Supervisor thread loop, it receives an IO sub-routine that expects an IO
 -- operation that blocks a thread until the message is done.
 sendSyncControlMsg
   :: SupervisorEnv
@@ -159,16 +159,14 @@ sendSyncControlMsg SupervisorEnv { supervisorNotify } mkCtrlMsg = do
   supervisorNotify (ControlAction $ mkCtrlMsg (putMVar result ()))
   takeMVar result
 
+-- | Utility function to transform a "CapatazOptions" record to a
+-- "SupervisorOptions" record
 capatazOptionsToSupervisorOptions :: CapatazOptions -> SupervisorOptions
 capatazOptionsToSupervisorOptions CapatazOptions {..} = SupervisorOptions {..}
 
+-- | Utility function to transform a "SupervisorEnv" record to a
+-- "ParentSupervisorEnv" record; used on functions where supervision of
+-- supervisors is managed.
 toParentSupervisorEnv :: SupervisorEnv -> ParentSupervisorEnv
 toParentSupervisorEnv SupervisorEnv { supervisorId, supervisorName, supervisorNotify, notifyEvent }
   = ParentSupervisorEnv {..}
-
-capatazToAsync :: Capataz -> Async ()
-capatazToAsync Capataz { capatazSupervisor } =
-  let Supervisor { supervisorAsync } = capatazSupervisor in supervisorAsync
-
-supervisorToAsync :: Supervisor -> Async ()
-supervisorToAsync Supervisor { supervisorAsync } = supervisorAsync

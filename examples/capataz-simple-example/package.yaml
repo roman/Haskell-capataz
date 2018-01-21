@@ -1,4 +1,4 @@
-name: capataz-example
+name: capataz-simple-example
 version: '0.0.0.1'
 category: TODO
 author: Roman Gonzalez
@@ -34,7 +34,7 @@ executables:
     - -O2
     dependencies:
     - async
-    - capataz-example
+    - capataz-simple-example
   example2:
     main: Main.hs
     source-dirs: src/example2
@@ -45,4 +45,4 @@ executables:
     - -O2
     dependencies:
     - capataz
-    - capataz-example
+    - capataz-simple-example

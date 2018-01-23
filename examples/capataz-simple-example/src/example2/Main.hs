@@ -3,13 +3,16 @@
 module Main where
 
 import Control.Concurrent.Capataz
-    ( CapatazOptions (..)
-    , SupervisorRestartStrategy (..)
-    , WorkerOptions (..)
+    ( SupervisorRestartStrategy (..)
     , WorkerRestartStrategy (..)
     , getSupervisorAsync
     , defCapatazOptions
     , defWorkerOptions
+    , (.~)
+    , supervisorNameL
+    , supervisorRestartStrategyL
+    , notifyEventL
+    , workerRestartStrategyL
     , forkCapataz
     , forkWorker
     , teardown
@@ -23,17 +26,16 @@ import Text.Show.Pretty           (pPrint)
 main :: IO ()
 main = do
   n       <- getRecord "Counter spawner"
-  capataz <- forkCapataz defCapatazOptions
-    { supervisorName            = "Example Capataz"
-    , supervisorRestartStrategy = OneForOne
-    , notifyEvent               = pPrint
-    }
+  capataz <- forkCapataz (defCapatazOptions
+                          & supervisorNameL .~ "Example Capataz"
+                          & supervisorRestartStrategyL .~ OneForOne
+                          & notifyEventL .~ pPrint)
 
   let numberWriter i a = print (i, a)
       delayMicros = 5000100
 
   _workerIdList <- forM [1 .. procNumber n] $ \i -> forkWorker
-    defWorkerOptions { workerRestartStrategy = Permanent }
+    (defWorkerOptions & workerRestartStrategyL .~ Permanent)
     ("Worker (" <> show i <> ")")
     (spawnNumbersProcess (numberWriter i))
     capataz

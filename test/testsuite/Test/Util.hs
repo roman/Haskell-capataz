@@ -13,7 +13,9 @@ import Text.Show.Pretty              (ppShow)
 
 import qualified Data.Text as T
 
+import Control.Concurrent.Capataz ((&), (.~))
 import qualified Control.Concurrent.Capataz as SUT
+import qualified Control.Concurrent.Capataz.Event as SUT
 
 --------------------------------------------------------------------------------
 -- Util
@@ -292,9 +294,9 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
         [preSetupAssertion, postSetupAssertions, postTeardownAssertions]
       )
 
-    capataz <- SUT.forkCapataz $ (optionModFn SUT.defCapatazOptions)
-      { SUT.notifyEvent = trackEvent accRef eventStream
-      }
+    capataz <-
+      SUT.forkCapataz $ (optionModFn SUT.defCapatazOptions)
+                      & SUT.notifyEventL .~ trackEvent accRef eventStream
 
     -- We check preSetup assertions are met before we execute the setup
     -- function. This serves to test initialization of capataz instance

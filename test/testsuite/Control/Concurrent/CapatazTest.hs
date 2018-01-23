@@ -27,6 +27,7 @@ import Test.Tasty.HUnit (testCase)
 
 import Control.Concurrent.STM.TVar (modifyTVar', newTVarIO, readTVar)
 
+import Control.Concurrent.Capataz (set)
 import qualified Control.Concurrent.Capataz as SUT
 
 import Test.Util
@@ -62,21 +63,16 @@ tests = testGroup
     "capataz with processSpecList"
     [ testCase "initialize and teardown of workers works as expected"
       $ testCapatazStreamWithOptions
-          ( \supOptions -> supOptions
-            { SUT.supervisorProcessSpecList = [ SUT.WorkerSpec
-                                                $ SUT.defWorkerOptions
-                                                    { SUT.workerName   = "A"
-                                                    , SUT.workerAction = forever
-                                                      (threadDelay 10001000)
-                                                    }
-                                              , SUT.WorkerSpec
-                                                $ SUT.defWorkerOptions
-                                                    { SUT.workerName   = "B"
-                                                    , SUT.workerAction = forever
-                                                      (threadDelay 10001000)
-                                                    }
-                                              ]
-            }
+          (set SUT.supervisorProcessSpecListL
+            [ SUT.WorkerSpec
+              $ SUT.defWorkerOptions
+                & set SUT.workerNameL "A"
+                & set SUT.workerActionL (forever $ threadDelay 10001000)
+            , SUT.WorkerSpec
+              $ SUT.defWorkerOptions
+                & set SUT.workerNameL "B"
+                & set SUT.workerActionL (forever $ threadDelay 10001000)
+            ]
           )
           [ assertWorkerStarted "A"
           , assertWorkerStarted "B"
@@ -120,10 +116,7 @@ tests = testGroup
           let (signalIntensityReached, waitTillIntensityReached) =
                 (putMVar lockVar (), takeMVar lockVar)
           testCapatazStreamWithOptions
-            ( \supOptions -> supOptions
-              { SUT.supervisorOnIntensityReached = signalIntensityReached
-              }
-            )
+            (& set SUT.supervisorOnIntensityReachedL signalIntensityReached)
             []
             ( \capataz -> do
               _workerId <- SUT.forkWorker SUT.defWorkerOptions
@@ -151,10 +144,8 @@ tests = testGroup
                 []
                 ( \capataz -> do
                   _workerId <- SUT.forkWorker
-                    ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      }
-                    )
+                    (SUT.defWorkerOptions
+                      & set SUT.workerRestartStrategyL SUT.Temporary)
                     "test-worker"
                     (return ())
                     capataz
@@ -173,10 +164,8 @@ tests = testGroup
                 []
                 ( \capataz -> do
                   _workerId <- SUT.forkWorker
-                    ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      }
-                    )
+                    (SUT.defWorkerOptions
+                     & set SUT.workerRestartStrategyL SUT.Temporary)
                     "test-worker"
                     (throwIO RestartingWorkerError)
                     capataz
@@ -201,8 +190,7 @@ tests = testGroup
                 ( \capataz -> do
                   workerId <- SUT.forkWorker
                     ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      }
+                      & set SUT.workerRestartStrategyL SUT.Temporary
                     )
                     "test-wroker"
                     (forever $ threadDelay 1000100)
@@ -227,9 +215,8 @@ tests = testGroup
                 ( \capataz -> do
                   _workerId <- SUT.forkWorker
                     ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      , SUT.workerOnCompletion    = throwIO TimeoutError
-                      }
+                      & set SUT.workerRestartStrategyL SUT.Temporary
+                      & set SUT.workerOnCompletionL (throwIO TimeoutError)
                     )
                     "test-worker"
                     (return ())
@@ -258,8 +245,7 @@ tests = testGroup
                 ( \capataz -> do
                   _workerId <- SUT.forkWorker
                     ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      }
+                      & set SUT.workerRestartStrategyL SUT.Temporary
                     )
                     "test-worker"
                     (throwIO RestartingWorkerError)
@@ -281,8 +267,7 @@ tests = testGroup
                 ( \capataz -> do
                   _workerId <- SUT.forkWorker
                     ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      }
+                      & set SUT.workerRestartStrategyL SUT.Temporary
                     )
                     "test-worker"
                     (return ())
@@ -310,8 +295,7 @@ tests = testGroup
                 ( \capataz -> do
                   workerId <- SUT.forkWorker
                     ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      }
+                      & set SUT.workerRestartStrategyL SUT.Temporary
                     )
                     "test-worker"
                     (forever $ threadDelay 1000100)
@@ -336,9 +320,8 @@ tests = testGroup
                 ( \capataz -> do
                   _workerId <- SUT.forkWorker
                     ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      , SUT.workerOnFailure       = const $ throwIO TimeoutError
-                      }
+                      & set SUT.workerRestartStrategyL SUT.Temporary
+                      & set SUT.workerOnFailureL (const $ throwIO TimeoutError)
                     )
                     "test-worker"
                     (throwIO RestartingWorkerError)
@@ -368,10 +351,9 @@ tests = testGroup
                 ( \capataz -> do
                   workerId <- SUT.forkWorker
                     ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      , SUT.workerTerminationPolicy = SUT.TimeoutMillis 1
-                      , SUT.workerOnTermination = forever $ threadDelay 100100
-                      }
+                      & set SUT.workerRestartStrategyL SUT.Temporary
+                      & set SUT.workerTerminationPolicyL (SUT.TimeoutMillis 1)
+                      & set SUT.workerOnTerminationL (forever $ threadDelay 100100)
                     )
                     "test-worker"
                     (forever $ threadDelay 10001000)
@@ -401,8 +383,7 @@ tests = testGroup
                 ( \capataz -> do
                   workerId <- SUT.forkWorker
                     ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      }
+                      & set SUT.workerRestartStrategyL SUT.Temporary
                     )
                     "test-worker"
                     (forever $ threadDelay 1000100)
@@ -427,8 +408,7 @@ tests = testGroup
                 ( \capataz -> do
                   _workerId <- SUT.forkWorker
                     ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      }
+                      & set SUT.workerRestartStrategyL SUT.Temporary
                     )
                     "test-worker"
                     (return ())
@@ -448,8 +428,7 @@ tests = testGroup
                 ( \capataz -> do
                   _workerId <- SUT.forkWorker
                     ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      }
+                      & set SUT.workerRestartStrategyL SUT.Temporary
                     )
                     "test-worker"
                     (throwIO (ErrorCall "surprise!"))
@@ -469,9 +448,8 @@ tests = testGroup
                 ( \capataz -> do
                   workerId <- SUT.forkWorker
                     ( SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      , SUT.workerOnTermination   = throwIO TimeoutError
-                      }
+                      & set SUT.workerRestartStrategyL SUT.Temporary
+                      & set SUT.workerOnTerminationL (throwIO TimeoutError)
                     )
                     "test-worker"
                     (forever $ threadDelay 10001000)
@@ -501,7 +479,7 @@ tests = testGroup
           []
           ( \capataz -> do
             _workerId <- SUT.forkWorker
-              SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Transient }
+              (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Transient)
               "test-worker"
               (return ())
               capataz
@@ -514,7 +492,7 @@ tests = testGroup
           []
           ( \capataz -> do
             workerId <- SUT.forkWorker
-              SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Transient }
+              (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Transient)
               "test-worker"
               (forever $ threadDelay 1000100)
               capataz
@@ -528,7 +506,7 @@ tests = testGroup
           ( \capataz -> do
             subRoutineAction <- mkFailingSubRoutine 1
             _workerId        <- SUT.forkWorker
-              SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Transient }
+              (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Transient)
               "test-worker"
               subRoutineAction
               capataz
@@ -546,9 +524,8 @@ tests = testGroup
               ( \capataz -> do
                 subRoutineAction <- mkFailingSubRoutine 2
                 _workerId        <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Transient
-                    }
+                  (SUT.defWorkerOptions
+                   & set SUT.workerRestartStrategyL SUT.Transient)
                   "test-worker"
                   subRoutineAction
                   capataz
@@ -569,7 +546,7 @@ tests = testGroup
           ( \capataz -> do
             subRoutineAction <- mkCompletingOnceSubRoutine
             _workerId        <- SUT.forkWorker
-              SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Permanent }
+              (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Permanent)
               "test-worker"
               subRoutineAction
               capataz
@@ -591,9 +568,8 @@ tests = testGroup
                 subRoutineAction <- mkCompletingBeforeNRestartsSubRoutine
                   expectedRestartCount
                 _workerId <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Permanent
-                    }
+                  (SUT.defWorkerOptions
+                    & set SUT.workerRestartStrategyL SUT.Permanent)
                   "test-worker"
                   subRoutineAction
                   capataz
@@ -610,7 +586,7 @@ tests = testGroup
           []
           ( \capataz -> do
             workerId <- SUT.forkWorker
-              SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Permanent }
+              (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Permanent)
               "test-worker"
               (forever $ threadDelay 10001000)
               capataz
@@ -631,10 +607,9 @@ tests = testGroup
                 []
                 ( \capataz -> do
                   workerId <- SUT.forkWorker
-                    SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Permanent
-                      , SUT.workerOnTermination   = signalWorkerTermination
-                      }
+                    (SUT.defWorkerOptions
+                      & set SUT.workerRestartStrategyL SUT.Permanent
+                      & set SUT.workerOnTerminationL signalWorkerTermination)
                     "test-worker"
                     (forever $ threadDelay 10001000)
                     capataz
@@ -662,7 +637,7 @@ tests = testGroup
           ( \capataz -> do
             subRoutineAction <- mkFailingSubRoutine 1
             _workerId        <- SUT.forkWorker
-              SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Permanent }
+              (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Permanent)
               "test-worker"
               subRoutineAction
               capataz
@@ -680,9 +655,8 @@ tests = testGroup
               ( \capataz -> do
                 subRoutineAction <- mkFailingSubRoutine 2
                 _workerId        <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Permanent
-                    }
+                  (SUT.defWorkerOptions
+                    & set SUT.workerRestartStrategyL SUT.Permanent)
                   "test-worker"
                   subRoutineAction
                   capataz
@@ -702,7 +676,7 @@ tests = testGroup
           []
           ( \capataz -> do
             _workerId <- SUT.forkWorker
-              SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Temporary }
+              (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Temporary)
               "test-worker"
               (return ())
               capataz
@@ -715,7 +689,7 @@ tests = testGroup
           []
           ( \capataz -> do
             workerId <- SUT.forkWorker
-              SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Temporary }
+              (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Temporary)
               "test-worker"
               (forever $ threadDelay 1000100)
               capataz
@@ -729,7 +703,7 @@ tests = testGroup
           []
           ( \capataz -> do
             _workerId <- SUT.forkWorker
-              SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Temporary }
+              (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Temporary)
               "failing-worker"
               (panic "worker failed!")
               capataz
@@ -747,16 +721,14 @@ tests = testGroup
             []
             ( \capataz -> do
               _workerA <- SUT.forkWorker
-                SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Permanent
-                                     }
+                (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Permanent)
                 "A"
                 (forever $ threadDelay 1000100)
                 capataz
 
 
               _workerB <- SUT.forkWorker
-                SUT.defWorkerOptions { SUT.workerRestartStrategy = SUT.Permanent
-                                     }
+                (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Permanent)
                 "B"
                 (forever $ threadDelay 1000100)
                 capataz
@@ -775,15 +747,11 @@ tests = testGroup
         "with one for one supervisor restart strategy"
         [ testCase "restarts failing worker sub-routine only"
             $ testCapatazStreamWithOptions
-                ( \supOptions ->
-                  supOptions { SUT.supervisorRestartStrategy = SUT.OneForOne }
-                )
+                (set SUT.supervisorRestartStrategyL SUT.OneForOne)
                 []
                 ( \capataz -> do
                   _workerA <- SUT.forkWorker
-                    SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Temporary
-                      }
+                    (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Temporary)
                     "A"
                     (forever $ threadDelay 1000100)
                     capataz
@@ -791,9 +759,7 @@ tests = testGroup
                   ioB      <- mkFailingSubRoutine 1
 
                   _workerB <- SUT.forkWorker
-                    SUT.defWorkerOptions
-                      { SUT.workerRestartStrategy = SUT.Permanent
-                      }
+                    (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Permanent)
                     "B"
                     (forever $ ioB >> threadDelay 1000100)
                     capataz
@@ -810,11 +776,10 @@ tests = testGroup
         "with all for one supervisor restart strategy with newest first order"
         [ testCase "does terminate all other workers that did not fail"
           $ testCapatazStreamWithOptions
-              ( \supOptions -> supOptions
-                { SUT.supervisorRestartStrategy         = SUT.AllForOne
-                , SUT.supervisorProcessTerminationOrder = SUT.OldestFirst
-                }
-              )
+              (\ supOptions ->
+                 supOptions
+                   & set SUT.supervisorRestartStrategyL SUT.AllForOne
+                   & set SUT.supervisorProcessTerminationOrderL SUT.OldestFirst)
               []
               ( \capataz -> do
               -- This lockVar guarantees that workerB executes before workerA
@@ -823,17 +788,13 @@ tests = testGroup
                 ioA      <- mkFailingSubRoutine 1
 
                 _workerA <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Permanent
-                    }
+                  (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Permanent)
                   "A"
                   (forever $ readMVar lockVar >> ioA)
                   capataz
 
                 _workerB <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Permanent
-                    }
+                  (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Permanent)
                   "B"
                   (putMVar lockVar () >> forever (threadDelay 10))
                   capataz
@@ -851,11 +812,10 @@ tests = testGroup
               Nothing
         , testCase "does not restart workers that are temporary"
           $ testCapatazStreamWithOptions
-              ( \supOptions -> supOptions
-                { SUT.supervisorRestartStrategy         = SUT.AllForOne
-                , SUT.supervisorProcessTerminationOrder = SUT.OldestFirst
-                }
-              )
+              (\supOptions ->
+                 supOptions
+                   & set SUT.supervisorRestartStrategyL SUT.AllForOne
+                   & set SUT.supervisorProcessTerminationOrderL SUT.OldestFirst)
               []
               ( \capataz -> do
                 lockVar  <- newEmptyMVar
@@ -863,17 +823,13 @@ tests = testGroup
                 ioA      <- mkFailingSubRoutine 1
 
                 _workerA <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Permanent
-                    }
+                  (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Permanent)
                   "A"
                   (forever $ readMVar lockVar >> ioA)
                   capataz
 
                 _workerB <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Temporary
-                    }
+                  (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Temporary)
                   "B"
                   (putMVar lockVar () >> forever (threadDelay 10))
                   capataz
@@ -892,11 +848,10 @@ tests = testGroup
               )
         , testCase "restarts workers that are not temporary"
           $ testCapatazStreamWithOptions
-              ( \supOptions -> supOptions
-                { SUT.supervisorRestartStrategy         = SUT.AllForOne
-                , SUT.supervisorProcessTerminationOrder = SUT.NewestFirst
-                }
-              )
+              (\supOptions ->
+                 supOptions
+                   & set SUT.supervisorRestartStrategyL SUT.AllForOne
+                   & set SUT.supervisorProcessTerminationOrderL SUT.NewestFirst)
               []
               ( \capataz -> do
                 ioA      <- mkFailingSubRoutine 1
@@ -904,17 +859,13 @@ tests = testGroup
                 lockVar  <- newEmptyMVar
 
                 _workerA <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Permanent
-                    }
+                  (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Permanent)
                   "A"
                   (forever $ readMVar lockVar >> ioA)
                   capataz
 
                 _workerB <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Transient
-                    }
+                  (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Transient)
                   "B"
                   (putMVar lockVar () >> forever (threadDelay 10))
                   capataz
@@ -931,11 +882,10 @@ tests = testGroup
         "with all for one capataz restart strategy with oldest first order"
         [ testCase "does not restart workers that are temporary"
           $ testCapatazStreamWithOptions
-              ( \supOptions -> supOptions
-                { SUT.supervisorRestartStrategy         = SUT.AllForOne
-                , SUT.supervisorProcessTerminationOrder = SUT.OldestFirst
-                }
-              )
+              (\supOptions ->
+                 supOptions
+                   & set SUT.supervisorRestartStrategyL SUT.AllForOne
+                   & set SUT.supervisorProcessTerminationOrderL SUT.OldestFirst)
               []
               ( \capataz -> do
                 ioA      <- mkFailingSubRoutine 1
@@ -944,17 +894,13 @@ tests = testGroup
                 lockVar  <- newEmptyMVar
 
                 _workerA <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Permanent
-                    }
+                  (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Permanent)
                   "A"
                   (forever $ readMVar lockVar >> ioA)
                   capataz
 
                 _workerB <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Temporary
-                    }
+                  (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Temporary)
                   "B"
                   (putMVar lockVar () >> forever (threadDelay 10))
                   capataz
@@ -968,11 +914,10 @@ tests = testGroup
               )
         , testCase "restarts workers that are not temporary"
           $ testCapatazStreamWithOptions
-              ( \supOptions -> supOptions
-                { SUT.supervisorRestartStrategy         = SUT.AllForOne
-                , SUT.supervisorProcessTerminationOrder = SUT.OldestFirst
-                }
-              )
+              (\supOptions ->
+                 supOptions
+                   & set SUT.supervisorRestartStrategyL SUT.AllForOne
+                   & set SUT.supervisorProcessTerminationOrderL SUT.OldestFirst)
               []
               ( \capataz -> do
                 ioA      <- mkFailingSubRoutine 1
@@ -981,17 +926,13 @@ tests = testGroup
                 lockVar  <- newEmptyMVar
 
                 _workerA <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Permanent
-                    }
+                  (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Permanent)
                   "A"
                   (forever $ readMVar lockVar >> ioA)
                   capataz
 
                 _workerB <- SUT.forkWorker
-                  SUT.defWorkerOptions
-                    { SUT.workerRestartStrategy = SUT.Transient
-                    }
+                  (SUT.defWorkerOptions & set SUT.workerRestartStrategyL SUT.Transient)
                   "B"
                   (putMVar lockVar () >> forever (threadDelay 10))
                   capataz

@@ -40,23 +40,25 @@ ghc-options:
 
 dependencies:
 - base
-- protolude
 - async
-- safe-exceptions
-- text
 - bytestring
-- time
-- teardown
-- uuid
-- unordered-containers
-- vector
 - data-default
+- microlens
+- protolude
+- safe-exceptions
 - stm
+- teardown
+- text
+- time
+- unordered-containers
+- uuid
+- vector
 
 library:
   source-dirs: src
   exposed-modules:
   - Control.Concurrent.Capataz
+  - Control.Concurrent.Capataz.Event
   - Control.Concurrent.Capataz.Internal.Types
   - Control.Concurrent.Capataz.Internal.Core
   - Control.Concurrent.Capataz.Internal.Worker

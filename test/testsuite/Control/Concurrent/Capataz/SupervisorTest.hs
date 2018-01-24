@@ -5,7 +5,7 @@ module Control.Concurrent.Capataz.SupervisorTest where
 
 import Protolude
 
-import Control.Concurrent.Capataz (set)
+import           Control.Concurrent.Capataz (set)
 import qualified Control.Concurrent.Capataz as SUT
 import           Test.Util
 
@@ -17,35 +17,25 @@ tests = testGroup
   "supervision trees"
   [ testCase "initialize and teardown of supervision tree works as expected"
     $ testCapatazStreamWithOptions
-        (& set SUT.supervisorProcessSpecListL
-           [ SUT.SupervisorSpec
-               $ SUT.defSupervisorOptions
-                   & set SUT.supervisorNameL "tree-1"
-                   & set SUT.supervisorProcessSpecListL
-                     [ SUT.WorkerSpec
-                       $ SUT.defWorkerOptions
-                         & set SUT.workerNameL "1-A"
-                         & set SUT.workerActionL (forever $ threadDelay 10001000)
-
-                     , SUT.WorkerSpec
-                       $ SUT.defWorkerOptions
-                         & set SUT.workerNameL "1-B"
-                         & set SUT.workerActionL (forever $ threadDelay 10001000)
-                     ]
-           , SUT.SupervisorSpec
-               $ SUT.defSupervisorOptions
-                 & set SUT.supervisorNameL "tree-2"
-                 & set SUT.supervisorProcessSpecListL
-                   [ SUT.WorkerSpec
-                     $ SUT.defWorkerOptions
-                       & set SUT.workerNameL "2-A"
-                       & set SUT.workerActionL (forever $  threadDelay 10001000)
-                   , SUT.WorkerSpec
-                     $ SUT.defWorkerOptions
-                       & set SUT.workerNameL "2-B"
-                       & set SUT.workerActionL (forever $  threadDelay 10001000)
-                   ]
-           ]
+        ( & set
+          SUT.supervisorProcessSpecListL
+          [ SUT.supervisorSpec
+            "tree-1"
+            ( set SUT.supervisorNameL "tree-1" . set
+              SUT.supervisorProcessSpecListL
+              [ SUT.workerSpec "1-A" (forever $ threadDelay 10001000) identity
+              , SUT.workerSpec "1-B" (forever $ threadDelay 10001000) identity
+              ]
+            )
+          , SUT.supervisorSpec
+            "tree-2"
+            ( set
+              SUT.supervisorProcessSpecListL
+              [ SUT.workerSpec "2-A" (forever $ threadDelay 10001000) identity
+              , SUT.workerSpec "2-B" (forever $ threadDelay 10001000) identity
+              ]
+            )
+          ]
         )
         [ andP [assertSupervisorName "tree-1", assertWorkerStarted "1-A"]
         , andP [assertSupervisorName "tree-1", assertWorkerStarted "1-B"]
@@ -96,22 +86,16 @@ tests = testGroup
   , testCase "supervision sub-tree gets restarted on failure" $ do
     failingAction <- mkFailingSubRoutine 2
     testCapatazStreamWithOptions
-      (\supOptions ->
-         supOptions
-           & set SUT.supervisorIntensityL 3
-           & set SUT.supervisorProcessSpecListL
-             [ SUT.SupervisorSpec
-                 $ SUT.defSupervisorOptions
-                   & set SUT.supervisorNameL "tree-1"
-                   & set SUT.supervisorIntensityL 1
-                   & set SUT.supervisorPeriodSecondsL 10
-                   & set SUT.supervisorProcessSpecListL
-                     [ SUT.WorkerSpec
-                         $ SUT.defWorkerOptions
-                           & set SUT.workerNameL "failing-worker"
-                           & set SUT.workerActionL failingAction
-                     ]
-             ]
+      ( set SUT.supervisorIntensityL 3 . set
+        SUT.supervisorProcessSpecListL
+        [ SUT.supervisorSpec
+            "tree-1"
+            ( set SUT.supervisorIntensityL     1
+            . set SUT.supervisorPeriodSecondsL 10
+            . set SUT.supervisorProcessSpecListL
+                  [SUT.workerSpec "failing-worker" failingAction identity]
+            )
+        ]
       )
       []
       (const $ threadDelay 1000)
@@ -125,32 +109,27 @@ tests = testGroup
   , testCase "AllForOne strategy restarts sibling supervision tree" $ do
     failingAction <- mkFailingSubRoutine 2
     testCapatazStreamWithOptions
-      ( \supOptions ->
-          supOptions
-          & set SUT.supervisorIntensityL 3
-          & set SUT.supervisorRestartStrategyL SUT.AllForOne
-          & set SUT.supervisorProcessSpecListL
-            [ SUT.SupervisorSpec
-                $ SUT.defSupervisorOptions
-                  & set SUT.supervisorNameL "tree-1"
-                  & set SUT.supervisorIntensityL 1
-                  & set SUT.supervisorPeriodSecondsL 10
-                  & set SUT.supervisorProcessSpecListL
-                    [ SUT.WorkerSpec
-                        $ SUT.defWorkerOptions
-                        & set SUT.workerNameL "failing-worker"
-                        & set SUT.workerActionL failingAction
-                    ]
-            , SUT.SupervisorSpec
-                $ SUT.defSupervisorOptions
-                  & set SUT.supervisorNameL "tree-2"
-                  & set SUT.supervisorProcessSpecListL
-                    [ SUT.WorkerSpec
-                        $ SUT.defWorkerOptions
-                        & set SUT.workerNameL "stable-worker"
-                        & set SUT.workerActionL (forever $ threadDelay 1000100)
-                    ]
-            ]
+      ( set SUT.supervisorIntensityL       3
+      . set SUT.supervisorRestartStrategyL SUT.AllForOne
+      . set
+          SUT.supervisorProcessSpecListL
+          [ SUT.supervisorSpec
+            "tree-1"
+            ( set SUT.supervisorIntensityL     1
+            . set SUT.supervisorPeriodSecondsL 10
+            . set SUT.supervisorProcessSpecListL
+                  [SUT.workerSpec "failing-worker" failingAction identity]
+            )
+          , SUT.supervisorSpec
+            "tree-2"
+            ( set
+              SUT.supervisorProcessSpecListL
+              [ SUT.workerSpec "stable-worker"
+                               (forever $ threadDelay 1000100)
+                               identity
+              ]
+            )
+          ]
       )
       []
       (const $ threadDelay 9000)

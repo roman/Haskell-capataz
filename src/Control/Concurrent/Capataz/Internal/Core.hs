@@ -15,6 +15,7 @@ import Protolude
 
 import Control.Concurrent.MVar (newEmptyMVar, takeMVar)
 import Control.Teardown        (newTeardown)
+import Control.Teardown        (Teardown)
 import Data.Time.Clock         (getCurrentTime)
 
 import qualified Data.UUID.V4 as UUID (nextRandom)
@@ -102,15 +103,10 @@ forkCapataz capatazOptions@CapatazOptions { notifyEvent } = do
 forkWorker
   :: HasSupervisor supervisor
   => WorkerOptions -- ^ Worker options (restart, name, callbacks, etc)
-  -> Text          -- ^ Worker Name
-  -> IO ()         -- ^ IO sub-routine that will be executed on worker thread
   -> supervisor    -- ^ "Supervisor" that supervises the worker
   -> IO WorkerId   -- ^ An identifier that can be used to terminate the "Worker"
-forkWorker WorkerOptions {..} wName wAction sup = do
+forkWorker workerOptions sup = do
   let Supervisor { supervisorNotify } = getSupervisor sup
-      workerOptions =
-        WorkerOptions {workerName = wName, workerAction = wAction, ..}
-
   workerIdVar <- newEmptyMVar
   supervisorNotify
     ( ControlAction ForkWorker
@@ -124,13 +120,11 @@ forkWorker WorkerOptions {..} wName wAction sup = do
 forkSupervisor
   :: HasSupervisor parentSupervisor
   => SupervisorOptions -- ^ Supervisor options
-  -> Text              -- ^ Supervisor Name
   -> parentSupervisor  -- ^ Parent supervisor instance that supervises new supervisor
   -> IO Supervisor     -- ^ A Supervisor record to dynamically create and
                        -- supervise other processes
-forkSupervisor SupervisorOptions {..} supName parentSup = do
+forkSupervisor supervisorOptions parentSup = do
   let Supervisor { supervisorNotify } = getSupervisor parentSup
-      supervisorOptions = SupervisorOptions {supervisorName = supName, ..}
   supervisorVar <- newEmptyMVar
   supervisorNotify
     ( ControlAction ForkSupervisor
@@ -161,14 +155,15 @@ terminateProcess processTerminationReason processId supervisor = do
     )
   takeMVar result
 
+getCapatazTeardown :: Capataz -> Teardown
+getCapatazTeardown Capataz { capatazTeardown } = capatazTeardown
+
 -- | Gets the async of a Supervisor thread
 getSupervisorAsync :: HasSupervisor supervisor => supervisor -> Async ()
 getSupervisorAsync supervisor =
   let Supervisor { supervisorAsync } = getSupervisor supervisor
-  in supervisorAsync
+  in  supervisorAsync
 
 -- | Gets the process identifier of a Supervisor (normally used for termination)
-getSupervisorProcessId :: HasSupervisor supervisor => supervisor -> ProcessId
-getSupervisorProcessId supervisor =
-  let Supervisor { supervisorId } = getSupervisor supervisor
-  in supervisorId
+getSupervisorProcessId :: Supervisor -> ProcessId
+getSupervisorProcessId Supervisor { supervisorId } = supervisorId

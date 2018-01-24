@@ -2,24 +2,23 @@ module Control.Concurrent.Capataz.Lens
   ( module X )
   where
 
-import Lens.Micro as X ((^.), (&), (.~), set)
-import Lens.Micro.Extras as X (view)
 import Control.Concurrent.Capataz.Internal.Types.Lens as X
-  (
-    supervisorNameL
-  , supervisorIntensityL
-  , supervisorPeriodSecondsL
-  , supervisorRestartStrategyL
-  , supervisorProcessSpecListL
-  , supervisorProcessTerminationOrderL
-  , supervisorOnIntensityReachedL
-  , supervisorOnFailureL
-  , notifyEventL
-  , workerActionL
-  , workerNameL
-  , workerOnFailureL
-  , workerOnCompletionL
-  , workerOnTerminationL
-  , workerTerminationPolicyL
-  , workerRestartStrategyL
-  )
+    ( notifyEventL
+    , supervisorIntensityL
+    , supervisorNameL
+    , supervisorOnFailureL
+    , supervisorOnIntensityReachedL
+    , supervisorPeriodSecondsL
+    , supervisorProcessSpecListL
+    , supervisorProcessTerminationOrderL
+    , supervisorRestartStrategyL
+    , workerActionL
+    , workerNameL
+    , workerOnCompletionL
+    , workerOnFailureL
+    , workerOnTerminationL
+    , workerRestartStrategyL
+    , workerTerminationPolicyL
+    )
+import Lens.Micro                                     as X (set, (&), (.~), (^.))
+import Lens.Micro.Extras                              as X (view)

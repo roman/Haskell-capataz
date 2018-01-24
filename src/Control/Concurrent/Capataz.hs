@@ -34,9 +34,11 @@ module Control.Concurrent.Capataz
 , Capataz
 
 -- * Default Options for Capataz Processes
-, defSupervisorOptions
-, defWorkerOptions
-, defCapatazOptions
+, buildCapatazOptions
+, buildSupervisorOptions
+, buildWorkerOptions
+, supervisorSpec
+, workerSpec
 
 -- * Lenses to modify Option Records
 , supervisorNameL
@@ -76,61 +78,61 @@ module Control.Concurrent.Capataz
 where
 
 import Control.Concurrent.Capataz.Internal.Core
-    (HasSupervisor (..), forkCapataz, forkWorker, getSupervisorProcessId, getSupervisorAsync, terminateProcess)
+    ( HasSupervisor (..)
+    , forkCapataz
+    , forkWorker
+    , getSupervisorAsync
+    , getSupervisorProcessId
+    , terminateProcess
+    )
 
 import Control.Concurrent.Capataz.Internal.Types
-    (
-      CallbackType (..)
-
-    , WorkerId
-    , WorkerAction
-    , WorkerRestartStrategy (..)
-    , WorkerTerminationPolicy (..)
-    , WorkerOptions
-
+    ( CallbackType (..)
+    , Capataz
+    , CapatazOptions
+    , ProcessError (..)
     , ProcessId
     , ProcessSpec (..)
-    , ProcessType (..)
     , ProcessTerminationOrder (..)
-    , ProcessError (..)
-
-    , SupervisorId
+    , ProcessType (..)
     , Supervisor
+    , SupervisorId
+    , SupervisorOptions
     , SupervisorRestartStrategy (..)
     , SupervisorStatus (..)
-    , SupervisorOptions
-
-    , CapatazOptions
-
-    , Capataz
-
-    , defSupervisorOptions
-    , defWorkerOptions
-    , defCapatazOptions
+    , WorkerAction
+    , WorkerId
+    , WorkerOptions
+    , WorkerRestartStrategy (..)
+    , WorkerTerminationPolicy (..)
+    , buildCapatazOptions
+    , buildSupervisorOptions
+    , buildWorkerOptions
+    , supervisorSpec
+    , workerSpec
     )
 
 import Control.Concurrent.Capataz.Lens
-  (
-    supervisorNameL
-  , supervisorIntensityL
-  , supervisorPeriodSecondsL
-  , supervisorRestartStrategyL
-  , supervisorProcessSpecListL
-  , supervisorProcessTerminationOrderL
-  , supervisorOnIntensityReachedL
-  , supervisorOnFailureL
-  , notifyEventL
-  , workerActionL
-  , workerNameL
-  , workerOnFailureL
-  , workerOnCompletionL
-  , workerOnTerminationL
-  , workerTerminationPolicyL
-  , workerRestartStrategyL
-  , (^.)
-  , (.~)
-  , (&)
-  , view
-  , set
-  )
-import Control.Teardown                          (teardown)
+    ( notifyEventL
+    , set
+    , supervisorIntensityL
+    , supervisorNameL
+    , supervisorOnFailureL
+    , supervisorOnIntensityReachedL
+    , supervisorPeriodSecondsL
+    , supervisorProcessSpecListL
+    , supervisorProcessTerminationOrderL
+    , supervisorRestartStrategyL
+    , view
+    , workerActionL
+    , workerNameL
+    , workerOnCompletionL
+    , workerOnFailureL
+    , workerOnTerminationL
+    , workerRestartStrategyL
+    , workerTerminationPolicyL
+    , (&)
+    , (.~)
+    , (^.)
+    )
+import Control.Teardown                (teardown)

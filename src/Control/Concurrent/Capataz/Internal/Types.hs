@@ -533,29 +533,45 @@ data SupervisorEnv
 -- * intensity error tolerance is set to 1 error every 5 seconds
 -- * has a "OneForOne " capataz restart strategy
 -- * has a termination order of "OldestFirst"
-defCapatazOptions :: CapatazOptions
-defCapatazOptions = CapatazOptions
-  { supervisorName                    = "capataz-root"
+buildCapatazOptions :: (CapatazOptions -> CapatazOptions) -> CapatazOptions
+buildCapatazOptions f =
+  f CapatazOptions
+    { supervisorName                    = "capataz-root"
 
-  -- One (1) restart every five (5) seconds
-  , supervisorIntensity               = 2
-  , supervisorPeriodSeconds           = 5
-  , supervisorRestartStrategy         = def
-  , supervisorProcessSpecList         = []
-  , supervisorProcessTerminationOrder = OldestFirst
-  , supervisorOnIntensityReached      = return ()
-  , supervisorOnFailure               = const $ return ()
-  , notifyEvent                       = const $ return ()
-  }
+    -- One (1) restart every five (5) seconds
+    , supervisorIntensity               = 2
+    , supervisorPeriodSeconds           = 5
+    , supervisorRestartStrategy         = def
+    , supervisorProcessSpecList         = []
+    , supervisorProcessTerminationOrder = OldestFirst
+    , supervisorOnIntensityReached      = return ()
+    , supervisorOnFailure               = const $ return ()
+    , notifyEvent                       = const $ return ()
+    }
+
+supervisorSpec
+  :: SupervisorName
+  -> (SupervisorOptions -> SupervisorOptions)
+  -> ProcessSpec
+supervisorSpec sName f =
+  SupervisorSpec (buildSupervisorOptions sName f)
+
+workerSpec
+  :: WorkerName
+  -> WorkerAction
+  -> (WorkerOptions -> WorkerOptions)
+  -> ProcessSpec
+workerSpec wName wAction f =
+  WorkerSpec (buildWorkerOptions wName wAction f)
 
 -- | Default options to easily create supervisor instances:
 -- * name defaults to \"default-capataz\"
 -- * intensity error tolerance is set to 1 error every 5 seconds
 -- * has a "OneForOne " capataz restart strategy
 -- * has a termination order of "OldestFirst"
-defSupervisorOptions :: SupervisorOptions
-defSupervisorOptions = SupervisorOptions
-  { supervisorName                    = "default-supervisor"
+buildSupervisorOptions :: SupervisorName -> (SupervisorOptions -> SupervisorOptions) -> SupervisorOptions
+buildSupervisorOptions supervisorName f = f SupervisorOptions
+  { supervisorName
 
   -- One (1) restart every five (5) seconds
   , supervisorIntensity               = 2
@@ -572,10 +588,10 @@ defSupervisorOptions = SupervisorOptions
 -- * name defaults to \"default-worker\"
 -- * has a "Transient" worker restart strategy
 -- * has a termination policy of three (3) seconds
-defWorkerOptions :: WorkerOptions
-defWorkerOptions = WorkerOptions
-  { workerName              = "default-worker"
-  , workerAction            = return ()
+buildWorkerOptions :: WorkerName -> WorkerAction -> (WorkerOptions -> WorkerOptions) -> WorkerOptions
+buildWorkerOptions workerName workerAction f = f WorkerOptions
+  { workerName
+  , workerAction
   , workerOnFailure         = const $ return ()
   , workerOnCompletion      = return ()
   , workerOnTermination     = return ()

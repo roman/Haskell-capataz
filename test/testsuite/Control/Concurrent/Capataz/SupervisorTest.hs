@@ -122,49 +122,46 @@ tests = testGroup
       ]
       []
       Nothing
-  -- , testCase "AllForOne strategy restarts sibling supervision tree" $ do
-  --   failingAction <- mkFailingSubRoutine 2
-  --   testCapatazStreamWithOptions
-  --     ( \supOptions -> supOptions
-  --       { SUT.supervisorIntensity       = 3
-  --       , SUT.supervisorRestartStrategy = SUT.AllForOne
-  --       , SUT.supervisorProcessSpecList = [ SUT.SupervisorSpec
-  --                                           SUT.defSupervisorOptions
-  --                                             { SUT.supervisorName = "tree-1"
-  --                                             , SUT.supervisorIntensity = 1
-  --                                             , SUT.supervisorPeriodSeconds = 10
-  --                                             , SUT.supervisorProcessSpecList = [ SUT.WorkerSpec
-  --                                                                                   SUT.defWorkerOptions
-  --                                                                                     { SUT.workerName = "failing-worker"
-  --                                                                                     , SUT.workerAction = failingAction
-  --                                                                                     }
-  --                                                                               ]
-  --                                             }
-  --                                         , SUT.SupervisorSpec
-  --                                           SUT.defSupervisorOptions
-  --                                             { SUT.supervisorName = "tree-2"
-  --                                             , SUT.supervisorProcessSpecList = [ SUT.WorkerSpec
-  --                                                                                   SUT.defWorkerOptions
-  --                                                                                     { SUT.workerName = "stable-worker"
-  --                                                                                     , SUT.workerAction = forever
-  --                                                                                       $ threadDelay
-  --                                                                                           1000100
-  --                                                                                     }
-  --                                                                               ]
-  --                                             }
-  --                                         ]
-  --       }
-  --     )
-  --     []
-  --     (const $ threadDelay 1000)
-  --     [ assertWorkerFailed "failing-worker"
-  --     , assertWorkerStarted "stable-worker"
-  --     , assertSupervisorFailed "tree-1"
-  --     , assertSupervisorRestarted "tree-1"
-  --     , assertSupervisorTerminated "tree-2"
-  --     , assertWorkerStarted "stable-worker"
-  --     , assertSupervisorRestarted "tree-2"
-  --     ]
-  --     []
-  --     Nothing
+  , testCase "AllForOne strategy restarts sibling supervision tree" $ do
+    failingAction <- mkFailingSubRoutine 2
+    testCapatazStreamWithOptions
+      ( \supOptions ->
+          supOptions
+          & set SUT.supervisorIntensityL 3
+          & set SUT.supervisorRestartStrategyL SUT.AllForOne
+          & set SUT.supervisorProcessSpecListL
+            [ SUT.SupervisorSpec
+                $ SUT.defSupervisorOptions
+                  & set SUT.supervisorNameL "tree-1"
+                  & set SUT.supervisorIntensityL 1
+                  & set SUT.supervisorPeriodSecondsL 10
+                  & set SUT.supervisorProcessSpecListL
+                    [ SUT.WorkerSpec
+                        $ SUT.defWorkerOptions
+                        & set SUT.workerNameL "failing-worker"
+                        & set SUT.workerActionL failingAction
+                    ]
+            , SUT.SupervisorSpec
+                $ SUT.defSupervisorOptions
+                  & set SUT.supervisorNameL "tree-2"
+                  & set SUT.supervisorProcessSpecListL
+                    [ SUT.WorkerSpec
+                        $ SUT.defWorkerOptions
+                        & set SUT.workerNameL "stable-worker"
+                        & set SUT.workerActionL (forever $ threadDelay 1000100)
+                    ]
+            ]
+      )
+      []
+      (const $ threadDelay 9000)
+      [ assertWorkerFailed "failing-worker"
+      , assertWorkerStarted "stable-worker"
+      , assertSupervisorFailed "tree-1"
+      , assertSupervisorRestarted "tree-1"
+      , assertSupervisorTerminated "tree-2"
+      , assertWorkerStarted "stable-worker"
+      , assertSupervisorRestarted "tree-2"
+      ]
+      []
+      Nothing
   ]

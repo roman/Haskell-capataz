@@ -104,8 +104,9 @@ tests = testGroup
               , assertSupervisorStatusChanged SUT.Initializing SUT.Running
               ]
           ]
-          ( \capataz -> cancelWith (SUT.getSupervisorAsync capataz)
-                                   (ErrorCall "async exception")
+          ( \capataz -> do
+              cancelWith (SUT.getSupervisorAsync capataz)
+                         (ErrorCall "async exception")
           )
           [assertEventType CapatazFailed]
           []

@@ -7,6 +7,8 @@
 ################################################################################
 ## VARIABLE
 
+# Used to override stack execution with general purpose flags (e.g. --system-ghc)
+STACK_FLAGS ?=
 PROJECT_VERSION:=$(shell cat package.yaml | grep -v '\#' | grep version | awk '{print $$2}' | sed -e "s;'\(.*\)';\1;")
 RESOLVER ?= $(shell cat stack.yaml | grep -v '\#' | grep resolver | awk '{print $$2}')
 
@@ -32,9 +34,9 @@ BRITTANY=$(BRITTANY_BIN) --config-file .brittany.yml --write-mode inplace {} \;
 STYLISH=$(STYLISH_BIN) -i {} \;
 HLINT=$(HLINT_BIN) --refactor --refactor-options -i {} \;
 
-STACK:=stack --resolver $(RESOLVER) --install-ghc --local-bin-path ./target/bin
-NIGHTLY_STACK:=stack --resolver nightly --install-ghc
-TOOLS_STACK:=stack --stack-yaml .tools.stack.yaml --install-ghc --local-bin-path $(TOOLS_DIR)
+STACK:=stack --resolver $(RESOLVER) $(STACK_FLAGS) --local-bin-path ./target/bin
+NIGHTLY_STACK:=stack --resolver nightly $(STACK_FLAGS)
+TOOLS_STACK:=stack --stack-yaml .tools.stack.yaml $(STACK_FLAGS) --local-bin-path $(TOOLS_DIR)
 
 ################################################################################
 

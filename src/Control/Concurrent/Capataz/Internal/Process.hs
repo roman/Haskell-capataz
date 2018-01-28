@@ -2,7 +2,8 @@
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
 
--- | Process => Supervisor | Worker common code
+-- | This module contains functionality that works both for Supervisor and
+-- Worker process types.
 module Control.Concurrent.Capataz.Internal.Process where
 
 import Protolude
@@ -12,42 +13,43 @@ import Control.Concurrent.Capataz.Internal.Util
     (readProcessMap, sortProcessesByTerminationOrder)
 import Data.Time.Clock                           (UTCTime, getCurrentTime)
 
--- | Fetch an "Async ()" from the Process thread
+-- | Gets "Async" from a given Process.
 getProcessAsync :: Process -> Async ()
 getProcessAsync process = case process of
   WorkerProcess     Worker { workerAsync }         -> workerAsync
   SupervisorProcess Supervisor { supervisorAsync } -> supervisorAsync
 
--- | Fetch the ThreadId of a Process thread
+-- | Gets "ThreadId" from a given Process.
 getProcessThreadId :: Process -> ThreadId
 getProcessThreadId = asyncThreadId . getProcessAsync
 
--- | Fetch the ProcessId of a Process record
+-- | Gets "ProcessId" from a given Process.
 getProcessId :: Process -> ProcessId
 getProcessId process = case process of
   WorkerProcess     Worker { workerId }         -> workerId
   SupervisorProcess Supervisor { supervisorId } -> supervisorId
 
--- | Fetch the ProcessName of a ProcessSpec record
+-- | Gets "ProcessName" from a given "ProcessSpec".
 getProcessName :: ProcessSpec -> ProcessName
 getProcessName procSpec = case procSpec of
   WorkerSpec     WorkerOptions { workerName }         -> workerName
   SupervisorSpec SupervisorOptions { supervisorName } -> supervisorName
 
--- | Fetch the ProcessType of a ProcessSpec record
+-- | Gets "ProcessType" from a given "ProcessSpec".
 getProcessType :: ProcessSpec -> ProcessType
 getProcessType processSpec = case processSpec of
   WorkerSpec{}     -> WorkerType
   SupervisorSpec{} -> SupervisorType
 
--- | Fetch the ProcessSpec of a Process record
+-- | Gets "ProcessSpec" of a given "Process".
 getProcessSpec :: Process -> ProcessSpec
 getProcessSpec process = case process of
   WorkerProcess Worker { workerOptions } -> WorkerSpec workerOptions
   SupervisorProcess Supervisor { supervisorOptions } ->
     SupervisorSpec supervisorOptions
 
--- | Utility function to send notifications when a Process fails
+-- | Utility function to send notifications to the capataz system callback when
+-- a Process fails.
 notifyProcessFailed :: SupervisorEnv -> Process -> SomeException -> IO ()
 notifyProcessFailed SupervisorEnv { supervisorId, supervisorName, notifyEvent } process processError
   = do
@@ -63,7 +65,8 @@ notifyProcessFailed SupervisorEnv { supervisorId, supervisorName, notifyEvent } 
       , eventTime
       }
 
--- | Utility function to send notifications when a Process is terminated
+-- | Utility function to send notifications to the capataz system callback when
+-- a Process is terminated.
 notifyProcessTerminated :: SupervisorEnv -> Process -> Text -> IO ()
 notifyProcessTerminated SupervisorEnv { supervisorId, supervisorName, notifyEvent } process terminationReason
   = do
@@ -79,14 +82,15 @@ notifyProcessTerminated SupervisorEnv { supervisorId, supervisorName, notifyEven
       , eventTime
       }
 
--- | Utility function to send notifications when a Process gets started/restarted
+-- | Utility function to send notifications to the capataz system callback when
+-- a Process is started or restarted.
 notifyProcessStarted
   :: Maybe (ProcessId, RestartCount) -> ParentSupervisorEnv -> Process -> IO ()
 notifyProcessStarted mRestartInfo ParentSupervisorEnv { supervisorId, supervisorName, notifyEvent } process
   = do
     eventTime <- getCurrentTime
     case mRestartInfo of
-      Just (_workerId, processRestartCount) -> notifyEvent ProcessRestarted
+      Just (_processId, processRestartCount) -> notifyEvent ProcessRestarted
         { supervisorId
         , supervisorName
         , processId           = getProcessId process
@@ -106,8 +110,8 @@ notifyProcessStarted mRestartInfo ParentSupervisorEnv { supervisorId, supervisor
         , eventTime
         }
 
-
--- | Utility function to send notifications when a Process completes
+-- | Utility function to send notifications when a Process sub-routine completes
+-- without errors.
 notifyProcessCompleted :: SupervisorEnv -> Process -> UTCTime -> IO ()
 notifyProcessCompleted SupervisorEnv { supervisorId, supervisorName, notifyEvent } process eventTime
   = notifyEvent ProcessCompleted
@@ -121,26 +125,26 @@ notifyProcessCompleted SupervisorEnv { supervisorId, supervisorName, notifyEvent
     }
 
 
--- | Utility function to execution completion callback on a Process
+-- | Utility function to execute a Process onCompletion sub-routine.
 callProcessOnCompletion :: ProcessSpec -> IO ()
 callProcessOnCompletion procSpec = case procSpec of
   WorkerSpec WorkerOptions { workerOnCompletion } -> workerOnCompletion
   _                                               -> return ()
 
--- | Utility function to execution failure callback on a Process
+-- | Utility function to execute a Process onFailure sub-routine.
 callProcessOnFailure :: ProcessSpec -> SomeException -> IO ()
 callProcessOnFailure procSpec err = case procSpec of
   WorkerSpec WorkerOptions { workerOnFailure } -> workerOnFailure err
   SupervisorSpec SupervisorOptions { supervisorOnFailure } ->
     supervisorOnFailure err
 
--- | Utility function to execution termination callback on a Process
+-- | Utility function to execute a Process onTermination sub-routine.
 callProcessOnTermination :: ProcessSpec -> IO ()
 callProcessOnTermination procSpec = case procSpec of
   WorkerSpec WorkerOptions { workerOnTermination } -> workerOnTermination
   _                                                -> return ()
 
--- | Handles errors produced - or thrown to - Worker and Supervisor threads
+-- | Handles errors produced - or thrown to - a process thread.
 handleProcessException
   :: (IO () -> IO a)
   -> ParentSupervisorEnv
@@ -243,7 +247,7 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
             , monitorEventTime
             }
 
--- | Handles completion of both Worker and Supervisor thread
+-- | Handles completion of a Process sub-routine.
 handleProcessCompletion
   :: (IO () -> IO a)
   -> ParentSupervisorEnv
@@ -286,9 +290,13 @@ handleProcessCompletion unmask ParentSupervisorEnv { supervisorId, supervisorNam
       Right _ ->
         return ProcessCompleted' {processName , processId , monitorEventTime }
 
--- | Utility functions to trigger termination of a Process
+-- | Internal utility function to trigger termination of a Process.
+--
+-- NOTE: The difference between public's API function and this, is that this
+-- function gets executed on the supervisor's thread.
+--
 terminateProcess
-  :: Text -- ^ Text that indicates why there is a termination
+  :: Text -- ^ Description that indicates _why_ there is a termination
   -> SupervisorEnv
   -> Process
   -> IO ()
@@ -300,8 +308,8 @@ terminateProcess processTerminationReason env process = do
 
   notifyProcessTerminated env process processTerminationReason
 
--- | Internal function that manages execution of a termination policy for a
--- Worker
+-- | Internal utility function that manages execution of a termination policy
+-- for a Worker.
 terminateWorker :: Text -> Worker -> IO ()
 terminateWorker processTerminationReason Worker { workerId, workerOptions, workerAsync }
   = do
@@ -334,15 +342,16 @@ terminateWorker processTerminationReason Worker { workerId, workerOptions, worke
           TerminateProcessException {processId , processTerminationReason }
         )
 
--- | Internal function that manages execution a Supervisor termination
+-- | Internal utility function that manages execution of a termination policy
+-- for a Supervisor.
 terminateSupervisor :: Text -> Supervisor -> IO ()
 terminateSupervisor processTerminationReason Supervisor { supervisorId = processId, supervisorAsync }
   = cancelWith
     supervisorAsync
     TerminateProcessException {processId , processTerminationReason }
 
--- | Internal sub-routine that terminates workers of a Supervisor, used when a
--- Supervisor instance is terminated
+-- | Internal sub-routine that terminates workers of a supervisor, used when a
+-- supervisor instance is terminated.
 terminateProcessMap :: Text -> SupervisorEnv -> IO ()
 terminateProcessMap terminationReason env@SupervisorEnv { supervisorId, supervisorName, supervisorProcessTerminationOrder, notifyEvent }
   = do

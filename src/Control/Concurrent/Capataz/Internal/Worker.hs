@@ -21,10 +21,9 @@ import Control.Concurrent.Capataz.Internal.Types
 
 -- | Decorates the given @IO ()@ sub-routine with failure handling
 workerMain
-  :: SupervisorEnv -> WorkerOptions -> WorkerId -> RestartCount -> IO Worker
-workerMain env@SupervisorEnv { supervisorNotify } workerOptions@WorkerOptions { workerName, workerAction } workerId restartCount
+  :: ParentSupervisorEnv -> WorkerOptions -> WorkerId -> RestartCount -> IO Worker
+workerMain env@ParentSupervisorEnv { supervisorNotify } workerOptions@WorkerOptions { workerName, workerAction } workerId restartCount
   = do
-    let parentEnv = Util.toParentSupervisorEnv env
     workerCreationTime <- getCurrentTime
     workerAsync        <- asyncWithUnmask $ \unmask -> do
 
@@ -34,13 +33,13 @@ workerMain env@SupervisorEnv { supervisorNotify } workerOptions@WorkerOptions { 
 
       resultEvent <- case eResult of
         Left err -> Process.handleProcessException unmask
-                                                   parentEnv
+                                                   env
                                                    (WorkerSpec workerOptions)
                                                    workerId
                                                    restartCount
                                                    err
         Right _ -> Process.handleProcessCompletion unmask
-                                                   parentEnv
+                                                   env
                                                    (WorkerSpec workerOptions)
                                                    workerId
                                                    restartCount
@@ -55,40 +54,11 @@ workerMain env@SupervisorEnv { supervisorNotify } workerOptions@WorkerOptions { 
       , workerOptions
       }
 
--- | Internal function used to send a proper "CapatazEvent" to the "notifyEvent"
--- callback, this event can either be a @WorkerStarted@ or a @WorkerRestarted@
-notifyWorkerStarted :: Maybe (WorkerId, Int) -> SupervisorEnv -> Worker -> IO ()
-notifyWorkerStarted mRestartInfo SupervisorEnv { supervisorId, supervisorName, notifyEvent } Worker { workerId, workerName, workerAsync }
-  = do
-    let processId   = workerId
-        processName = workerName
-    eventTime <- getCurrentTime
-    case mRestartInfo of
-      Just (_workerId, processRestartCount) -> notifyEvent ProcessRestarted
-        { supervisorId
-        , supervisorName
-        , processId
-        , processName
-        , processType         = WorkerType
-        , processRestartCount
-        , processThreadId     = asyncThreadId workerAsync
-        , eventTime
-        }
-      Nothing -> notifyEvent ProcessStarted
-        { supervisorId
-        , supervisorName
-        , processId
-        , processName
-        , processType     = WorkerType
-        , eventTime
-        , processThreadId = asyncThreadId workerAsync
-        }
-
 -- | Internal function that forks a worker thread on the Capataz thread; note
 -- this is different from the public @forkWorker@ function which sends a message
 -- to the capataz loop
 forkWorker
-  :: SupervisorEnv
+  :: ParentSupervisorEnv
   -> WorkerOptions
   -> Maybe (WorkerId, RestartCount)
   -> IO Worker
@@ -98,5 +68,5 @@ forkWorker env workerOptions mRestartInfo = do
     Nothing                       -> (,) <$> UUID.nextRandom <*> pure 0
 
   worker <- workerMain env workerOptions workerId restartCount
-  notifyWorkerStarted mRestartInfo env worker
+  Process.notifyProcessStarted mRestartInfo env (WorkerProcess worker)
   return worker

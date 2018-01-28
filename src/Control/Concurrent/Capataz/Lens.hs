@@ -3,17 +3,14 @@ module Control.Concurrent.Capataz.Lens
   where
 
 import Control.Concurrent.Capataz.Internal.Types.Lens as X
-    ( notifyEventL
+    ( onSystemEventL
     , supervisorIntensityL
-    , supervisorNameL
     , supervisorOnFailureL
     , supervisorOnIntensityReachedL
     , supervisorPeriodSecondsL
     , supervisorProcessSpecListL
     , supervisorProcessTerminationOrderL
     , supervisorRestartStrategyL
-    , workerActionL
-    , workerNameL
     , workerOnCompletionL
     , workerOnFailureL
     , workerOnTerminationL

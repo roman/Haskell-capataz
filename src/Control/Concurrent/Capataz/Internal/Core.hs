@@ -9,7 +9,19 @@
 * High level message handlers of the supervisor thread loop
 
 -}
-module Control.Concurrent.Capataz.Internal.Core where
+module Control.Concurrent.Capataz.Internal.Core
+(
+  HasSupervisor(..)
+, forkWorker
+, forkSupervisor
+, forkCapataz
+, terminateProcess
+, joinCapatazThread
+, getSupervisorProcessId
+, getSupervisorAsync
+, getCapatazTeardown
+)
+where
 
 import Protolude
 
@@ -28,9 +40,9 @@ import qualified Control.Concurrent.Capataz.Internal.Util  as Util
 --------------------------------------------------------------------------------
 
 -- | Utility typeclass to call public supervision API with types
--- that contain a supervisor (e.g. Capataz record)
+-- that contain a supervisor (e.g. Capataz record).
 class HasSupervisor a where
-  -- | Fetches a supervisor from a record internals
+  -- | Fetches a supervisor from a record internals.
   getSupervisor :: a -> Supervisor
 
 instance HasSupervisor Capataz where
@@ -39,14 +51,16 @@ instance HasSupervisor Capataz where
 instance HasSupervisor Supervisor where
   getSupervisor = identity
 
--- | Creates a Capataz record, which holds a root Supervisor; this Supervisor
--- monitors failures on process threads defined in the "CapatazOptions" or
--- created dynamically using "forkWorker" or "forkSupervisor".
-forkCapataz :: CapatazOptions -> IO Capataz
-forkCapataz capatazOptions@CapatazOptions { notifyEvent } = do
+-- | Creates a Capataz record, which holds both a root supervisor and a
+-- "Teardown" to shut down the system. The root supervisor monitors failures on
+-- process threads defined with "supervisorProcessSpecList" or created
+-- dynamically using "forkWorker" or "forkSupervisor".
+forkCapataz :: (CapatazOptions -> CapatazOptions) -> IO Capataz
+forkCapataz modOptionsFn = do
   capatazId    <- UUID.nextRandom
   supervisorId <- UUID.nextRandom
   let
+    capatazOptions@CapatazOptions { notifyEvent } = defCapatazOptions modOptionsFn
     supervisorOptions@SupervisorOptions { supervisorName } =
       Util.capatazOptionsToSupervisorOptions capatazOptions
     parentSupervisorEnv = ParentSupervisorEnv
@@ -78,6 +92,7 @@ forkCapataz capatazOptions@CapatazOptions { notifyEvent } = do
 
           ControlAction{} ->
             panic "Capataz received a ControlAction message; bad implementation"
+
       , notifyEvent
       }
 
@@ -90,16 +105,22 @@ forkCapataz capatazOptions@CapatazOptions { notifyEvent } = do
   capatazTeardown <- newTeardown
     "capataz"
     ( do
-      Supervisor.haltSupervisor "capataz teardown" supervisorEnv
+      Supervisor.haltSupervisor "capataz system shutdown" supervisorEnv
       eventTime <- getCurrentTime
       notifyEvent CapatazTerminated {supervisorId , supervisorName , eventTime }
     )
 
   return Capataz {capatazSupervisor , capatazTeardown }
 
--- | Creates a worker green thread "IO ()" sub-routine, and depending in options
--- defined in the "WorkerOptions" record, it will restart the Worker sub-routine
--- in case of failures
+-- | Creates a green thread from an "IO ()" sub-routine. Depending in options
+-- defined in the "WorkerOptions" record, it will automatically restart this
+-- sub-routine in case of failures.
+--
+-- See documentation of related functions:
+--
+-- * "buildWorkerOptionsWithDefault"
+-- * "buildWorkerOptions"
+--
 forkWorker
   :: HasSupervisor supervisor
   => WorkerOptions -- ^ Worker options (restart, name, callbacks, etc)
@@ -116,13 +137,20 @@ forkWorker workerOptions sup = do
     )
   takeMVar workerIdVar
 
--- | Creates a Supervisor, which can create other processes.
+-- | Creates a green thread which monitors other green threads for failures and
+-- restarts them using settings defined on "SupervisorOptions".
+--
+-- See documentation of related functions:
+--
+-- * "buildSupervisorOptionsWithDefault"
+-- * "buildSupervisorOptions"
+--
 forkSupervisor
   :: HasSupervisor parentSupervisor
   => SupervisorOptions -- ^ Supervisor options
   -> parentSupervisor  -- ^ Parent supervisor instance that supervises new supervisor
-  -> IO Supervisor     -- ^ A Supervisor record to dynamically create and
-                       -- supervise other processes
+  -> IO Supervisor     -- ^ A record used to dynamically create and supervise
+                       -- other processes
 forkSupervisor supervisorOptions parentSup = do
   let Supervisor { supervisorNotify } = getSupervisor parentSup
   supervisorVar <- newEmptyMVar
@@ -134,15 +162,14 @@ forkSupervisor supervisorOptions parentSup = do
     )
   takeMVar supervisorVar
 
--- | Stops the execution of a process green thread being supervised by the given
--- "Supervisor" instance, if the "ProcessId" does not belong to the given
--- Supervisor, the operation does not perform any side-effect.
+-- | Stops the execution of a green thread being supervised by the given
+-- supervisor.
 --
--- Note: If ProcessId maps to a worker that has a "Permanent" restart strategy,
--- the worker thread __will be restarted again__; so use a "Transient" restart
--- strategy for the worker instead.
+-- NOTE: If "ProcessId" maps to a worker that is configured with a "Permanent"
+-- worker restart strategy, the worker green thread __will be restarted again__.
+--
 terminateProcess
-  :: HasSupervisor supervisor => Text -> ProcessId -> supervisor -> IO ()
+  :: HasSupervisor supervisor => Text -> ProcessId -> supervisor -> IO Bool
 terminateProcess processTerminationReason processId supervisor = do
   let Supervisor { supervisorNotify } = getSupervisor supervisor
   result <- newEmptyMVar
@@ -150,20 +177,30 @@ terminateProcess processTerminationReason processId supervisor = do
     ( ControlAction TerminateProcess
       { processId
       , processTerminationReason
-      , notifyProcessTermination = putMVar result ()
+      , notifyProcessTermination = putMVar result
       }
     )
   takeMVar result
 
+-- | Joins the thread of the root supervisor of the given capataz system to the
+-- current thread.
+joinCapatazThread :: Capataz -> IO ()
+joinCapatazThread Capataz { capatazSupervisor } =
+  let Supervisor { supervisorAsync } = capatazSupervisor
+  in wait supervisorAsync
+
+-- | Gets "Teardown" record of this capataz system.
 getCapatazTeardown :: Capataz -> Teardown
 getCapatazTeardown Capataz { capatazTeardown } = capatazTeardown
 
--- | Gets the async of a Supervisor thread
-getSupervisorAsync :: HasSupervisor supervisor => supervisor -> Async ()
-getSupervisorAsync supervisor =
-  let Supervisor { supervisorAsync } = getSupervisor supervisor
-  in  supervisorAsync
+-- | Gets the "Async" of a Supervisor thread.
+--
+-- NOTE: There is no way to get the "Async" value of the root supervisor; this
+-- is to avoid error scenarios.
+getSupervisorAsync :: Supervisor -> Async ()
+getSupervisorAsync Supervisor { supervisorAsync } =
+  supervisorAsync
 
--- | Gets the process identifier of a Supervisor (normally used for termination)
+-- | Gets the process identifier of a Supervisor; normally used for termination.
 getSupervisorProcessId :: Supervisor -> ProcessId
 getSupervisorProcessId Supervisor { supervisorId } = supervisorId

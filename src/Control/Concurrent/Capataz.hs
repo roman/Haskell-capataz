@@ -8,131 +8,75 @@
 module Control.Concurrent.Capataz
 (
 -- * Types
-  HasSupervisor (..)
-, CallbackType (..)
+  Control.Concurrent.Capataz.Internal.Core.HasSupervisor (..)
+, Control.Concurrent.Capataz.Internal.Types.CallbackType (..)
 
-, WorkerId
-, WorkerAction
-, WorkerRestartStrategy (..)
-, WorkerTerminationPolicy (..)
-, WorkerOptions
+, Control.Concurrent.Capataz.Internal.Types.WorkerId
+, Control.Concurrent.Capataz.Internal.Types.WorkerRestartStrategy (..)
+, Control.Concurrent.Capataz.Internal.Types.WorkerTerminationPolicy (..)
+, Control.Concurrent.Capataz.Internal.Types.WorkerOptions
 
-, ProcessId
-, ProcessSpec (..)
-, ProcessType (..)
-, ProcessTerminationOrder (..)
-, ProcessError (..)
+, Control.Concurrent.Capataz.Internal.Types.ProcessId
+, Control.Concurrent.Capataz.Internal.Types.ProcessSpec (..)
+, Control.Concurrent.Capataz.Internal.Types.ProcessType (..)
+, Control.Concurrent.Capataz.Internal.Types.ProcessTerminationOrder (..)
+, Control.Concurrent.Capataz.Internal.Types.ProcessError (..)
 
-, SupervisorId
-, Supervisor
-, SupervisorRestartStrategy (..)
-, SupervisorStatus (..)
-, SupervisorOptions
+, Control.Concurrent.Capataz.Internal.Types.SupervisorId
+, Control.Concurrent.Capataz.Internal.Types.Supervisor
+, Control.Concurrent.Capataz.Internal.Types.SupervisorRestartStrategy (..)
+, Control.Concurrent.Capataz.Internal.Types.SupervisorStatus (..)
+, Control.Concurrent.Capataz.Internal.Types.SupervisorOptions
 
-, CapatazOptions
+, Control.Concurrent.Capataz.Internal.Types.CapatazOptions
 
-, Capataz
+, Control.Concurrent.Capataz.Internal.Types.Capataz
 
 -- * Default Options for Capataz Processes
-, buildCapatazOptions
-, buildSupervisorOptions
-, buildWorkerOptions
-, supervisorSpec
-, workerSpec
+, Control.Concurrent.Capataz.Internal.Types.defCapatazOptions
+, Control.Concurrent.Capataz.Internal.Types.buildSupervisorOptions
+, Control.Concurrent.Capataz.Internal.Types.buildWorkerOptions
+, Control.Concurrent.Capataz.Internal.Types.supervisorSpec
+, Control.Concurrent.Capataz.Internal.Types.workerSpec
 
 -- * Lenses to modify Option Records
-, supervisorNameL
-, supervisorIntensityL
-, supervisorPeriodSecondsL
-, supervisorRestartStrategyL
-, supervisorProcessSpecListL
-, supervisorProcessTerminationOrderL
-, supervisorOnIntensityReachedL
-, supervisorOnFailureL
-, notifyEventL
-, workerActionL
-, workerNameL
-, workerOnFailureL
-, workerOnCompletionL
-, workerOnTerminationL
-, workerTerminationPolicyL
-, workerRestartStrategyL
+, Control.Concurrent.Capataz.Lens.onSystemEventL
+, Control.Concurrent.Capataz.Lens.supervisorIntensityL
+, Control.Concurrent.Capataz.Lens.supervisorPeriodSecondsL
+, Control.Concurrent.Capataz.Lens.supervisorRestartStrategyL
+, Control.Concurrent.Capataz.Lens.supervisorProcessSpecListL
+, Control.Concurrent.Capataz.Lens.supervisorProcessTerminationOrderL
+, Control.Concurrent.Capataz.Lens.supervisorOnIntensityReachedL
+, Control.Concurrent.Capataz.Lens.supervisorOnFailureL
+, Control.Concurrent.Capataz.Lens.workerOnFailureL
+, Control.Concurrent.Capataz.Lens.workerOnCompletionL
+, Control.Concurrent.Capataz.Lens.workerOnTerminationL
+, Control.Concurrent.Capataz.Lens.workerTerminationPolicyL
+, Control.Concurrent.Capataz.Lens.workerRestartStrategyL
 
 -- * Core functionality
-, forkWorker
-, forkCapataz
-, terminateProcess
+, Control.Concurrent.Capataz.Internal.Core.forkWorker
+, Control.Concurrent.Capataz.Internal.Core.forkSupervisor
+, Control.Concurrent.Capataz.Internal.Core.forkCapataz
+, Control.Concurrent.Capataz.Internal.Core.terminateProcess
 
 -- * Utility functions
-, getSupervisorProcessId
-, getSupervisorAsync
+, Control.Concurrent.Capataz.Internal.Core.getSupervisorProcessId
+, Control.Concurrent.Capataz.Internal.Core.getSupervisorAsync
+, Control.Concurrent.Capataz.Internal.Core.getCapatazTeardown
+
 -- * Teardown (re-exported)
-, teardown
+, Control.Teardown.teardown
+
 -- * Lens (re-exported)
-, (^.)
 , (.~)
 , (&)
-, view
-, set
+, Control.Concurrent.Capataz.Lens.set
 )
 where
 
-import Control.Concurrent.Capataz.Internal.Core
-    ( HasSupervisor (..)
-    , forkCapataz
-    , forkWorker
-    , getSupervisorAsync
-    , getSupervisorProcessId
-    , terminateProcess
-    )
-
-import Control.Concurrent.Capataz.Internal.Types
-    ( CallbackType (..)
-    , Capataz
-    , CapatazOptions
-    , ProcessError (..)
-    , ProcessId
-    , ProcessSpec (..)
-    , ProcessTerminationOrder (..)
-    , ProcessType (..)
-    , Supervisor
-    , SupervisorId
-    , SupervisorOptions
-    , SupervisorRestartStrategy (..)
-    , SupervisorStatus (..)
-    , WorkerAction
-    , WorkerId
-    , WorkerOptions
-    , WorkerRestartStrategy (..)
-    , WorkerTerminationPolicy (..)
-    , buildCapatazOptions
-    , buildSupervisorOptions
-    , buildWorkerOptions
-    , supervisorSpec
-    , workerSpec
-    )
-
-import Control.Concurrent.Capataz.Lens
-    ( notifyEventL
-    , set
-    , supervisorIntensityL
-    , supervisorNameL
-    , supervisorOnFailureL
-    , supervisorOnIntensityReachedL
-    , supervisorPeriodSecondsL
-    , supervisorProcessSpecListL
-    , supervisorProcessTerminationOrderL
-    , supervisorRestartStrategyL
-    , view
-    , workerActionL
-    , workerNameL
-    , workerOnCompletionL
-    , workerOnFailureL
-    , workerOnTerminationL
-    , workerRestartStrategyL
-    , workerTerminationPolicyL
-    , (&)
-    , (.~)
-    , (^.)
-    )
-import Control.Teardown                (teardown)
+import qualified Control.Concurrent.Capataz.Internal.Core
+import qualified Control.Concurrent.Capataz.Internal.Types
+import qualified Control.Concurrent.Capataz.Lens
+import qualified Control.Teardown
+import Control.Concurrent.Capataz.Lens ((.~), (&))

@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
@@ -24,7 +25,7 @@ import           GHC.Conc            (labelThread)
 
 import Control.Concurrent.Capataz.Internal.Types
 
--- | Returns only the number of the ThreadId
+-- | Returns only the number of the ThreadId.
 getTidNumber :: ThreadId -> Maybe Text
 getTidNumber tid = case T.words $ show tid of
   (_:tidNumber:_) -> Just tidNumber
@@ -33,7 +34,7 @@ getTidNumber tid = case T.words $ show tid of
 --------------------------------------------------------------------------------
 
 -- | Internal functions that overwrites the GHC thread name, for increasing
--- traceability on GHC internals
+-- traceability on GHC internals.
 setProcessThreadName :: WorkerId -> WorkerName -> IO ()
 setProcessThreadName workerId workerName = do
   tid <- myThreadId
@@ -44,13 +45,13 @@ setProcessThreadName workerId workerName = do
           (getTidNumber tid)
   labelThread tid workerIdentifier
 
--- | Returns the ProcessId of both a Worker or Supervisor process
+-- | Gets the "ProcessId" of both a Worker or Supervisor process.
 getProcessId :: Process -> ProcessId
 getProcessId process = case process of
   WorkerProcess     Worker { workerId }         -> workerId
   SupervisorProcess Supervisor { supervisorId } -> supervisorId
 
--- | Fetches a "Process" from a "Supervisor" instance
+-- | Gets a supervised "Process" from a "Supervisor" instance.
 fetchProcess :: SupervisorEnv -> ProcessId -> IO (Maybe Process)
 fetchProcess SupervisorEnv { supervisorProcessMap } processId = do
   processMap <- readIORef supervisorProcessMap
@@ -82,13 +83,13 @@ resetProcessMap SupervisorEnv { supervisorProcessMap } processMapFn =
   atomicModifyIORef' supervisorProcessMap
                      (\processMap -> (processMapFn processMap, ()))
 
--- | Function to get a snapshot of a "Supervisor" process map
+-- | Function to get a snapshot of a "Supervisor" process map.
 readProcessMap :: SupervisorEnv -> IO ProcessMap
 readProcessMap SupervisorEnv { supervisorProcessMap } =
   readIORef supervisorProcessMap
 
 -- | Returns all processes of a "Supervisor" by "ProcessTerminationOrder". This
--- is used "AllForOne" restarts and shutdown operations.
+-- is used on "AllForOne" restarts and shutdown operations.
 sortProcessesByTerminationOrder
   :: ProcessTerminationOrder -> ProcessMap -> [Process]
 sortProcessesByTerminationOrder terminationOrder processMap =
@@ -106,23 +107,23 @@ sortProcessesByTerminationOrder terminationOrder processMap =
 
 --------------------------------------------------------------------------------
 
--- | Sub-routine that returns the "SupervisorStatus", this sub-routine will
--- block until its associated "Supervisor" has a status different from
--- "Initializing".
+-- | Returns the "SupervisorStatus", this sub-routine will retry transaction
+-- until its associated "Supervisor" has a status different from "Initializing".
 readSupervisorStatusSTM :: TVar SupervisorStatus -> STM SupervisorStatus
 readSupervisorStatusSTM statusVar = do
   status <- readTVar statusVar
   if status == Initializing then retry else return status
 
--- | Sub-routine that returns the "SupervisorStatus" on the IO monad
+-- | Executes transaction that returns the "SupervisorStatus".
 readSupervisorStatus :: SupervisorEnv -> IO SupervisorStatus
 readSupervisorStatus SupervisorEnv { supervisorStatusVar } =
   atomically $ readTVar supervisorStatusVar
 
--- | Modifes the "Supervisor" status, this is the only function that should be
--- used for this purpose given it has the side-effect of notifying a status
--- change via the "notifyEvent" sub-routine, orginally provided in the
--- "CapatazOption" record.
+-- | Modifes the "Supervisor" status.
+--
+-- IMPORTANT: this is the only function that should be used for this purpose
+-- given it has the side-effect of notifying a status change via the
+-- "notifyEvent" sub-routine, orginally given in the "CapatazOption" record.
 writeSupervisorStatus :: SupervisorEnv -> SupervisorStatus -> IO ()
 writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, notifyEvent } newSupervisorStatus
   = do
@@ -141,8 +142,8 @@ writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorSt
       , eventTime
       }
 
--- | Used from public API functions to send ControlAction messages to a
--- Supervisor thread loop
+-- | Used from public API functions to send "ControlAction" messages to a
+-- Supervisor thread loop.
 sendControlMsg :: SupervisorEnv -> ControlAction -> IO ()
 sendControlMsg SupervisorEnv { supervisorNotify } ctrlMsg =
   supervisorNotify (ControlAction ctrlMsg)
@@ -160,9 +161,10 @@ sendSyncControlMsg SupervisorEnv { supervisorNotify } mkCtrlMsg = do
   takeMVar result
 
 -- | Utility function to transform a "CapatazOptions" record to a
--- "SupervisorOptions" record
+-- "SupervisorOptions" record.
 capatazOptionsToSupervisorOptions :: CapatazOptions -> SupervisorOptions
-capatazOptionsToSupervisorOptions CapatazOptions {..} = SupervisorOptions {..}
+capatazOptionsToSupervisorOptions CapatazOptions {..} =
+  SupervisorOptions {supervisorName = "capataz-root-supervisor", ..}
 
 -- | Utility function to transform a "SupervisorEnv" record to a
 -- "ParentSupervisorEnv" record; used on functions where supervision of

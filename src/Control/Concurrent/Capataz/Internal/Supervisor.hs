@@ -25,7 +25,7 @@ import qualified Control.Concurrent.Capataz.Internal.Worker  as Worker
 
 -- | Internal function that forks a supervisor thread; note this is different
 -- from the public @forkSupervisor@ function which sends a message to the
--- supervisor loop
+-- supervisor loop.
 forkSupervisor
   :: ParentSupervisorEnv
   -> SupervisorOptions
@@ -47,8 +47,8 @@ forkSupervisor parentEnv supervisorOptions mRestartInfo = do
                                (SupervisorProcess supervisor)
   return supervisor
 
--- | Builds an utility record that is used on all internal APIs of the
--- supervision logic
+-- | Utility function that builds an utility record which is used on all
+-- internal APIs of the supervision logic.
 buildSupervisorEnv
   :: (CapatazEvent -> IO ())
   -> (SupervisorMessage -> IO ())
@@ -62,7 +62,7 @@ buildSupervisorEnv notifyEvent supervisorNotify supervisorGetNotification superv
     supervisorStatusVar  <- newTVarIO Initializing
     return SupervisorEnv {..}
 
--- | Handles an event produced by one of the processes this Supervisor monitors
+-- | Handles an event produced by one of the processes this supervisor monitors.
 handleMonitorEvent :: SupervisorEnv -> MonitorEvent -> IO Bool
 handleMonitorEvent env monitorEv = do
   case monitorEv of
@@ -86,11 +86,12 @@ handleMonitorEvent env monitorEv = do
 
   return True
 
--- | Handles an action triggered by the public Supervisor API
+-- | Handles an action triggered by the public Capataz API.
 handleControlAction :: SupervisorEnv -> ControlAction -> IO Bool
 handleControlAction env controlAction = case controlAction of
   ForkWorker { workerOptions, returnWorkerId } -> do
-    worker@Worker { workerId } <- Worker.forkWorker env workerOptions Nothing
+    worker@Worker { workerId } <-
+      Worker.forkWorker (Util.toParentSupervisorEnv env) workerOptions Nothing
     Util.appendProcessToMap env (WorkerProcess worker)
     returnWorkerId workerId
     return True
@@ -109,12 +110,14 @@ handleControlAction env controlAction = case controlAction of
       case mProcess of
         Just process -> do
           Process.terminateProcess processTerminationReason env process
-          notifyProcessTermination
+          notifyProcessTermination True
           return True
-        _ -> return True
+        _ -> do
+          notifyProcessTermination False
+          return True
 
 -- | Executes the shutdown operation of a Supervisor, including the termination
--- of Workers.
+-- of its supervised processes.
 haltSupervisor :: Text -> SupervisorEnv -> IO ()
 haltSupervisor reason env = do
   Util.writeSupervisorStatus  env    Halting
@@ -124,13 +127,13 @@ haltSupervisor reason env = do
 
 
 -- | Handles all messages that a Supervisor can receive from its monitored
--- processes or from the public API
+-- processes or from the public API.
 handleSupervisorMessage :: SupervisorEnv -> SupervisorMessage -> IO Bool
 handleSupervisorMessage env message = case message of
   ControlAction controlAction -> handleControlAction env controlAction
   MonitorEvent  monitorEvent  -> handleMonitorEvent env monitorEvent
 
--- | This sub-routine executes the main thread loop of a "Supervisor" instance
+-- | This sub-routine executes the main thread loop of a "Supervisor" instance.
 supervisorLoop
   :: (forall b . IO b -> IO b)
   -> ParentSupervisorEnv
@@ -207,8 +210,8 @@ supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorNa
           -- Discard messages when halted
           return ()
 
-
--- | This sub-routine starts a Supervisor thread and initializes processList
+-- | This sub-routine starts a Supervisor thread and initializes its
+-- processList.
 supervisorMain
   :: ParentSupervisorEnv
   -> SupervisorOptions
@@ -238,7 +241,7 @@ supervisorMain parentEnv@ParentSupervisorEnv { notifyEvent } supervisorOptions@S
       supervisorProcessSpecList
       ( \processSpec -> case processSpec of
         WorkerSpec workerOptions -> do
-          worker <- Worker.forkWorker supervisorEnv workerOptions Nothing
+          worker <- Worker.forkWorker (Util.toParentSupervisorEnv supervisorEnv) workerOptions Nothing
           Util.appendProcessToMap supervisorEnv (WorkerProcess worker)
 
         SupervisorSpec childSupervisorOptions -> do
@@ -263,16 +266,16 @@ supervisorMain parentEnv@ParentSupervisorEnv { notifyEvent } supervisorOptions@S
 
 --------------------------------------------------------------------------------
 
--- | Function used to track difference between two timestamps to track a
--- Supervisor error intensity
+-- | Tracks difference between two timestamps so that we keep track of a
+-- Supervisor error intensity.
 calcDiffSeconds :: UTCTime -> IO NominalDiffTime
 calcDiffSeconds creationTime = do
   currentTime <- getCurrentTime
   return $ diffUTCTime currentTime creationTime
 
--- | Function that checks restart counts and worker start times to assess if the
--- Supervisor error intensity has been breached, see "ProcessRestartAction" for
--- possible outcomes.
+-- | Checks restart counts and worker start times to assess if the Supervisor
+-- error intensity has been breached, see "ProcessRestartAction" for possible
+-- outcomes.
 calcRestartAction
   :: SupervisorEnv -> Int -> NominalDiffTime -> ProcessRestartAction
 calcRestartAction SupervisorEnv { supervisorIntensity, supervisorPeriodSeconds } restartCount diffSeconds
@@ -288,7 +291,7 @@ calcRestartAction SupervisorEnv { supervisorIntensity, supervisorPeriodSeconds }
       | otherwise
       -> IncreaseRestartCount
 
--- | Sub-routine responsible of executing a "SupervisorRestartStrategy"
+-- | Sub-routine responsible of executing a "SupervisorRestartStrategy".
 execCapatazRestartStrategy
   :: SupervisorEnv -> ProcessId -> ProcessSpec -> Int -> IO ()
 execCapatazRestartStrategy supervisorEnv@SupervisorEnv { supervisorRestartStrategy } processId processSpec processRestartCount
@@ -320,7 +323,7 @@ execCapatazRestartStrategy supervisorEnv@SupervisorEnv { supervisorRestartStrate
       Util.appendProcessToMap supervisorEnv newProcess
 
 -- | Executes a restart action returned from the invokation of
--- "calcRestartAction"
+-- "calcRestartAction".
 execRestartAction
   :: SupervisorEnv
   -> ProcessId
@@ -356,9 +359,9 @@ execRestartAction supervisorEnv@SupervisorEnv { supervisorOnIntensityReached } p
 
 --------------------------------------------------------------------------------
 
--- | Restarts _all_ the processes supervised by a Supervisor, invoked when one
--- worker green thread fails and causes sibling process threads to get restarted
--- as well
+-- | Restarts _all_ processes that are supervised by Supervisor, invoked when
+-- one worker green thread fails and causes sibling process threads to get
+-- restarted as well (e.g. "AllForOne" supervisor restart strategy).
 restartProcessList :: SupervisorEnv -> WorkerId -> RestartCount -> IO [Process]
 restartProcessList supervisorEnv@SupervisorEnv { supervisorProcessTerminationOrder } failingProcessId restartCount
   = do
@@ -406,7 +409,7 @@ forceRestartProcess env process = do
 restartWorker
   :: SupervisorEnv -> WorkerOptions -> WorkerId -> RestartCount -> IO Process
 restartWorker supervisorEnv workerOptions workerId restartCount =
-  WorkerProcess <$> Worker.forkWorker supervisorEnv
+  WorkerProcess <$> Worker.forkWorker (Util.toParentSupervisorEnv supervisorEnv)
                                       workerOptions
                                       (Just (workerId, restartCount))
 
@@ -427,8 +430,8 @@ restartSupervisor parentEnv supervisorOptions processId restartCount =
 
 --------------------------------------------------------------------------------
 
--- | Sub-routine that handles the event when a Worker process completes without
--- errors
+-- | Executes restart strategy for when a worker finishes it execution because
+-- of a completion (e.g. worker sub-routine finished without any errors).
 handleWorkerCompleted :: SupervisorEnv -> Worker -> IO ()
 handleWorkerCompleted env worker = do
   let Worker { workerId, workerOptions, workerCreationTime } = worker
@@ -450,9 +453,8 @@ handleWorkerCompleted env worker = do
 
     _ -> Util.removeProcessFromMap env workerId
 
--- | Sub-routine responsible of the restart strategies execution when a process
--- finishes it execution because of a completion (e.g. worker sub-routine
--- finished without any errors).
+-- | Executes restart strategy for when a process finishes it execution because
+-- of a completion (e.g. worker sub-routine finished without any errors).
 handleProcessCompleted :: SupervisorEnv -> ProcessId -> UTCTime -> IO ()
 handleProcessCompleted env processId completionTime = do
   mProcess <- Util.fetchProcess env processId
@@ -469,8 +471,8 @@ handleProcessCompleted env processId completionTime = do
             <> show (Process.getProcessId process)
             <> ") should never complete"
 
--- | Sub-routine responsible of the execution of restart strategies when a
--- Worker finishes it execution because of an error.
+-- | Executes restart strategy for when a worker finishes it execution because
+-- of a failure.
 handleWorkerFailed :: SupervisorEnv -> Worker -> Int -> IO ()
 handleWorkerFailed env worker restartCount = do
   let Worker { workerId, workerCreationTime, workerOptions } = worker
@@ -484,8 +486,8 @@ handleWorkerFailed env worker restartCount = do
                                    workerCreationTime
                                    restartCount
 
--- | Sub-routine responsible of the execution of restart strategies
--- when a Supervisor finishes it execution because of an error.
+-- | Executes restart strategy for when a supervisor finishes it execution because
+-- of a failure.
 handleSupervisorFailed :: SupervisorEnv -> Supervisor -> Int -> IO ()
 handleSupervisorFailed env supervisor restartCount = do
   let Supervisor { supervisorId, supervisorCreationTime, supervisorOptions } =
@@ -498,8 +500,8 @@ handleSupervisorFailed env supervisor restartCount = do
                     supervisorCreationTime
                     restartCount
 
--- | Sub-routine responsible of the restart strategies execution when a process
--- finishes it execution because of an error.
+-- | Executes restart strategy for when a process finishes it execution because
+-- of a failure.
 handleProcessFailed
   :: SupervisorEnv -> WorkerId -> SomeException -> Int -> IO ()
 handleProcessFailed env processId processError restartCount = do
@@ -514,8 +516,8 @@ handleProcessFailed env processId processError restartCount = do
         SupervisorProcess supervisor ->
           handleSupervisorFailed env supervisor restartCount
 
--- | Sub-routine responsible of the execution of restart strategies when a
--- Worker finishes it execution because of a termination.
+-- | Executes restart strategy for when a worker finishes it execution because
+-- of a termination from its supervisor.
 handleWorkerTerminated :: SupervisorEnv -> Worker -> Int -> IO ()
 handleWorkerTerminated env worker restartCount = do
   let Worker { workerId, workerCreationTime, workerOptions } = worker
@@ -531,8 +533,8 @@ handleWorkerTerminated env worker restartCount = do
 
     _ -> Util.removeProcessFromMap env workerId
 
--- | Sub-routine responsible of the execution of restart strategies when a
--- Supervisor finishes it execution because of a termination.
+-- | Executes restart strategy for when a supervisor finishes it execution
+-- because of a termination from its parent supervisor.
 handleSupervisorTerminated :: SupervisorEnv -> Supervisor -> Int -> IO ()
 handleSupervisorTerminated env supervisor restartCount = do
   let Supervisor { supervisorId, supervisorCreationTime, supervisorOptions } =
@@ -545,8 +547,8 @@ handleSupervisorTerminated env supervisor restartCount = do
                     supervisorCreationTime
                     restartCount
 
--- | Sub-routine responsible of the execution of restart strategies when a
--- Process finishes it execution because of a termination.
+-- | Executes restart strategy for when a process finishes it execution because
+-- of a termination from its supervisor.
 handleProcessTerminated :: SupervisorEnv -> ProcessId -> Text -> Int -> IO ()
 handleProcessTerminated env processId terminationReason restartCount = do
   mProcess <- Util.fetchProcess env processId

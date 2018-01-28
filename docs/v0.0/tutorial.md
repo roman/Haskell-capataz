@@ -1,5 +1,8 @@
 # Basic Tutorial using Unix Processes
 
+> NOTE: This tutorial is for version v0.0.0.2 of the capataz library, follow
+> [this link]() to read this tutorial with the newest version
+
 In this tutorial, we will build a small CLI application that spawns processes through Haskell's Unix Process API. We will keep all our threads running smoothly despite having one of the threads killing the spawned Unix processes through Unix `SIGTERM` signals.
 
 We will implement two (2) different versions of our CLI program, one using standard Haskell threading utilities, and another using the Capataz library.
@@ -17,7 +20,7 @@ If you are not familiar with the topics above, we recommend following along and 
 
 Our CLI program will receive an input parameter `procNumber` that will be used to spawn some green threads, each of them generating a Unix process. Each Unix process executes a simple bash script that echoes a number and increments it in an infinite while loop. Our Haskell program will also run a Haskell thread that will kill one of the many bash script executions.
 
-You can find the code for this tutorial in the [`examples`](https://github.com/roman/Haskell-capataz/tree/examples/examples) directory of the project's Github repository.
+You can find the code for this tutorial in the [`examples`](https://github.com/roman/Haskell-capataz/tree/v0.0.0.2/examples/capataz-example) directory of the project's Github repository.
 
 ## Setting up the stage - A trivial library for Processes
 

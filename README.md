@@ -29,16 +29,16 @@ provides a simple Supervisor API.
 This library is intended to be a drop-in replacement to `forkIO` invocations
 throughout your codebase, the difference being, you'll need to do a bit more of
 setup specifying supervision rules, and also pass along a reference of a
-capataz descriptor to every thread fork.
+supervisor for every thread you fork.
 
 ### Why not [distributed-process](https://hackage.haskell.org/package/distributed-process)?
 
 `distributed-process` is an impressive library, and brings many great utilities
-if you need to develop applications that are reliable. However, it is a
-heavyweight solution that will enforce serious changes to your application. It
-also optimizes its implementation around the *distributed* part of its name.
-This library is intended to provide some benefits of `distributed-process` ,
-without the baggage.
+if you need to develop applications that need to be distributed and reliable.
+However, it is a heavyweight solution that will enforce serious changes to your
+application. This library is intended to provide the reliability benefits of
+`distributed-process`, without the constraints imposed by the *distributed*
+part.
 
 ### Why not a complete actor system?
 

@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Control.Concurrent.Capataz
+import Control.Concurrent.Capataz -- (0)
     ( SupervisorRestartStrategy (..)
     , WorkerRestartStrategy (..)
     , buildWorkerOptions
@@ -21,29 +21,40 @@ import Options.Generic            (getRecord)
 import Protolude
 import Text.Show.Pretty           (pPrint)
 
-
 main :: IO ()
 main = do
   n <- getRecord "Counter spawner"
 
-  capataz <- forkCapataz ( set supervisorRestartStrategyL OneForOne
-                         . set onSystemEventL pPrint
-                         )
+  capataz <-
+    forkCapataz -- (1)
+      ( set supervisorRestartStrategyL OneForOne -- (2)
+      . set onSystemEventL pPrint                -- (3)
+      )
 
   let numberWriter i a = print (i, a)
       delayMicros = 5000100
 
-  _workerIdList <- forM [1 .. procNumber n] $ \i -> forkWorker
-    ( buildWorkerOptions ("Worker (" <> show i <> ")")
-                         (spawnNumbersProcess (numberWriter i))
-                         (set workerRestartStrategyL Permanent)
-    )
-    capataz
+  _workerIdList <- forM [1 .. procNumber n] $ \i -> do
+      let
+        counterWorkerOptions =
+          buildWorkerOptions -- (4)
+            ("Worker (" <> show i <> ")")
+            (spawnNumbersProcess (numberWriter i)) -- (5)
+            (set workerRestartStrategyL Permanent) -- (6)
 
-  let workerKillerOptions = buildWorkerOptionsWithDefaults
-        "worker-killer"
-        (forever $ threadDelay delayMicros >> killNumberProcess)
+      forkWorker -- (7)
+        counterWorkerOptions
+        capataz
 
+  let
+    workerKillerOptions =
+        buildWorkerOptionsWithDefaults -- (8)
+          "worker-killer"
+          (forever $ threadDelay delayMicros >> killNumberProcess)
+
+  -- ignore returned ProcessId, as we won't use it in our example
   void $ forkWorker workerKillerOptions capataz
 
-  joinCapatazThread capataz `finally` (teardown capataz >>= print)
+  joinCapatazThread capataz  -- (9)
+    `finally`
+    (teardown capataz >>= print) -- (10)

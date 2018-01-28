@@ -92,20 +92,6 @@ tests = testGroup
             ]
           ]
           Nothing
-    , testCase "reports error when capataz thread receives async exception"
-      $ testCapatazStream
-          [ andP
-              [ assertEventType SupervisorStatusChanged
-              , assertSupervisorStatusChanged SUT.Initializing SUT.Running
-              ]
-          ]
-          ( \capataz -> do
-            cancelWith (SUT.getSupervisorAsync capataz)
-                       (ErrorCall "async exception")
-          )
-          [assertEventType CapatazFailed]
-          []
-          Nothing
     , testCase "reports error when worker retries violate restart intensity"
       $ do
           lockVar <- newEmptyMVar
@@ -195,7 +181,7 @@ tests = testGroup
                     )
                     capataz
 
-                  _workerId <- SUT.terminateProcess
+                  _workerId <- void $ SUT.terminateProcess
                     "testing onCompletion callback"
                     workerId
                     capataz
@@ -301,7 +287,7 @@ tests = testGroup
                     )
                     capataz
 
-                  SUT.terminateProcess "testing onFailure callback"
+                  void $ SUT.terminateProcess "testing onFailure callback"
                                        workerId
                                        capataz
                 )
@@ -364,7 +350,7 @@ tests = testGroup
                     )
                     capataz
 
-                  SUT.terminateProcess "testing workerOnTermination callback"
+                  void $ SUT.terminateProcess "testing workerOnTermination callback"
                                        workerId
                                        capataz
                 )
@@ -394,7 +380,7 @@ tests = testGroup
                     )
                     capataz
 
-                  SUT.terminateProcess "testing workerOnTermination callback"
+                  void $ SUT.terminateProcess "testing workerOnTermination callback"
                                        workerId
                                        capataz
                 )
@@ -461,7 +447,7 @@ tests = testGroup
                     )
                     capataz
 
-                  SUT.terminateProcess "testing workerOnTermination callback"
+                  void $ SUT.terminateProcess "testing workerOnTermination callback"
                                        workerId
                                        capataz
                 )
@@ -506,7 +492,7 @@ tests = testGroup
                 (set SUT.workerRestartStrategyL SUT.Transient)
               )
               capataz
-            SUT.terminateProcess "termination test (1)" workerId capataz
+            void $ SUT.terminateProcess "termination test (1)" workerId capataz
           )
           [assertEventType ProcessTerminated]
           [assertEventType CapatazTerminated]
@@ -608,7 +594,7 @@ tests = testGroup
                 (set SUT.workerRestartStrategyL SUT.Permanent)
               )
               capataz
-            SUT.terminateProcess "testing termination (1)" workerId capataz
+            void $ SUT.terminateProcess "testing termination (1)" workerId capataz
           )
           [assertEventType ProcessTerminated, assertEventType ProcessRestarted]
           []
@@ -634,11 +620,11 @@ tests = testGroup
                     )
                     capataz
 
-                  SUT.terminateProcess "testing termination (1)"
+                  void $ SUT.terminateProcess "testing termination (1)"
                                        workerId
                                        capataz
                   waitWorkerTermination 1
-                  SUT.terminateProcess "testing termination (2)"
+                  void $ SUT.terminateProcess "testing termination (2)"
                                        workerId
                                        capataz
                   waitWorkerTermination 2
@@ -720,7 +706,7 @@ tests = testGroup
                 (set SUT.workerRestartStrategyL SUT.Temporary)
               )
               capataz
-            SUT.terminateProcess "termination test (1)" workerId capataz
+            void $ SUT.terminateProcess "termination test (1)" workerId capataz
             threadDelay 100
           )
           [assertEventType ProcessStarted, assertEventType ProcessTerminated]

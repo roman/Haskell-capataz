@@ -21,18 +21,17 @@ tests = testGroup
           SUT.supervisorProcessSpecListL
           [ SUT.supervisorSpec
             "tree-1"
-            ( set SUT.supervisorNameL "tree-1" . set
-              SUT.supervisorProcessSpecListL
-              [ SUT.workerSpec "1-A" (forever $ threadDelay 10001000) identity
-              , SUT.workerSpec "1-B" (forever $ threadDelay 10001000) identity
+            ( set SUT.supervisorProcessSpecListL
+              [ SUT.workerSpecWithDefaults "1-A" (forever $ threadDelay 10001000)
+              , SUT.workerSpecWithDefaults "1-B" (forever $ threadDelay 10001000)
               ]
             )
           , SUT.supervisorSpec
             "tree-2"
             ( set
               SUT.supervisorProcessSpecListL
-              [ SUT.workerSpec "2-A" (forever $ threadDelay 10001000) identity
-              , SUT.workerSpec "2-B" (forever $ threadDelay 10001000) identity
+              [ SUT.workerSpecWithDefaults "2-A" (forever $ threadDelay 10001000)
+              , SUT.workerSpecWithDefaults "2-B" (forever $ threadDelay 10001000)
               ]
             )
           ]
@@ -52,7 +51,7 @@ tests = testGroup
           , assertSupervisorStatusChanged SUT.Initializing SUT.Running
           ]
         , andP
-          [ assertSupervisorName "capataz-root"
+          [ assertSupervisorName "capataz-root-supervisor"
           , assertEventType SupervisorStatusChanged
           , assertSupervisorStatusChanged SUT.Initializing SUT.Running
           ]
@@ -60,12 +59,12 @@ tests = testGroup
         (const $ return ())
         []
         [ andP
-          [ assertSupervisorName "capataz-root"
+          [ assertSupervisorName "capataz-root-supervisor"
           , assertEventType SupervisorStatusChanged
           , assertSupervisorStatusChanged SUT.Running SUT.Halting
           ]
         , andP
-          [ assertSupervisorName "capataz-root"
+          [ assertSupervisorName "capataz-root-supervisor"
           , assertEventType ProcessTerminationStarted
           ]
         , andP [assertSupervisorName "tree-1", assertWorkerTerminated "1-A"]
@@ -73,11 +72,11 @@ tests = testGroup
         , andP [assertSupervisorName "tree-2", assertWorkerTerminated "2-A"]
         , andP [assertSupervisorName "tree-2", assertWorkerTerminated "2-B"]
         , andP
-          [ assertSupervisorName "capataz-root"
+          [ assertSupervisorName "capataz-root-supervisor"
           , assertEventType ProcessTerminationFinished
           ]
         , andP
-          [ assertSupervisorName "capataz-root"
+          [ assertSupervisorName "capataz-root-supervisor"
           , assertEventType SupervisorStatusChanged
           , assertSupervisorStatusChanged SUT.Halting SUT.Halted
           ]
@@ -93,7 +92,7 @@ tests = testGroup
             ( set SUT.supervisorIntensityL     1
             . set SUT.supervisorPeriodSecondsL 10
             . set SUT.supervisorProcessSpecListL
-                  [SUT.workerSpec "failing-worker" failingAction identity]
+                  [SUT.workerSpecWithDefaults "failing-worker" failingAction]
             )
         ]
       )
@@ -118,7 +117,7 @@ tests = testGroup
             ( set SUT.supervisorIntensityL     1
             . set SUT.supervisorPeriodSecondsL 10
             . set SUT.supervisorProcessSpecListL
-                  [SUT.workerSpec "failing-worker" failingAction identity]
+                  [SUT.workerSpecWithDefaults "failing-worker" failingAction]
             )
           , SUT.supervisorSpec
             "tree-2"

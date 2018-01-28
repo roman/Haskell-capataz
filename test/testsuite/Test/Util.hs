@@ -13,7 +13,6 @@ import Text.Show.Pretty              (ppShow)
 
 import qualified Data.Text as T
 
-import           Control.Concurrent.Capataz       ((&), (.~))
 import qualified Control.Concurrent.Capataz       as SUT
 import qualified Control.Concurrent.Capataz.Event as SUT
 
@@ -296,9 +295,9 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
 
     capataz <-
       SUT.forkCapataz
-      $  (SUT.buildCapatazOptions optionModFn)
-      &  SUT.notifyEventL
-      .~ trackEvent accRef eventStream
+        ( SUT.set SUT.onSystemEventL (trackEvent accRef eventStream)
+        . optionModFn
+        )
 
     -- We check preSetup assertions are met before we execute the setup
     -- function. This serves to test initialization of capataz instance

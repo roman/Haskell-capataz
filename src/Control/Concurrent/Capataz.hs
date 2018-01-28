@@ -33,11 +33,14 @@ module Control.Concurrent.Capataz
 , Control.Concurrent.Capataz.Internal.Types.Capataz
 
 -- * Default Options for Capataz Processes
-, Control.Concurrent.Capataz.Internal.Types.defCapatazOptions
 , Control.Concurrent.Capataz.Internal.Types.buildSupervisorOptions
+, Control.Concurrent.Capataz.Internal.Types.buildSupervisorOptionsWithDefaults
 , Control.Concurrent.Capataz.Internal.Types.buildWorkerOptions
+, Control.Concurrent.Capataz.Internal.Types.buildWorkerOptionsWithDefaults
 , Control.Concurrent.Capataz.Internal.Types.supervisorSpec
+, Control.Concurrent.Capataz.Internal.Types.supervisorSpecWithDefaults
 , Control.Concurrent.Capataz.Internal.Types.workerSpec
+, Control.Concurrent.Capataz.Internal.Types.workerSpecWithDefaults
 
 -- * Lenses to modify Option Records
 , Control.Concurrent.Capataz.Lens.onSystemEventL
@@ -61,6 +64,7 @@ module Control.Concurrent.Capataz
 , Control.Concurrent.Capataz.Internal.Core.terminateProcess
 
 -- * Utility functions
+, Control.Concurrent.Capataz.Internal.Core.joinCapatazThread
 , Control.Concurrent.Capataz.Internal.Core.getSupervisorProcessId
 , Control.Concurrent.Capataz.Internal.Core.getSupervisorAsync
 , Control.Concurrent.Capataz.Internal.Core.getCapatazTeardown

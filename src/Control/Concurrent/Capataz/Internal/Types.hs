@@ -533,8 +533,8 @@ defCapatazOptions
   :: (CapatazOptions -> CapatazOptions) -- ^ Function to modify root supervisor
                                         -- options
   -> CapatazOptions
-defCapatazOptions f =
-  f CapatazOptions
+defCapatazOptions modFn =
+  modFn CapatazOptions
     {
       supervisorIntensity               = 2
     , supervisorPeriodSeconds           = 5

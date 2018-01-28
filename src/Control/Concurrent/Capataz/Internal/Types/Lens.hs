@@ -28,7 +28,7 @@ class HasSupervisorPeriodSeconds s where
     -> f s
 
 class HasSupervisorRestartStrategy s where
-   -- | Specifies the "SupervisorRestartStrategy" for a root supervisor.
+  -- | Specifies the "SupervisorRestartStrategy" for a root supervisor.
   supervisorRestartStrategyL
     :: Functor f
     => (SupervisorRestartStrategy -> f SupervisorRestartStrategy)
@@ -63,8 +63,8 @@ class HasSupervisorIntensityReachedCallback s where
     -> f s
 
 class HasSupervisorFailureCallback s where
-   -- | Specifies callback sub-routine that gets executed when a supervisor
-   -- fails.
+  -- | Specifies callback sub-routine that gets executed when a supervisor
+  -- fails.
   supervisorOnFailureL
     :: Functor f
     => ((SomeException -> IO ()) -> f (SomeException -> IO ()))

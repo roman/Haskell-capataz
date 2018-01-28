@@ -5,14 +5,13 @@ module Main where
 import Control.Concurrent.Capataz
     ( SupervisorRestartStrategy (..)
     , WorkerRestartStrategy (..)
-    , buildCapatazOptions
     , buildWorkerOptions
+    , buildWorkerOptionsWithDefaults
+    , joinCapatazThread
     , forkCapataz
     , forkWorker
-    , getSupervisorAsync
-    , notifyEventL
+    , onSystemEventL
     , set
-    , supervisorNameL
     , supervisorRestartStrategyL
     , teardown
     , workerRestartStrategyL
@@ -27,13 +26,9 @@ main :: IO ()
 main = do
   n <- getRecord "Counter spawner"
 
-  let myCapatazOptions = buildCapatazOptions
-        ( set supervisorNameL            "Example Capataz"
-        . set supervisorRestartStrategyL OneForOne
-        . set notifyEventL               pPrint
-        )
-
-  capataz <- forkCapataz myCapatazOptions
+  capataz <- forkCapataz ( set supervisorRestartStrategyL OneForOne
+                         . set onSystemEventL pPrint
+                         )
 
   let numberWriter i a = print (i, a)
       delayMicros = 5000100
@@ -45,10 +40,10 @@ main = do
     )
     capataz
 
-  let workerKillerOptions = buildWorkerOptions
+  let workerKillerOptions = buildWorkerOptionsWithDefaults
         "worker-killer"
         (forever $ threadDelay delayMicros >> killNumberProcess)
-        identity
+
   void $ forkWorker workerKillerOptions capataz
 
-  wait (getSupervisorAsync capataz) `finally` (teardown capataz >>= print)
+  joinCapatazThread capataz `finally` (teardown capataz >>= print)

@@ -1,5 +1,5 @@
 name: capataz
-version: '0.0.0.2'
+version: '0.1.0.0'
 synopsis: OTP-like supervision trees in Haskell
 description: |
   `capataz` enhances the reliability of your concurrent applications by offering
@@ -21,7 +21,7 @@ description: |
 
 category: Control, Concurrency
 author: Roman Gonzalez
-maintainer: capataz@roman-gonzalez.info
+maintainer: open-source@roman-gonzalez.info
 copyright: © 2018 Roman Gonzalez
 license: MIT
 license-file: LICENSE
@@ -59,11 +59,13 @@ library:
   exposed-modules:
   - Control.Concurrent.Capataz
   - Control.Concurrent.Capataz.Event
-  - Control.Concurrent.Capataz.Internal.Types
+  - Control.Concurrent.Capataz.Lens
   - Control.Concurrent.Capataz.Internal.Core
-  - Control.Concurrent.Capataz.Internal.Worker
+  - Control.Concurrent.Capataz.Internal.Types
+  - Control.Concurrent.Capataz.Internal.Types.Lens
   - Control.Concurrent.Capataz.Internal.Supervisor
   - Control.Concurrent.Capataz.Internal.Util
+  - Control.Concurrent.Capataz.Internal.Worker
 
 tests:
   capataz-test:
@@ -71,8 +73,6 @@ tests:
     source-dirs: test/testsuite
     ghc-options:
     - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
     dependencies:
     - tasty
     - tasty-hunit

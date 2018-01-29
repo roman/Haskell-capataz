@@ -1,0 +1,9 @@
+out/bin/*
+tmp/*
+target/*
+tools/bin/*
+.make/*
+.tasty-rerun-log
+**/.stack-work/*
+*.cabal
+/tutorial.md

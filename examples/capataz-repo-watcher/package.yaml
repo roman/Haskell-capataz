@@ -1,0 +1,44 @@
+name: capataz-repo-watcher
+version: '0.0.0.0'
+category: TODO
+author: Roman Gonzalez
+maintainer: Roman Gonzalez <open-source@roman-gonzalez.info>
+copyright: © 2018 Roman Gonzalez
+stability: alpha (experimental)
+license: MIT
+license-file: LICENSE
+github: /Haskell-capataz
+tested-with: GHC==8.2.1
+extra-source-files:
+- README.md
+- CHANGELOG.md
+
+ghc-options:
+- -Wall
+# as recommended in:
+# https://functor.tokyo/blog/2017-07-28-ghc-warnings-you-should-enable
+- -Wincomplete-uni-patterns
+- -Wincomplete-record-updates
+
+dependencies:
+- base
+- capataz
+- hinotify
+- rio
+- safe-exceptions
+- shelly
+- stm
+- teardown
+
+library:
+  source-dirs: src
+  exposed-modules:
+  - Lib
+
+executables:
+  repo-watcher:
+    source-dirs: app
+    main: Main.hs
+    dependencies:
+    - optparse-generic
+    - capataz-repo-watcher

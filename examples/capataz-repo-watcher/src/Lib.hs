@@ -68,24 +68,20 @@ buildINotify = Component.buildComponentWithCleanup $ do
 -- this sub-routine retries until such change happens in the filesystem.
 buildFileWatcher
   :: INotify.INotify
+  -> (FilePath -> IO ())
   -> FilePath -- ^ Directory where changes are tracked
-  -> ComponentM (STM FilePath)
-buildFileWatcher inotify !dir = Component.buildComponentWithCleanup $ mask $ \_ -> do
-  fileChangesChan <- TChan.newTChanIO
+  -> IO (IO ())
+buildFileWatcher inotify notifyFileChange !dir = do
   fileWatch <- INotify.addWatch inotify [INotify.CloseWrite, INotify.Modify] dir $ \ev -> do
     case ev of
       INotify.Modified {INotify.isDirectory, INotify.maybeFilePath}
         -- we ignore all changes that happen to a Directory
         | isDirectory -> return ()
         | otherwise ->
-          maybe (return ())
-                (atomically . TChan.writeTChan fileChangesChan)
-                maybeFilePath
+          maybe (return ()) notifyFileChange maybeFilePath
       _ -> return ()
 
-  return ( TChan.readTChan fileChangesChan
-         , ("inotify:" <> Text.pack dir, INotify.removeWatch fileWatch)
-         )
+  return (INotify.removeWatch fileWatch)
 
 -- | Returns both an STM sub-routine that blocks until a given period of time
 -- has passed, and a "ProcessSpec" for supervision of this interval thread.
@@ -102,7 +98,6 @@ buildIntervalWorker !workerName !delaySeconds = Component.buildComponent $ do
       threadDelay (delaySeconds * 1000100)
       atomically $ TChan.writeTChan intervalChan ()
 
-    -- (3)
     intervalSpec :: Capataz.ProcessSpec
     intervalSpec =
       Capataz.workerSpec workerName triggerEvent
@@ -128,15 +123,14 @@ buildGitWorker !repoPath !getWatcherMsg =
             Shelly.shelly
               $ Shelly.chdir (Shelly.fromText $ Text.pack repoPath)
               $ do Shelly.run_ "git" ["add", "."]
-                   Shelly.run_ "git" ["commit", "-a", "--amend", "--no-edit"]
+                   Shelly.run_ "git" ["commit", "-m", "file changes"]
 
           SyncRequested -> do
             Shelly.shelly
               $ Shelly.chdir (Shelly.fromText $ Text.pack repoPath)
-              $ do Shelly.run_ "git" ["pull", "-r"]
-                   Shelly.run_ "git" ["push", "--force-with-lease", "origin"]
+              $ do Shelly.run_ "git" ["pull", "-r", "origin", "master"]
+                   Shelly.run_ "git" ["push", "origin", "master"]
   in
-    -- (4)
     Capataz.workerSpec "git-worker" executeCmd
       (set Capataz.workerRestartStrategyL Capataz.Permanent)
 
@@ -166,7 +160,6 @@ buildEventLogger = Component.buildComponent $ do
 
   return (
       atomically . TChan.writeTChan logChan
-      -- (5)
     , Capataz.workerSpec "logger" logLoop
         (set Capataz.workerRestartStrategyL Capataz.Permanent)
     )
@@ -177,33 +170,56 @@ buildEventLogger = Component.buildComponent $ do
 -- * An interval worker
 -- * A git worker
 --
+-- NOTE: when we restart our repo file watcher, we need to make sure that our
+-- watch gets restarted as well.
 buildRepoFileWatcher :: INotify.INotify -> FilePath -> ComponentM ProcessSpec
 buildRepoFileWatcher !inotify !repoDir = do
-  -- (6)
-  onFileChange <- buildFileWatcher inotify repoDir
+  -- We create functions that workers will use to communicate between each
+  -- other
+  changesChan <- liftIO $ TChan.newTChanIO
+  let notifyFileChange = atomically . TChan.writeTChan changesChan
+      onFileChange = TChan.readTChan changesChan
+
+  fileWatchCleanupRef <- liftIO $ do
+    fileWatchCleanup <- buildFileWatcher inotify notifyFileChange repoDir
+    newIORef fileWatchCleanup
+
   (onSync, syncIntervalSpec) <- buildIntervalWorker "git-sync-interval" (60 * 2)
 
   let
+    -- We compose both Sync interval requests and file changes notifications
     onMsg :: IO WatcherMsg
     onMsg =
       atomically
       $ (FileChanged <$> onFileChange)
       `orElse` (onSync $> SyncRequested)
 
+    cleanupWatch :: IO ()
+    cleanupWatch =
+      join (readIORef fileWatchCleanupRef)
+
+    -- We restart the inotify watch when supervisor fails; We mask to make sure
+    -- that our ref is not corrupted with async exceptions
+    onRepoWatcherFailure :: IO ()
+    onRepoWatcherFailure = mask $ \unmask -> do
+      unmask cleanupWatch
+      fileWatchCleanup <- buildFileWatcher inotify notifyFileChange repoDir
+      writeIORef fileWatchCleanupRef fileWatchCleanup
+
     gitWorkerSpec :: ProcessSpec
     gitWorkerSpec =
       buildGitWorker repoDir onMsg
 
-  -- (7)
-  Component.buildComponent
+  Component.buildComponentWithCleanup
     $ return
-    $ Capataz.supervisorSpec ("repo-file-watcher:" <> Text.pack repoDir)
-        ( set Capataz.supervisorRestartStrategyL Capataz.OneForOne
-        . set Capataz.supervisorProcessSpecListL
-            [ gitWorkerSpec
-            , syncIntervalSpec
-            ]
-        )
+    $ (
+        Capataz.supervisorSpec ("repo-file-watcher:" <> Text.pack repoDir)
+            ( set Capataz.supervisorRestartStrategyL Capataz.AllForOne
+            . set Capataz.supervisorOnFailureL (const $ onRepoWatcherFailure)
+            . set Capataz.supervisorProcessSpecListL [gitWorkerSpec, syncIntervalSpec]
+            )
+      , ("repo-file-watcher:" <> Text.pack repoDir, cleanupWatch)
+      )
 
 -- | Creates a Capataz supervision tree which contains a RepoWatcher
 -- supervisor per repository path
@@ -217,14 +233,12 @@ createRepoWatcherSystem repoPathList = do
     procList =
       loggerProcessSpec:repoProcessSpecList
 
-  Component.buildComponentWithTeardown $ mask $ \_ -> do
-    -- (8)
+  Component.buildComponentWithTeardown $ do
     capataz <- Capataz.forkCapataz
       ( set Capataz.onSystemEventL (logFn . displayShow)
       . set Capataz.supervisorProcessSpecListL procList
       )
 
-    -- (9)
     return (capataz, Capataz.getCapatazTeardown capataz)
 
 
@@ -235,6 +249,6 @@ main = do
     [] ->
       error "Expecting repository paths as inputs; got nothing"
     repoPaths ->
-      withComponent ("repo-watcher-system")
+      withComponent ("repo-watcher")
                     (createRepoWatcherSystem repoPaths)
-                    Capataz.joinCapatazThread -- (10)
+                    Capataz.joinCapatazThread

@@ -21,17 +21,22 @@ tests = testGroup
           SUT.supervisorProcessSpecListL
           [ SUT.supervisorSpec
             "tree-1"
-            ( set SUT.supervisorProcessSpecListL
-              [ SUT.workerSpecWithDefaults "1-A" (forever $ threadDelay 10001000)
-              , SUT.workerSpecWithDefaults "1-B" (forever $ threadDelay 10001000)
+            ( set
+              SUT.supervisorProcessSpecListL
+              [ SUT.workerSpecWithDefaults "1-A"
+                                           (forever $ threadDelay 10001000)
+              , SUT.workerSpecWithDefaults "1-B"
+                                           (forever $ threadDelay 10001000)
               ]
             )
           , SUT.supervisorSpec
             "tree-2"
             ( set
               SUT.supervisorProcessSpecListL
-              [ SUT.workerSpecWithDefaults "2-A" (forever $ threadDelay 10001000)
-              , SUT.workerSpecWithDefaults "2-B" (forever $ threadDelay 10001000)
+              [ SUT.workerSpecWithDefaults "2-A"
+                                           (forever $ threadDelay 10001000)
+              , SUT.workerSpecWithDefaults "2-B"
+                                           (forever $ threadDelay 10001000)
               ]
             )
           ]
@@ -91,8 +96,9 @@ tests = testGroup
             "tree-1"
             ( set SUT.supervisorIntensityL     1
             . set SUT.supervisorPeriodSecondsL 10
-            . set SUT.supervisorProcessSpecListL
-                  [SUT.workerSpecWithDefaults "failing-worker" failingAction]
+            . set
+                SUT.supervisorProcessSpecListL
+                [SUT.workerSpecWithDefaults "failing-worker" failingAction]
             )
         ]
       )
@@ -116,8 +122,9 @@ tests = testGroup
             "tree-1"
             ( set SUT.supervisorIntensityL     1
             . set SUT.supervisorPeriodSecondsL 10
-            . set SUT.supervisorProcessSpecListL
-                  [SUT.workerSpecWithDefaults "failing-worker" failingAction]
+            . set
+                SUT.supervisorProcessSpecListL
+                [SUT.workerSpecWithDefaults "failing-worker" failingAction]
             )
           , SUT.supervisorSpec
             "tree-2"

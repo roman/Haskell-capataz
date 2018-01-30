@@ -2,14 +2,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Control.Concurrent.Capataz -- (0)
+import Control.Concurrent.Capataz
     ( SupervisorRestartStrategy (..)
     , WorkerRestartStrategy (..)
     , buildWorkerOptions
     , buildWorkerOptionsWithDefaults
-    , joinCapatazThread
     , forkCapataz
     , forkWorker
+    , joinCapatazThread
     , onSystemEventL
     , set
     , supervisorRestartStrategyL
@@ -23,38 +23,30 @@ import Text.Show.Pretty           (pPrint)
 
 main :: IO ()
 main = do
-  n <- getRecord "Counter spawner"
+  n       <- getRecord "Counter spawner"
 
-  capataz <-
-    forkCapataz -- (1)
-      ( set supervisorRestartStrategyL OneForOne -- (2)
-      . set onSystemEventL pPrint                -- (3)
-      )
+  capataz <- forkCapataz -- (1)
+    (set supervisorRestartStrategyL OneForOne -- (2)
+                                              . set onSystemEventL pPrint)                -- (3)
 
   let numberWriter i a = print (i, a)
       delayMicros = 5000100
 
   _workerIdList <- forM [1 .. procNumber n] $ \i -> do
-      let
-        counterWorkerOptions =
-          buildWorkerOptions -- (4)
-            ("Worker (" <> show i <> ")")
-            (spawnNumbersProcess (numberWriter i)) -- (5)
-            (set workerRestartStrategyL Permanent) -- (6)
+    let counterWorkerOptions = buildWorkerOptions -- (4)
+          ("Worker (" <> show i <> ")")
+          (spawnNumbersProcess (numberWriter i)) -- (5)
+          (set workerRestartStrategyL Permanent) -- (6)
 
-      forkWorker -- (7)
-        counterWorkerOptions
-        capataz
+    forkWorker -- (7)
+               counterWorkerOptions capataz
 
-  let
-    workerKillerOptions =
-        buildWorkerOptionsWithDefaults -- (8)
-          "worker-killer"
-          (forever $ threadDelay delayMicros >> killNumberProcess)
+  let workerKillerOptions = buildWorkerOptionsWithDefaults -- (8)
+        "worker-killer"
+        (forever $ threadDelay delayMicros >> killNumberProcess)
 
   -- ignore returned ProcessId, as we won't use it in our example
   void $ forkWorker workerKillerOptions capataz
 
   joinCapatazThread capataz  -- (9)
-    `finally`
-    (teardown capataz >>= print) -- (10)
+                            `finally` (teardown capataz >>= print) -- (10)

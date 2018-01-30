@@ -21,7 +21,11 @@ import Control.Concurrent.Capataz.Internal.Types
 
 -- | Decorates the given @IO ()@ sub-routine with failure handling
 workerMain
-  :: ParentSupervisorEnv -> WorkerOptions -> WorkerId -> RestartCount -> IO Worker
+  :: ParentSupervisorEnv
+  -> WorkerOptions
+  -> WorkerId
+  -> RestartCount
+  -> IO Worker
 workerMain env@ParentSupervisorEnv { supervisorNotify } workerOptions@WorkerOptions { workerName, workerAction } workerId restartCount
   = do
     workerCreationTime <- getCurrentTime

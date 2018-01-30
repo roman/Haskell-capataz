@@ -293,11 +293,8 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
         [preSetupAssertion, postSetupAssertions, postTeardownAssertions]
       )
 
-    capataz <-
-      SUT.forkCapataz
-        ( SUT.set SUT.onSystemEventL (trackEvent accRef eventStream)
-        . optionModFn
-        )
+    capataz <- SUT.forkCapataz
+      (SUT.set SUT.onSystemEventL (trackEvent accRef eventStream) . optionModFn)
 
     -- We check preSetup assertions are met before we execute the setup
     -- function. This serves to test initialization of capataz instance

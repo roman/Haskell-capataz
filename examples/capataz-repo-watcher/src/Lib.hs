@@ -1,31 +1,30 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Lib where
 
 import qualified Prelude
-import RIO
+import           RIO
 import qualified RIO.Logger as Logger
 
 import Control.Monad.Component (ComponentM)
 
-import Control.Concurrent (threadDelay)
+import Control.Concurrent         (threadDelay)
 import Control.Concurrent.Capataz (Capataz, ProcessSpec)
-import Control.Concurrent.STM (orElse)
+import Control.Concurrent.STM     (orElse)
 
 import System.Environment (getArgs)
 
 import qualified RIO.Text as Text
 
-import qualified Control.Monad.Component as Component
+import qualified Control.Concurrent.Capataz   as Capataz
 import qualified Control.Concurrent.STM.TChan as TChan
-import qualified Control.Concurrent.Capataz as Capataz
+import qualified Control.Monad.Component      as Component
 
 import qualified Shelly
 import qualified System.INotify as INotify
@@ -53,8 +52,7 @@ withComponent :: Text -> ComponentM a -> (a -> IO ()) -> IO ()
 withComponent !appDesc !buildComponent !f = mask $ \restore -> do
   component <- Component.runComponentM appDesc buildComponent
   (restore . f $ Component.fromComponent component)
-      `finally`
-      (Component.teardown component >>= Prelude.print)
+    `finally` (Component.teardown component >>= Prelude.print)
 
 --------------------------------------------------------------------------------
 
@@ -72,14 +70,16 @@ buildFileWatcher
   -> FilePath -- ^ Directory where changes are tracked
   -> IO (IO ())
 buildFileWatcher inotify notifyFileChange !dir = do
-  fileWatch <- INotify.addWatch inotify [INotify.CloseWrite, INotify.Modify] dir $ \ev -> do
-    case ev of
-      INotify.Modified {INotify.isDirectory, INotify.maybeFilePath}
-        -- we ignore all changes that happen to a Directory
-        | isDirectory -> return ()
-        | otherwise ->
-          maybe (return ()) notifyFileChange maybeFilePath
-      _ -> return ()
+  fileWatch <-
+    INotify.addWatch inotify [INotify.CloseWrite, INotify.Modify] dir $ \ev ->
+
+      case ev of
+        INotify.Modified { INotify.isDirectory, INotify.maybeFilePath }
+          |
+          -- we ignore all changes that happen to a Directory
+            isDirectory -> return ()
+          | otherwise   -> maybe (return ()) notifyFileChange maybeFilePath
+        _ -> return ()
 
   return (INotify.removeWatch fileWatch)
 
@@ -92,16 +92,16 @@ buildIntervalWorker
 buildIntervalWorker !workerName !delaySeconds = Component.buildComponent $ do
   intervalChan <- TChan.newTChanIO
 
-  let
-    triggerEvent :: IO ()
-    triggerEvent = forever $ do
-      threadDelay (delaySeconds * 1000100)
-      atomically $ TChan.writeTChan intervalChan ()
+  let triggerEvent :: IO ()
+      triggerEvent = forever $ do
+        threadDelay (delaySeconds * 1000100)
+        atomically $ TChan.writeTChan intervalChan ()
 
-    intervalSpec :: Capataz.ProcessSpec
-    intervalSpec =
-      Capataz.workerSpec workerName triggerEvent
-         (set Capataz.workerRestartStrategyL Capataz.Permanent)
+      intervalSpec :: Capataz.ProcessSpec
+      intervalSpec = Capataz.workerSpec
+        workerName
+        triggerEvent
+        (set Capataz.workerRestartStrategyL Capataz.Permanent)
 
   return (TChan.readTChan intervalChan, intervalSpec)
 
@@ -117,51 +117,53 @@ buildGitWorker !repoPath !getWatcherMsg =
   let
     executeCmd :: IO ()
     executeCmd = forever $ do
-        msg <- getWatcherMsg
-        case msg of
-          FileChanged {} ->
-            Shelly.shelly
-              $ Shelly.chdir (Shelly.fromText $ Text.pack repoPath)
-              $ do Shelly.run_ "git" ["add", "."]
-                   Shelly.run_ "git" ["commit", "-m", "file changes"]
+      msg <- getWatcherMsg
+      case msg of
+        FileChanged{} ->
+          Shelly.shelly
+            $ Shelly.chdir (Shelly.fromText $ Text.pack repoPath)
+            $ do
+                Shelly.run_ "git" ["add", "."]
+                Shelly.run_ "git" ["commit", "-m", "file changes"]
 
-          SyncRequested -> do
-            Shelly.shelly
-              $ Shelly.chdir (Shelly.fromText $ Text.pack repoPath)
-              $ do Shelly.run_ "git" ["pull", "-r", "origin", "master"]
-                   Shelly.run_ "git" ["push", "origin", "master"]
+        SyncRequested ->
+          Shelly.shelly
+            $ Shelly.chdir (Shelly.fromText $ Text.pack repoPath)
+            $ do
+                Shelly.run_ "git" ["pull", "-r", "origin", "master"]
+                Shelly.run_ "git" ["push", "origin", "master"]
   in
-    Capataz.workerSpec "git-worker" executeCmd
-      (set Capataz.workerRestartStrategyL Capataz.Permanent)
+    Capataz.workerSpec "git-worker"
+                       executeCmd
+                       (set Capataz.workerRestartStrategyL Capataz.Permanent)
 
 -- | Returns both an utility function for logging and a "ProcessSpec" to
 -- supervise a thread that receives log messages and displays them to stdout.
 buildEventLogger :: ComponentM (DisplayBuilder -> IO (), ProcessSpec)
 buildEventLogger = Component.buildComponent $ do
   logChan <- TChan.newTChanIO
-  let
-    logOptions :: Logger.LogOptions
-    logOptions =
-      Logger.LogOptions
-      {
-        Logger.logMinLevel = Logger.LevelDebug
-      , Logger.logVerboseFormat = True
-      , Logger.logTerminal = True
-      , Logger.logUseTime = True
-      , Logger.logUseColor = True
-      , Logger.logUseUnicode = True
-      }
+  let logOptions :: Logger.LogOptions
+      logOptions = Logger.LogOptions
+        { Logger.logMinLevel      = Logger.LevelDebug
+        , Logger.logVerboseFormat = True
+        , Logger.logTerminal      = True
+        , Logger.logUseTime       = True
+        , Logger.logUseColor      = True
+        , Logger.logUseUnicode    = True
+        }
 
-    logLoop :: IO ()
-    logLoop = Logger.withStickyLogger logOptions $ \logger -> do
-      flip runReaderT logger $ forever $ do
-        bs <- liftIO $ atomically $ TChan.readTChan logChan
-        Logger.logDebug bs
+      logLoop :: IO ()
+      logLoop = Logger.withStickyLogger logOptions $ \logger ->
+        flip runReaderT logger $ forever $ do
+          bs <- liftIO $ atomically $ TChan.readTChan logChan
+          Logger.logDebug bs
 
-  return (
-      atomically . TChan.writeTChan logChan
-    , Capataz.workerSpec "logger" logLoop
-        (set Capataz.workerRestartStrategyL Capataz.Permanent)
+  return
+    ( atomically . TChan.writeTChan logChan
+    , Capataz.workerSpec
+      "logger"
+      logLoop
+      (set Capataz.workerRestartStrategyL Capataz.Permanent)
     )
 
 -- | Creates a RepoWatcher supervisor, which is composed by:
@@ -176,9 +178,9 @@ buildRepoFileWatcher :: INotify.INotify -> FilePath -> ComponentM ProcessSpec
 buildRepoFileWatcher !inotify !repoDir = do
   -- We create functions that workers will use to communicate between each
   -- other
-  changesChan <- liftIO $ TChan.newTChanIO
+  changesChan <- liftIO TChan.newTChanIO
   let notifyFileChange = atomically . TChan.writeTChan changesChan
-      onFileChange = TChan.readTChan changesChan
+      onFileChange     = TChan.readTChan changesChan
 
   fileWatchCleanupRef <- liftIO $ do
     fileWatchCleanup <- buildFileWatcher inotify notifyFileChange repoDir
@@ -191,12 +193,11 @@ buildRepoFileWatcher !inotify !repoDir = do
     onMsg :: IO WatcherMsg
     onMsg =
       atomically
-      $ (FileChanged <$> onFileChange)
-      `orElse` (onSync $> SyncRequested)
+        $        (FileChanged <$> onFileChange)
+        `orElse` (onSync $> SyncRequested)
 
     cleanupWatch :: IO ()
-    cleanupWatch =
-      join (readIORef fileWatchCleanupRef)
+    cleanupWatch = join (readIORef fileWatchCleanupRef)
 
     -- We restart the inotify watch when supervisor fails; We mask to make sure
     -- that our ref is not corrupted with async exceptions
@@ -207,35 +208,32 @@ buildRepoFileWatcher !inotify !repoDir = do
       writeIORef fileWatchCleanupRef fileWatchCleanup
 
     gitWorkerSpec :: ProcessSpec
-    gitWorkerSpec =
-      buildGitWorker repoDir onMsg
+    gitWorkerSpec = buildGitWorker repoDir onMsg
 
-  Component.buildComponentWithCleanup
-    $ return
-    $ (
-        Capataz.supervisorSpec ("repo-file-watcher:" <> Text.pack repoDir)
-            ( set Capataz.supervisorRestartStrategyL Capataz.AllForOne
-            . set Capataz.supervisorOnFailureL (const $ onRepoWatcherFailure)
-            . set Capataz.supervisorProcessSpecListL [gitWorkerSpec, syncIntervalSpec]
-            )
-      , ("repo-file-watcher:" <> Text.pack repoDir, cleanupWatch)
+  Component.buildComponentWithCleanup $ return
+    ( Capataz.supervisorSpec
+      ("repo-file-watcher:" <> Text.pack repoDir)
+      ( set Capataz.supervisorRestartStrategyL Capataz.AllForOne
+      . set Capataz.supervisorOnFailureL       (const $ onRepoWatcherFailure)
+      . set Capataz.supervisorProcessSpecListL
+            [gitWorkerSpec, syncIntervalSpec]
       )
+    , ("repo-file-watcher:" <> Text.pack repoDir, cleanupWatch)
+    )
 
 -- | Creates a Capataz supervision tree which contains a RepoWatcher
 -- supervisor per repository path
 createRepoWatcherSystem :: [FilePath] -> ComponentM Capataz
 createRepoWatcherSystem repoPathList = do
   (logFn, loggerProcessSpec) <- buildEventLogger
-  inotify <- buildINotify
-  repoProcessSpecList <- mapM (buildRepoFileWatcher inotify) repoPathList
+  inotify                    <- buildINotify
+  repoProcessSpecList        <- mapM (buildRepoFileWatcher inotify) repoPathList
 
-  let
-    procList =
-      loggerProcessSpec:repoProcessSpecList
+  let procList = loggerProcessSpec : repoProcessSpecList
 
   Component.buildComponentWithTeardown $ do
     capataz <- Capataz.forkCapataz
-      ( set Capataz.onSystemEventL (logFn . displayShow)
+      ( set Capataz.onSystemEventL             (logFn . displayShow)
       . set Capataz.supervisorProcessSpecListL procList
       )
 
@@ -246,9 +244,7 @@ main :: IO ()
 main = do
   input <- getArgs
   case input of
-    [] ->
-      error "Expecting repository paths as inputs; got nothing"
-    repoPaths ->
-      withComponent ("repo-watcher")
-                    (createRepoWatcherSystem repoPaths)
-                    Capataz.joinCapatazThread
+    []        -> error "Expecting repository paths as inputs; got nothing"
+    repoPaths -> withComponent "repo-watcher"
+                               (createRepoWatcherSystem repoPaths)
+                               Capataz.joinCapatazThread

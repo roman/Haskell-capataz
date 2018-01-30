@@ -81,6 +81,6 @@ where
 
 import qualified Control.Concurrent.Capataz.Internal.Core
 import qualified Control.Concurrent.Capataz.Internal.Types
+import           Control.Concurrent.Capataz.Lens           ((&), (.~))
 import qualified Control.Concurrent.Capataz.Lens
 import qualified Control.Teardown
-import Control.Concurrent.Capataz.Lens ((.~), (&))

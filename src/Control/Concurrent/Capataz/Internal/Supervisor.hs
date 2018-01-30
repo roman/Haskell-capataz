@@ -90,8 +90,10 @@ handleMonitorEvent env monitorEv = do
 handleControlAction :: SupervisorEnv -> ControlAction -> IO Bool
 handleControlAction env controlAction = case controlAction of
   ForkWorker { workerOptions, returnWorkerId } -> do
-    worker@Worker { workerId } <-
-      Worker.forkWorker (Util.toParentSupervisorEnv env) workerOptions Nothing
+    worker@Worker { workerId } <- Worker.forkWorker
+      (Util.toParentSupervisorEnv env)
+      workerOptions
+      Nothing
     Util.appendProcessToMap env (WorkerProcess worker)
     returnWorkerId workerId
     return True
@@ -241,7 +243,10 @@ supervisorMain parentEnv@ParentSupervisorEnv { notifyEvent } supervisorOptions@S
       supervisorProcessSpecList
       ( \processSpec -> case processSpec of
         WorkerSpec workerOptions -> do
-          worker <- Worker.forkWorker (Util.toParentSupervisorEnv supervisorEnv) workerOptions Nothing
+          worker <- Worker.forkWorker
+            (Util.toParentSupervisorEnv supervisorEnv)
+            workerOptions
+            Nothing
           Util.appendProcessToMap supervisorEnv (WorkerProcess worker)
 
         SupervisorSpec childSupervisorOptions -> do
@@ -409,9 +414,10 @@ forceRestartProcess env process = do
 restartWorker
   :: SupervisorEnv -> WorkerOptions -> WorkerId -> RestartCount -> IO Process
 restartWorker supervisorEnv workerOptions workerId restartCount =
-  WorkerProcess <$> Worker.forkWorker (Util.toParentSupervisorEnv supervisorEnv)
-                                      workerOptions
-                                      (Just (workerId, restartCount))
+  WorkerProcess <$> Worker.forkWorker
+    (Util.toParentSupervisorEnv supervisorEnv)
+    workerOptions
+    (Just (workerId, restartCount))
 
 -- | Starts a new Supervisor thread taking into account an existing
 -- "SupervisorId" and keeping a "RestartCount" to manage the parent Supervisor

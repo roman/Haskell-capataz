@@ -1,8 +1,9 @@
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes        #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RankNTypes            #-}
+
 {-| This module contains:
 
 * Functions exported on the public API
@@ -26,8 +27,7 @@ where
 import Protolude
 
 import Control.Concurrent.MVar (newEmptyMVar, takeMVar)
-import Control.Teardown        (newTeardown)
-import Control.Teardown        (Teardown)
+import Control.Teardown        (Teardown, newTeardown)
 import Data.Time.Clock         (getCurrentTime)
 
 import qualified Data.UUID.V4 as UUID (nextRandom)
@@ -46,7 +46,7 @@ class HasSupervisor a where
   getSupervisor :: a -> Supervisor
 
 instance HasSupervisor Capataz where
-  getSupervisor (Capataz {capatazSupervisor}) = capatazSupervisor
+  getSupervisor Capataz {capatazSupervisor} = capatazSupervisor
 
 instance HasSupervisor Supervisor where
   getSupervisor = identity
@@ -60,7 +60,8 @@ forkCapataz modOptionsFn = do
   capatazId    <- UUID.nextRandom
   supervisorId <- UUID.nextRandom
   let
-    capatazOptions@CapatazOptions { notifyEvent } = defCapatazOptions modOptionsFn
+    capatazOptions@CapatazOptions { notifyEvent } =
+      defCapatazOptions modOptionsFn
     supervisorOptions@SupervisorOptions { supervisorName } =
       Util.capatazOptionsToSupervisorOptions capatazOptions
     parentSupervisorEnv = ParentSupervisorEnv
@@ -92,7 +93,6 @@ forkCapataz modOptionsFn = do
 
           ControlAction{} ->
             panic "Capataz received a ControlAction message; bad implementation"
-
       , notifyEvent
       }
 
@@ -187,7 +187,7 @@ terminateProcess processTerminationReason processId supervisor = do
 joinCapatazThread :: Capataz -> IO ()
 joinCapatazThread Capataz { capatazSupervisor } =
   let Supervisor { supervisorAsync } = capatazSupervisor
-  in wait supervisorAsync
+  in  wait supervisorAsync
 
 -- | Gets "Teardown" record of this capataz system.
 getCapatazTeardown :: Capataz -> Teardown
@@ -198,8 +198,7 @@ getCapatazTeardown Capataz { capatazTeardown } = capatazTeardown
 -- NOTE: There is no way to get the "Async" value of the root supervisor; this
 -- is to avoid error scenarios.
 getSupervisorAsync :: Supervisor -> Async ()
-getSupervisorAsync Supervisor { supervisorAsync } =
-  supervisorAsync
+getSupervisorAsync Supervisor { supervisorAsync } = supervisorAsync
 
 -- | Gets the process identifier of a Supervisor; normally used for termination.
 getSupervisorProcessId :: Supervisor -> ProcessId

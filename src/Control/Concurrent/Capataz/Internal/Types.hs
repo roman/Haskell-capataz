@@ -2,19 +2,19 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
-{-# LANGUAGE OverloadedStrings     #-}
+
 {-| This module contains all the types used across all the other modules -}
 module Control.Concurrent.Capataz.Internal.Types where
 
 import Protolude
 
-import Control.Concurrent.STM.TVar   (TVar)
-import Control.Teardown              (ITeardown (..), Teardown)
-import Data.Default                  (Default (..))
-import Data.HashMap.Strict           (HashMap)
-import Data.IORef                    (IORef)
-import Data.Time.Clock               (NominalDiffTime, UTCTime)
-import Data.UUID                     (UUID)
+import Control.Concurrent.STM.TVar (TVar)
+import Control.Teardown            (ITeardown (..), Teardown)
+import Data.Default                (Default (..))
+import Data.HashMap.Strict         (HashMap)
+import Data.IORef                  (IORef)
+import Data.Time.Clock             (NominalDiffTime, UTCTime)
+import Data.UUID                   (UUID)
 
 type CapatazId = UUID
 type WorkerId = UUID
@@ -533,18 +533,16 @@ defCapatazOptions
   :: (CapatazOptions -> CapatazOptions) -- ^ Function to modify root supervisor
                                         -- options
   -> CapatazOptions
-defCapatazOptions modFn =
-  modFn CapatazOptions
-    {
-      supervisorIntensity               = 2
-    , supervisorPeriodSeconds           = 5
-    , supervisorRestartStrategy         = def
-    , supervisorProcessSpecList         = []
-    , supervisorProcessTerminationOrder = OldestFirst
-    , supervisorOnIntensityReached      = return ()
-    , supervisorOnFailure               = const $ return ()
-    , notifyEvent                       = const $ return ()
-    }
+defCapatazOptions modFn = modFn CapatazOptions
+  { supervisorIntensity               = 2
+  , supervisorPeriodSeconds           = 5
+  , supervisorRestartStrategy         = def
+  , supervisorProcessSpecList         = []
+  , supervisorProcessTerminationOrder = OldestFirst
+  , supervisorOnIntensityReached      = return ()
+  , supervisorOnFailure               = const $ return ()
+  , notifyEvent                       = const $ return ()
+  }
 
 -- | Builds a "ProcessSpec" record for a supervisor process with defaults from
 -- "supervisorSpecWithDefaults". This function allows overrides of these
@@ -570,9 +568,8 @@ supervisorSpec sName modFn =
 --
 supervisorSpecWithDefaults
   :: SupervisorName -- ^ Name used for telemetry purposes
-  ->  ProcessSpec
-supervisorSpecWithDefaults sName =
-  supervisorSpec sName identity
+  -> ProcessSpec
+supervisorSpecWithDefaults sName = supervisorSpec sName identity
 {-# INLINE supervisorSpecWithDefaults #-}
 
 -- | Builds a "ProcessSpec" record for a worker process with defaults from
@@ -583,7 +580,7 @@ supervisorSpecWithDefaults sName =
 --
 workerSpec
   :: WorkerName -- ^ Name used for telemetry purposes
-  -> (IO ()) -- ^ IO sub-routine to be supervised
+  -> IO () -- ^ IO sub-routine to be supervised
   -> (WorkerOptions -> WorkerOptions) -- ^ Function to modify default worker
                                       -- options
   -> ProcessSpec
@@ -598,10 +595,9 @@ workerSpec wName wAction modFn =
 --
 workerSpecWithDefaults
   :: WorkerName -- ^ Name used for telemetry purposes
-  -> (IO ()) -- ^ IO sub-routine to be supervised
+  -> IO () -- ^ IO sub-routine to be supervised
   -> ProcessSpec
-workerSpecWithDefaults wName wAction =
-  workerSpec wName wAction identity
+workerSpecWithDefaults wName wAction = workerSpec wName wAction identity
 {-# INLINE workerSpecWithDefaults #-}
 
 -- | Builds a "SupervisorOptions" record with defaults from
@@ -641,8 +637,7 @@ buildSupervisorOptions supervisorName modFn = modFn SupervisorOptions
 buildSupervisorOptionsWithDefaults
   :: SupervisorName -- ^ Name used for telemetry purposes
   -> SupervisorOptions
-buildSupervisorOptionsWithDefaults =
-  flip buildSupervisorOptions identity
+buildSupervisorOptionsWithDefaults = flip buildSupervisorOptions identity
 {-# INLINE buildSupervisorOptionsWithDefaults #-}
 
 -- | Builds a "WorkerOptions" record, keeps the defaults from
@@ -653,7 +648,7 @@ buildSupervisorOptionsWithDefaults =
 --
 buildWorkerOptions
   :: WorkerName -- ^ Name used for telemetry purposes
-  -> (IO ()) -- ^ IO sub-routine to be supervised
+  -> IO () -- ^ IO sub-routine to be supervised
   -> (WorkerOptions -> WorkerOptions) -- ^ Function to modify default worker
                                       -- options
   -> WorkerOptions
@@ -687,7 +682,7 @@ buildWorkerOptions workerName workerAction f = f WorkerOptions
 --
 buildWorkerOptionsWithDefaults
   :: WorkerName -- ^ Name used for telemetry purposes
-  -> (IO ()) -- ^ IO sub-routine to be supervised
+  -> IO () -- ^ IO sub-routine to be supervised
   -> WorkerOptions
 buildWorkerOptionsWithDefaults wName wAction =
   buildWorkerOptions wName wAction identity

@@ -8,4 +8,4 @@
 * Guide
   * [Supervisor Theory](supervisor-theory.md)
 
-* [Developer Guidelines](developer-guidelines.md)
+* [Developer Guidelines](CONTRIBUTING.md)

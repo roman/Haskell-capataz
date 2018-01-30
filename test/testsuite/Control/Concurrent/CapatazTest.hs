@@ -288,8 +288,8 @@ tests = testGroup
                     capataz
 
                   void $ SUT.terminateProcess "testing onFailure callback"
-                                       workerId
-                                       capataz
+                                              workerId
+                                              capataz
                 )
                 [assertEventType ProcessTerminated]
                 []
@@ -350,9 +350,10 @@ tests = testGroup
                     )
                     capataz
 
-                  void $ SUT.terminateProcess "testing workerOnTermination callback"
-                                       workerId
-                                       capataz
+                  void $ SUT.terminateProcess
+                    "testing workerOnTermination callback"
+                    workerId
+                    capataz
                 )
                 [ andP
                   [ assertEventType ProcessCallbackExecuted
@@ -380,9 +381,10 @@ tests = testGroup
                     )
                     capataz
 
-                  void $ SUT.terminateProcess "testing workerOnTermination callback"
-                                       workerId
-                                       capataz
+                  void $ SUT.terminateProcess
+                    "testing workerOnTermination callback"
+                    workerId
+                    capataz
                 )
                 [ andP
                   [ assertEventType ProcessCallbackExecuted
@@ -447,9 +449,10 @@ tests = testGroup
                     )
                     capataz
 
-                  void $ SUT.terminateProcess "testing workerOnTermination callback"
-                                       workerId
-                                       capataz
+                  void $ SUT.terminateProcess
+                    "testing workerOnTermination callback"
+                    workerId
+                    capataz
                 )
                 [ andP
                   [ assertEventType ProcessCallbackExecuted
@@ -594,7 +597,9 @@ tests = testGroup
                 (set SUT.workerRestartStrategyL SUT.Permanent)
               )
               capataz
-            void $ SUT.terminateProcess "testing termination (1)" workerId capataz
+            void $ SUT.terminateProcess "testing termination (1)"
+                                        workerId
+                                        capataz
           )
           [assertEventType ProcessTerminated, assertEventType ProcessRestarted]
           []
@@ -621,12 +626,12 @@ tests = testGroup
                     capataz
 
                   void $ SUT.terminateProcess "testing termination (1)"
-                                       workerId
-                                       capataz
+                                              workerId
+                                              capataz
                   waitWorkerTermination 1
                   void $ SUT.terminateProcess "testing termination (2)"
-                                       workerId
-                                       capataz
+                                              workerId
+                                              capataz
                   waitWorkerTermination 2
                 )
                 [ assertEventType ProcessTerminated

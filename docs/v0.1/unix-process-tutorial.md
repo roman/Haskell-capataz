@@ -230,7 +230,7 @@ main = do
   n <- getRecord "Counter spawner"
 
   capataz <-
-    forkCapataz -- (1)
+    forkCapataz "unix-process-capataz" -- (1)
       ( set supervisorRestartStrategyL OneForOne -- (2)
       . set onSystemEventL pPrint                -- (3)
       )

@@ -56,7 +56,7 @@ tests = testGroup
           , assertSupervisorStatusChanged SUT.Initializing SUT.Running
           ]
         , andP
-          [ assertSupervisorName "capataz-root-supervisor"
+          [ assertRootSupervisor
           , assertEventType SupervisorStatusChanged
           , assertSupervisorStatusChanged SUT.Initializing SUT.Running
           ]
@@ -64,24 +64,19 @@ tests = testGroup
         (const $ return ())
         []
         [ andP
-          [ assertSupervisorName "capataz-root-supervisor"
+          [ assertRootSupervisor
           , assertEventType SupervisorStatusChanged
           , assertSupervisorStatusChanged SUT.Running SUT.Halting
           ]
-        , andP
-          [ assertSupervisorName "capataz-root-supervisor"
-          , assertEventType ProcessTerminationStarted
-          ]
+        , andP [assertRootSupervisor, assertEventType ProcessTerminationStarted]
         , andP [assertSupervisorName "tree-1", assertWorkerTerminated "1-A"]
         , andP [assertSupervisorName "tree-1", assertWorkerTerminated "1-B"]
         , andP [assertSupervisorName "tree-2", assertWorkerTerminated "2-A"]
         , andP [assertSupervisorName "tree-2", assertWorkerTerminated "2-B"]
         , andP
-          [ assertSupervisorName "capataz-root-supervisor"
-          , assertEventType ProcessTerminationFinished
-          ]
+          [assertRootSupervisor, assertEventType ProcessTerminationFinished]
         , andP
-          [ assertSupervisorName "capataz-root-supervisor"
+          [ assertRootSupervisor
           , assertEventType SupervisorStatusChanged
           , assertSupervisorStatusChanged SUT.Halting SUT.Halted
           ]

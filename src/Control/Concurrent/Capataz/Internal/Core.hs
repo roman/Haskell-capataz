@@ -55,13 +55,13 @@ instance HasSupervisor Supervisor where
 -- "Teardown" to shut down the system. The root supervisor monitors failures on
 -- process threads defined with "supervisorProcessSpecList" or created
 -- dynamically using "forkWorker" or "forkSupervisor".
-forkCapataz :: (CapatazOptions -> CapatazOptions) -> IO Capataz
-forkCapataz modOptionsFn = do
+forkCapataz :: Text -> (CapatazOptions -> CapatazOptions) -> IO Capataz
+forkCapataz capatazName modOptionsFn = do
   capatazId    <- UUID.nextRandom
   supervisorId <- UUID.nextRandom
   let
     capatazOptions@CapatazOptions { notifyEvent } =
-      defCapatazOptions modOptionsFn
+      defCapatazOptions capatazName modOptionsFn
     supervisorOptions@SupervisorOptions { supervisorName } =
       Util.capatazOptionsToSupervisorOptions capatazOptions
     parentSupervisorEnv = ParentSupervisorEnv

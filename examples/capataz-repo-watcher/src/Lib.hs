@@ -214,7 +214,7 @@ buildRepoFileWatcher !inotify !repoDir = do
     ( Capataz.supervisorSpec
       ("repo-file-watcher:" <> Text.pack repoDir)
       ( set Capataz.supervisorRestartStrategyL Capataz.AllForOne
-      . set Capataz.supervisorOnFailureL       (const $ onRepoWatcherFailure)
+      . set Capataz.supervisorOnFailureL       (const onRepoWatcherFailure)
       . set Capataz.supervisorProcessSpecListL
             [gitWorkerSpec, syncIntervalSpec]
       )
@@ -233,6 +233,7 @@ createRepoWatcherSystem repoPathList = do
 
   Component.buildComponentWithTeardown $ do
     capataz <- Capataz.forkCapataz
+      "repo-watcher-capataz"
       ( set Capataz.onSystemEventL             (logFn . displayShow)
       . set Capataz.supervisorProcessSpecListL procList
       )

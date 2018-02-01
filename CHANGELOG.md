@@ -35,6 +35,7 @@ The change log is available [on GitHub][2].
   documentation
 * Add capataz-repo-watcher example to showcase static supervision trees
 * Update capataz-simple-example unix-process example
+* `forkCapataz` signature now requires name for root supervisor
 
 ## v0.0.0.2
 

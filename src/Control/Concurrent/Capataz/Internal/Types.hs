@@ -212,7 +212,8 @@ instance NFData SupervisorRestartStrategy
 --
 data CapatazOptions
   = CapatazOptions {
-    supervisorIntensity               :: !Int
+    supervisorName                    :: !SupervisorName
+  , supervisorIntensity               :: !Int
   , supervisorPeriodSeconds           :: !NominalDiffTime
   , supervisorRestartStrategy         :: !SupervisorRestartStrategy
   , supervisorProcessSpecList         :: ![ProcessSpec]
@@ -530,11 +531,12 @@ data SupervisorEnv
 -- This function is intended to be used in combination with "forkCapataz".
 --
 defCapatazOptions
-  :: (CapatazOptions -> CapatazOptions) -- ^ Function to modify root supervisor
-                                        -- options
+  :: Text
+  -> (CapatazOptions -> CapatazOptions) -- ^ Function to modify root supervisor
   -> CapatazOptions
-defCapatazOptions modFn = modFn CapatazOptions
-  { supervisorIntensity               = 2
+defCapatazOptions supervisorName modFn = modFn CapatazOptions
+  { supervisorName
+  , supervisorIntensity               = 2
   , supervisorPeriodSeconds           = 5
   , supervisorRestartStrategy         = def
   , supervisorProcessSpecList         = []

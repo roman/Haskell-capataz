@@ -209,6 +209,13 @@ assertCapatazFailedWith :: Text -> SUT.CapatazEvent -> Bool
 assertCapatazFailedWith errorName =
   andP [assertEventType CapatazFailed, assertErrorType errorName]
 
+rootSupervisorName :: Text
+rootSupervisorName = "capataz-root-supervisor"
+
+assertRootSupervisor :: SUT.CapatazEvent -> Bool
+assertRootSupervisor = assertSupervisorName rootSupervisorName
+
+
 --------------------------------------------------------------------------------
 
 -- | Exception used to test failures inside Worker sub-routines
@@ -294,6 +301,7 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
       )
 
     capataz <- SUT.forkCapataz
+      rootSupervisorName
       (SUT.set SUT.onSystemEventL (trackEvent accRef eventStream) . optionModFn)
 
     -- We check preSetup assertions are met before we execute the setup

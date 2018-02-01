@@ -337,7 +337,7 @@ createRepoWatcherSystem repoPathList = do
 
   Component.buildComponentWithTeardown $ mask $ \_ -> do
     -- (12)
-    capataz <- Capataz.forkCapataz
+    capataz <- Capataz.forkCapataz "repo-watcher-capataz"
       ( set Capataz.onSystemEventL (logFn . displayShow)
       . set Capataz.supervisorProcessSpecListL procList
       )

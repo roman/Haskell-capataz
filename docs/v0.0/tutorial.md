@@ -1,7 +1,9 @@
 # Basic Tutorial using Unix Processes
 
 > NOTE: This tutorial is for version v0.0.0.2 of the capataz library, follow
-> [this link]() to read this tutorial with the newest version
+> [this
+> link](https://romanandreg.gitbooks.io/capataz/content/v0.1/unix-process-tutorial.md)
+> to read this tutorial with the newest version
 
 In this tutorial, we will build a small CLI application that spawns processes through Haskell's Unix Process API. We will keep all our threads running smoothly despite having one of the threads killing the spawned Unix processes through Unix `SIGTERM` signals.
 

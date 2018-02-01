@@ -8,7 +8,7 @@
 * [Documentation](#documentation)
 * [Development](#development)
 
-## Raison d'etre
+## Raison d'être
 
 As time progresses, I've come to love developing concurrent applications in
 Haskell, its API (STM, MVars, etc.) and light threading RTS bring a lot to the
@@ -29,16 +29,16 @@ provides a simple Supervisor API.
 This library is intended to be a drop-in replacement to `forkIO` invocations
 throughout your codebase, the difference being, you'll need to do a bit more of
 setup specifying supervision rules, and also pass along a reference of a
-capataz descriptor to every thread fork.
+supervisor for every thread you fork.
 
 ### Why not [distributed-process](https://hackage.haskell.org/package/distributed-process)?
 
 `distributed-process` is an impressive library, and brings many great utilities
-if you need to develop applications that are reliable. However, it is a
-heavyweight solution that will enforce serious changes to your application. It
-also optimizes its implementation around the *distributed* part of its name.
-This library is intended to provide some benefits of `distributed-process` ,
-without the baggage.
+if you need to develop applications that need to be distributed and reliable.
+However, it is a heavyweight solution that will enforce serious changes to your
+application. This library is intended to provide the reliability benefits of
+`distributed-process`, without the constraints imposed by the *distributed*
+part.
 
 ### Why not a complete actor system?
 
@@ -91,12 +91,15 @@ dependencies:
 ## Development
 
 [![Build Status](https://travis-ci.org/roman/Haskell-capataz.svg?branch=master)](https://travis-ci.org/roman/Haskell-capataz)
-[![Github](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.0.0.2.svg)](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.0.0.2.svg)
+[![Github](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.1.0.0.svg)](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.1.0.0.svg)
 [![Hackage Dependencies](https://img.shields.io/hackage-deps/v/capataz.svg)](http://packdeps.haskellers.com/feed?needle=capataz)
 
 Follow the [developer guidelines](https://romanandreg.gitbooks.io/capataz/content/developer-guidelines.html)
 
-## In next release
+## In future releases
 
-* Add support for supervising supervisors
+* Replace Protolude in favor of RIO
+* Documentation of performance analysis
+* Documentation improvements
+* capataz-dashboard package that provides web-ui with Supervisor statistics
 * Ensure unit tests always finish on all concurrent scenarios (dejafu experiment)

@@ -1,10 +1,12 @@
 out/bin/*
+out/profiled/*
 tools/bin/*
 tmp/*
 target/*
 .make/*
 .tasty-rerun-log
 **/.stack-work/*
+**/.stack-work_*
 *.cabal
 /tutorial.md
 .dir-locals.el

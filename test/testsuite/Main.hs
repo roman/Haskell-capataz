@@ -7,12 +7,15 @@ module Main where
 
 import Protolude
 
-import Control.Concurrent.CapatazTest
-import Test.Tasty                     (defaultMainWithIngredients, testGroup)
-import Test.Tasty.Ingredients.Rerun   (rerunningTests)
-import Test.Tasty.Runners             (consoleTestReporter, listingTests)
+import qualified Control.Concurrent.Capataz.SupervisorTest as Supervisor
+import qualified Control.Concurrent.CapatazTest            as Capataz
+import           Test.Tasty
+    (defaultMainWithIngredients, testGroup)
+import           Test.Tasty.Ingredients.Rerun              (rerunningTests)
+import           Test.Tasty.Runners
+    (consoleTestReporter, listingTests)
 
 main :: IO ()
 main = defaultMainWithIngredients
   [rerunningTests [listingTests, consoleTestReporter]]
-  (testGroup "capataz" tests)
+  (testGroup "capataz" [Capataz.tests, Supervisor.tests])

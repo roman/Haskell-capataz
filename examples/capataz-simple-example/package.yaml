@@ -1,4 +1,4 @@
-name: capataz-example
+name: capataz-simple-example
 version: '0.0.0.1'
 category: TODO
 author: Roman Gonzalez
@@ -29,20 +29,16 @@ executables:
     source-dirs: src/example1
     ghc-options:
     - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
     - -O2
     dependencies:
     - async
-    - capataz-example
+    - capataz-simple-example
   example2:
     main: Main.hs
     source-dirs: src/example2
     ghc-options:
     - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
     - -O2
     dependencies:
     - capataz
-    - capataz-example
+    - capataz-simple-example

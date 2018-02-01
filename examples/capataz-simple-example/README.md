@@ -1,4 +1,4 @@
-# capataz-example
+# capataz-simple-example
 
 This is an example that showcases how the `capataz` API works
 

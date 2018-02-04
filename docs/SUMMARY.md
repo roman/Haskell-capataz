@@ -7,6 +7,7 @@
 
 * How-to
   * [Create a Dynamic Worker](how-to/dynamic-worker.md)
+  * [Create a Dynamic Supervisor](how-to/dynamic-supervisor.md)
 
 * Guide
   * [Supervisor Theory](supervisor-theory.md)

@@ -94,7 +94,7 @@ dependencies:
 [![Github](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.1.0.0.svg)](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.1.0.0.svg)
 [![Hackage Dependencies](https://img.shields.io/hackage-deps/v/capataz.svg)](http://packdeps.haskellers.com/feed?needle=capataz)
 
-Follow the [developer guidelines](https://romanandreg.gitbooks.io/capataz/content/developer-guidelines.html)
+Follow the [developer guidelines](https://romanandreg.gitbooks.io/capataz/content/CONTRIBUTING.html)
 
 ## In future releases
 

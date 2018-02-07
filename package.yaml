@@ -1,5 +1,5 @@
 name: capataz
-version: '0.1.0.0'
+version: '0.1.0.1'
 synopsis: OTP-like supervision trees in Haskell
 description: |
   `capataz` enhances the reliability of your concurrent applications by offering
@@ -40,7 +40,7 @@ ghc-options:
 
 dependencies:
 - base
-- async
+- async >=2.1.1.1 && <2.3
 - bytestring
 - data-default
 - microlens

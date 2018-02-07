@@ -43,10 +43,11 @@ main = do
     mySupervisor =
       supervisorSpec "unnecessary-supervisor"
         ( set supervisorRestartStrategyL AllForOne
-        . set supervisorProcessSpecListL [myWorker])
+        . set supervisorProcessSpecListL [myWorker]
+        )
 
 
-  capataz <- forkCapataz "dynamic-supervisor-example"
+  capataz <- forkCapataz "static-supervisor-example"
                          ( set supervisorRestartStrategyL OneForOne
                          . set supervisorProcessSpecListL [mySupervisor]
                          )

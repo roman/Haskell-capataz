@@ -8,6 +8,8 @@
 * How-to
   * [Create a Dynamic Worker](how-to/dynamic-worker.md)
   * [Create a Dynamic Supervisor](how-to/dynamic-supervisor.md)
+  * [Create a Static Worker](how-to/static-worker.md)
+  * [Create a Static Supervisor](how-to/static-supervisor.md)
 
 * Guide
   * [Supervisor Theory](supervisor-theory.md)

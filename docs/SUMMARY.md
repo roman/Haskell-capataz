@@ -10,7 +10,7 @@
     * Workers Tutorials
       * [Create a Dynamic Worker](v0.1/how-to/dynamic-worker.md)
       * [Create a Static Worker](v0.1/how-to/static-worker.md)
-      * [Create a Stateful Worker](v0.1/how-to/static-worker.md)
+      * [Create a Stateful Worker](v0.1/how-to/stateful-worker.md)
     * Supervisor Tutorials
       * [Create a Dynamic Supervisor](v0.1/how-to/dynamic-supervisor.md)
       * [Create a Static Supervisor](v0.1/how-to/static-supervisor.md)

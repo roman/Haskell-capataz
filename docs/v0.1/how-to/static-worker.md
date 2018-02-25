@@ -1,4 +1,4 @@
-# Create a static
+# Create a static worker
 
 ## Description
 

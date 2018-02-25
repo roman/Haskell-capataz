@@ -1,4 +1,4 @@
-# Create a static
+# Create a stateful worker
 
 ## Description
 
@@ -40,7 +40,7 @@ import Control.Concurrent.Capataz
     )
 import Control.Concurrent.STM     (atomically, newTQueueIO, readTQueue, writeTQueue)
 import Control.Monad              (forever)
-import Data.IORef                 (atomicModifyIORef, newIORef, readIORef)
+import Data.IORef                 (IORef, atomicModifyIORef, newIORef, readIORef)
 import Data.Maybe                 (fromMaybe)
 import GHC.Generics               (Generic)
 import Safe                       (readMay)
@@ -66,40 +66,47 @@ buildCalculatorWorker prevStBackup getOperation = do
     . set workerOnTerminationL   (storeBackup stRef)
     )
  where
+  restoreBackup :: IO [Int]
   restoreBackup = do
     filePresent <- doesFileExist prevStBackup
     if filePresent
       then (fromMaybe [] . readMay) <$> readFile prevStBackup
       else return []
 
-
+  storeBackup :: IORef [Int] -> IO ()
   storeBackup stRef = do
     st <- readIORef stRef
     writeFile prevStBackup (show st)
 
+  workerLoop :: IORef [Int] -> IO ()
   workerLoop stRef = forever $ do
     operation <- getOperation
     case operation of
       Push n -> atomicModifyIORef stRef (\ns -> (n : ns, ()))
+
       Add    -> atomicModifyIORef
         stRef
         ( \ns -> case ns of
           (a:b:rest) -> (a + b : rest, ())
           _          -> (ns, ())
-        ) -- ignore operation
+        )
+
       Multiply -> atomicModifyIORef
         stRef
         ( \ns -> case ns of
           (a:b:rest) -> (a * b : rest, ())
           _          -> (ns, ())
-        ) -- ignore operation
+        )
+
       Top notifyFn -> do
         result <- readIORef stRef
         case result of
           []    -> notifyFn Nothing
           (a:_) -> notifyFn (Just a)
-      Read notifyFn ->
-        readIORef stRef >>= notifyFn
+
+      Read notifyFn -> do
+        st <- readIORef stRef
+        notifyFn st
 
 
 main :: IO ()

@@ -1,4 +1,4 @@
-# Create a dynamic worker
+# Create a Dynamic Worker
 
 ## Description
 

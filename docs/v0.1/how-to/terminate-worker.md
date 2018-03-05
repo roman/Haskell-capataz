@@ -1,6 +1,6 @@
-# Terminate a worker
+# Terminate a Worker
 
-*NOTE*: Only workers created dynamically can be terminated
+**NOTE**: Only workers created dynamically can be terminated
 
 ## Description
 

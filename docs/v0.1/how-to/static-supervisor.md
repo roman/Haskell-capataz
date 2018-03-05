@@ -1,4 +1,4 @@
-# Create a static supervisor
+# Create a Static Supervisor
 
 ## Description
 

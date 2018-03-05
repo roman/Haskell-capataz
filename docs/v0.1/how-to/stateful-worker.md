@@ -1,4 +1,4 @@
-# Create a stateful worker
+# Create a Stateful Worker
 
 ## Description
 

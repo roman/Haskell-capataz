@@ -1,4 +1,4 @@
-# Create a dynamic supervisor
+# Create a Dynamic Supervisor
 
 ## Description
 

@@ -1,6 +1,6 @@
-# Terminate a supervisor
+# Terminate a Supervisor
 
-*NOTE*: Only supervisors created dynamically can be terminated
+**NOTE**: Only supervisors created dynamically can be terminated
 
 ## Description
 

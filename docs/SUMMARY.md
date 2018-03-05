@@ -7,12 +7,12 @@
 
 * How-to
   * v0.1
-    * Workers Tutorials
+    * Worker
       * [Create a Dynamic Worker](v0.1/how-to/dynamic-worker.md)
       * [Create a Static Worker](v0.1/how-to/static-worker.md)
       * [Create a Stateful Worker](v0.1/how-to/stateful-worker.md)
       * [Terminate a Worker](v0.1/how-to/terminate-worker.md)
-    * Supervisor Tutorials
+    * Supervisor
       * [Create a Dynamic Supervisor](v0.1/how-to/dynamic-supervisor.md)
       * [Create a Static Supervisor](v0.1/how-to/static-supervisor.md)
       * [Terminate a Supervisor](v0.1/how-to/terminate-supervisor.md)

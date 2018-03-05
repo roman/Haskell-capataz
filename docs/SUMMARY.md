@@ -1,3 +1,5 @@
+* [Purpose](./purpose.md)
+
 * Tutorials
   * v0.0
       * [Basic Tutorial using Unix Processes](v0.0/tutorial.md)
@@ -21,3 +23,4 @@
   * [Supervisor Theory](supervisor-theory.md)
 
 * [Developer Guidelines](CONTRIBUTING.md)
+* [FAQ](FAQ.md)

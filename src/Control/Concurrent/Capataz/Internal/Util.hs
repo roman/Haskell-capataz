@@ -12,22 +12,20 @@
 -}
 module Control.Concurrent.Capataz.Internal.Util where
 
-import Protolude
+import           RIO
+import qualified RIO.Text as T
+import qualified RIO.HashMap as HashMap
+import qualified RIO.List as List
 
-import           Control.Concurrent.STM      (STM, atomically, retry)
-import           Control.Concurrent.STM.TVar (TVar, readTVar, writeTVar)
-import           Data.IORef                  (atomicModifyIORef', readIORef)
-import qualified Data.Text                   as T
 import           Data.Time.Clock             (getCurrentTime)
 
-import qualified Data.HashMap.Strict as HashMap
 import           GHC.Conc            (labelThread)
 
 import Control.Concurrent.Capataz.Internal.Types
 
 -- | Returns only the number of the ThreadId.
 getTidNumber :: ThreadId -> Maybe Text
-getTidNumber tid = case T.words $ show tid of
+getTidNumber tid = case T.words $ tshow tid of
   (_:tidNumber:_) -> Just tidNumber
   _               -> Nothing
 
@@ -103,7 +101,7 @@ sortProcessesByTerminationOrder terminationOrder processMap =
   processCreationTime (SupervisorProcess Supervisor { supervisorCreationTime })
     = supervisorCreationTime
 
-  workers = sortBy (comparing processCreationTime) (HashMap.elems processMap)
+  workers = List.sortBy (comparing processCreationTime) (HashMap.elems processMap)
 
 --------------------------------------------------------------------------------
 
@@ -112,7 +110,7 @@ sortProcessesByTerminationOrder terminationOrder processMap =
 readSupervisorStatusSTM :: TVar SupervisorStatus -> STM SupervisorStatus
 readSupervisorStatusSTM statusVar = do
   status <- readTVar statusVar
-  if status == Initializing then retry else return status
+  if status == Initializing then retrySTM else return status
 
 -- | Executes transaction that returns the "SupervisorStatus".
 readSupervisorStatus :: SupervisorEnv -> IO SupervisorStatus

@@ -2,6 +2,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+import qualified Prelude
+import RIO
+
 import Control.Concurrent.Capataz
     ( SupervisorRestartStrategy (..)
     , WorkerRestartStrategy (..)
@@ -13,12 +16,11 @@ import Control.Concurrent.Capataz
     , onSystemEventL
     , set
     , supervisorRestartStrategyL
-    , teardown
+    , runTeardown
     , workerRestartStrategyL
     )
 import Lib                        (Cli (..), killNumberProcess, spawnNumbersProcess)
 import Options.Generic            (getRecord)
-import Protolude
 import Text.Show.Pretty           (pPrint)
 
 main :: IO ()
@@ -30,12 +32,12 @@ main = do
     (set supervisorRestartStrategyL OneForOne -- (2)
                                               . set onSystemEventL pPrint)                -- (3)
 
-  let numberWriter i a = print (i, a)
+  let numberWriter i a = Prelude.print (i, a)
       delayMicros = 5000100
 
   _workerIdList <- forM [1 .. procNumber n] $ \i -> do
     let counterWorkerOptions = buildWorkerOptions -- (4)
-          ("Worker (" <> show i <> ")")
+          ("Worker (" <> tshow i <> ")")
           (spawnNumbersProcess (numberWriter i)) -- (5)
           (set workerRestartStrategyL Permanent) -- (6)
 
@@ -50,4 +52,4 @@ main = do
   void $ forkWorker workerKillerOptions capataz
 
   joinCapatazThread capataz  -- (9)
-                            `finally` (teardown capataz >>= print) -- (10)
+                            `finally` (runTeardown capataz >>= Prelude.print) -- (10)

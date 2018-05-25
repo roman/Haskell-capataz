@@ -9,15 +9,14 @@ github: roman/Haskell-capataz
 extra-source-files:
 - README.md
 dependencies:
-- base
-- bytestring
-- optparse-generic
-- pretty-show
-- process
-- protolude
-- random
-- text
-- turtle
+- base >= 4 && < 5
+- bytestring >= 0.10.8
+- optparse-generic >= 1.1.1
+- pretty-show >= 1.6.13
+- process >= 1.4.2
+- rio >= 0.1.2.0
+- random >= 1.1
+- turtle >= 1.2.8
 library:
   exposed-modules:
   source-dirs: src/lib
@@ -31,7 +30,6 @@ executables:
     - -threaded
     - -O2
     dependencies:
-    - async
     - capataz-simple-example
   example2:
     main: Main.hs

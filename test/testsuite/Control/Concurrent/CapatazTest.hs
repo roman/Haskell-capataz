@@ -20,12 +20,12 @@ a ticket pending to add dejafu tests to ensure our tests are stable.
 -}
 module Control.Concurrent.CapatazTest (tests) where
 
-import Protolude
+import RIO
+
+import Control.Exception (ErrorCall(..))
 
 import Test.Tasty       (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase)
-
-import Control.Concurrent.STM.TVar (modifyTVar', newTVarIO, readTVar)
 
 import           Control.Concurrent.Capataz (set)
 import qualified Control.Concurrent.Capataz as SUT
@@ -65,8 +65,8 @@ tests = testGroup
       $ testCapatazStreamWithOptions
           ( set
             SUT.supervisorProcessSpecListL
-            [ SUT.workerSpec "A" (forever $ threadDelay 10001000) identity
-            , SUT.workerSpec "B" (forever $ threadDelay 10001000) identity
+            [ SUT.workerSpec "A" (forever $ threadDelay 10001000) id
+            , SUT.workerSpec "B" (forever $ threadDelay 10001000) id
             ]
           )
           [ assertWorkerStarted "A"
@@ -104,7 +104,7 @@ tests = testGroup
               _workerId <- SUT.forkWorker
                 ( SUT.buildWorkerOptions "test-worker"
                                          (throwIO RestartingWorkerError)
-                                         identity
+                                         id
                 )
                 capataz
               waitTillIntensityReached
@@ -151,7 +151,7 @@ tests = testGroup
                   _workerId <- SUT.forkWorker
                     ( SUT.buildWorkerOptions "test-worker"
                                              (throwIO RestartingWorkerError)
-                                             identity
+                                             id
                     )
                     capataz
                   return ()
@@ -611,7 +611,7 @@ tests = testGroup
                     atomically (modifyTVar' terminationCountVar (+ 1))
                   waitWorkerTermination i = atomically $ do
                     n <- readTVar terminationCountVar
-                    when (n /= i) retry
+                    when (n /= i) retrySTM
               testCapatazStream
                 []
                 ( \capataz -> do
@@ -723,7 +723,7 @@ tests = testGroup
             _workerId <- SUT.forkWorker
               ( SUT.buildWorkerOptions
                 "failing-worker"
-                (panic "worker failed!")
+                (error "worker failed!")
                 (set SUT.workerRestartStrategyL SUT.Temporary)
               )
               capataz

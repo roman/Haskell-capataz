@@ -70,10 +70,9 @@ module Control.Concurrent.Capataz
 , Control.Concurrent.Capataz.Internal.Core.getCapatazTeardown
 
 -- * Teardown (re-exported)
-, Control.Teardown.teardown
+, Control.Teardown.runTeardown
 
 -- * Lens (re-exported)
-, (.~)
 , (&)
 , Control.Concurrent.Capataz.Lens.set
 )
@@ -81,6 +80,6 @@ where
 
 import qualified Control.Concurrent.Capataz.Internal.Core
 import qualified Control.Concurrent.Capataz.Internal.Types
-import           Control.Concurrent.Capataz.Lens           ((&), (.~))
+import           Control.Concurrent.Capataz.Lens           ((&))
 import qualified Control.Concurrent.Capataz.Lens
 import qualified Control.Teardown

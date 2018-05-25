@@ -6,12 +6,12 @@
 {-# LANGUAGE TypeOperators     #-}
 module Lib where
 
-import qualified Data.ByteString.Char8 as C
-import           Data.List             ((!!))
-import qualified Data.Text             as T
+import           RIO
+import qualified RIO.Text             as T
+import RIO.List.Partial ((!!))
+
 import           Options.Generic       (ParseRecord)
-import           Protolude
-import           System.IO             (hGetLine, hIsEOF)
+import           System.IO             (hGetLine)
 import qualified System.Process        as Process
 import qualified System.Random         as Random
 import qualified Turtle
@@ -23,7 +23,7 @@ newtype Cli =
 instance ParseRecord Cli
 
 data SimpleProcess =
-  SimpleProcess { readStdOut       :: !(IO (Either ExitCode ByteString))
+  SimpleProcess { readStdOut       :: !(IO (Either ExitCode Text))
                 , terminateProcess :: !(IO ())
                 , waitProcess      :: !(IO ExitCode)
                 }
@@ -36,11 +36,11 @@ spawnSimpleProcess program args = do
 
   (_, Just hout, _, procHandle) <- Process.createProcess processSpec
 
-  let readStdOut :: IO (Either ExitCode ByteString)
+  let readStdOut :: IO (Either ExitCode Text)
       readStdOut = do
         isEof <- hIsEOF hout
         if not isEof
-          then (Right . C.pack) <$> hGetLine hout
+          then (Right . T.pack) <$> hGetLine hout
           else Left <$> Process.waitForProcess procHandle
 
       terminateProcess :: IO ()
@@ -58,9 +58,9 @@ processKiller processName = do
   case procNumbers of
     [] -> return ()
     _  -> do
-      theOneToKill <- Random.randomRIO (0, pred $ length procNumbers)
-      putText $ "Process running: " <> show procNumbers
-      putText $ "Killing: " <> (procNumbers !! theOneToKill)
+      theOneToKill <- Random.randomRIO (0, length procNumbers - 1)
+      -- putText $ "Process running: " <> show procNumbers
+      -- putText $ "Killing: " <> (procNumbers !! theOneToKill)
       void $ Turtle.procStrict "kill" [procNumbers !! theOneToKill] Turtle.empty
 
 --------------------------------------------------------------------------------
@@ -76,12 +76,12 @@ spawnNumbersProcess writeNumber = do
     ]
 
   let loop = do
-        eInput <- ((readMaybe . C.unpack) <$>) <$> readStdOut proc'
+        eInput <- ((readMaybe . T.unpack) <$>) <$> readStdOut proc'
         case eInput of
           Left exitCode | exitCode == ExitSuccess -> return ()
                         | otherwise               -> throwIO exitCode
           Right Nothing -> do
-            putText "didn't get a number?"
+            -- putText "didn't get a number?"
             loop
           Right (Just number) -> do
             writeNumber number

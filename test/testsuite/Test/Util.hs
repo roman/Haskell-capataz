@@ -4,14 +4,12 @@
 {-# LANGUAGE OverloadedStrings     #-}
 module Test.Util where
 
-import Protolude
+import RIO
+import qualified RIO.Text as T
 
-import Control.Concurrent.STM.TQueue (newTQueueIO, readTQueue, writeTQueue)
-import Data.IORef                    (atomicModifyIORef', newIORef, readIORef, writeIORef)
 import Test.Tasty.HUnit              (assertBool, assertFailure)
 import Text.Show.Pretty              (ppShow)
 
-import qualified Data.Text as T
 
 import qualified Control.Concurrent.Capataz       as SUT
 import qualified Control.Concurrent.Capataz.Event as SUT
@@ -22,7 +20,7 @@ import qualified Control.Concurrent.Capataz.Event as SUT
 -- | Utility function that gets the type name of a Record through it's Show
 -- output.
 fetchRecordName :: Show a => a -> Text
-fetchRecordName = T.takeWhile (/= ' ') . show
+fetchRecordName = T.takeWhile (/= ' ') . tshow
 
 -- | Composes two predicate functions together with a boolean AND
 andP :: [a -> Bool] -> a -> Bool
@@ -241,7 +239,7 @@ mkFailingSubRoutine failCount = do
   countRef <- newIORef failCount
   let subRoutine = do
         shouldFail <- atomicModifyIORef' countRef
-                                         (\count -> (pred count, count > 0))
+                                         (\count -> (count - 1, count > 0))
         when shouldFail (throwIO RestartingWorkerError)
 
   return subRoutine
@@ -255,7 +253,7 @@ mkCompletingBeforeNRestartsSubRoutine initCount = do
   countRef <- newIORef initCount
   let subRoutine = do
         shouldStop <- atomicModifyIORef' countRef
-                                         (\count -> (pred count, count > 0))
+                                         (\count -> (count - 1, count > 0))
         if shouldStop then return () else forever $ threadDelay 1000100
   return subRoutine
 
@@ -328,7 +326,7 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
                       capataz
 
         -- We now shutdown the capataz instance
-        void $ SUT.teardown capataz
+        void $ SUT.runTeardown capataz
 
         -- We run assertions for after the capataz has been shut down
         runAssertions "POST-TEARDOWN"
@@ -364,7 +362,7 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
         Left _ -> do
           events       <- reverse <$> readIORef accRef
           pendingCount <- readIORef pendingCountVar
-          void $ SUT.teardown capataz
+          void $ SUT.runTeardown capataz
           assertFailure
             (  "On "
             <> stageName
@@ -414,4 +412,4 @@ testCapatazStream
                                       -- __did not__ happen
   -> IO ()
 testCapatazStream preSetupAssertions =
-  testCapatazStreamWithOptions identity preSetupAssertions
+  testCapatazStreamWithOptions id preSetupAssertions

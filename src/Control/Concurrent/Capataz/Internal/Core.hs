@@ -24,9 +24,8 @@ module Control.Concurrent.Capataz.Internal.Core
 )
 where
 
-import Protolude
+import RIO
 
-import Control.Concurrent.MVar (newEmptyMVar, takeMVar)
 import Control.Teardown        (Teardown, newTeardown)
 import Data.Time.Clock         (getCurrentTime)
 
@@ -49,7 +48,7 @@ instance HasSupervisor Capataz where
   getSupervisor Capataz {capatazSupervisor} = capatazSupervisor
 
 instance HasSupervisor Supervisor where
-  getSupervisor = identity
+  getSupervisor = id
 
 -- | Creates a Capataz record, which holds both a root supervisor and a
 -- "Teardown" to shut down the system. The root supervisor monitors failures on
@@ -85,14 +84,14 @@ forkCapataz capatazName modOptionsFn = do
             }
 
           MonitorEvent ProcessCompleted'{} ->
-            panic "Capataz completed; this should never happen"
+            error "Capataz completed; this should never happen"
 
           MonitorEvent ProcessForcedRestart{} ->
-            panic
+            error
               "Capataz was restarted from a OneForAll strategy; this should never happen"
 
           ControlAction{} ->
-            panic "Capataz received a ControlAction message; bad implementation"
+            error "Capataz received a ControlAction message; bad implementation"
       , notifyEvent
       }
 

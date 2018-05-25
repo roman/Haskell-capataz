@@ -6,7 +6,7 @@
 -- Worker process types.
 module Control.Concurrent.Capataz.Internal.Process where
 
-import Protolude
+import RIO
 
 import Control.Concurrent.Capataz.Internal.Types
 import Control.Concurrent.Capataz.Internal.Util

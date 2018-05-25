@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings     #-}
 module Control.Concurrent.Capataz.SupervisorTest where
 
-import Protolude
+import RIO
 
 import           Control.Concurrent.Capataz (set)
 import qualified Control.Concurrent.Capataz as SUT
@@ -127,7 +127,7 @@ tests = testGroup
               SUT.supervisorProcessSpecListL
               [ SUT.workerSpec "stable-worker"
                                (forever $ threadDelay 1000100)
-                               identity
+                               id
               ]
             )
           ]

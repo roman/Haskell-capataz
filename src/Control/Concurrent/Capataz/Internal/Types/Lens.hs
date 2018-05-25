@@ -3,9 +3,10 @@
 {-# LANGUAGE RecordWildCards   #-}
 module Control.Concurrent.Capataz.Internal.Types.Lens where
 
+import RIO
+
 import Control.Concurrent.Capataz.Internal.Types
 import Data.Time.Clock                           (NominalDiffTime)
-import Protolude
 
 --------------------------------------------------------------------------------
 

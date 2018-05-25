@@ -2,17 +2,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Control.Concurrent.Async (async)
+import qualified Prelude
+import RIO
+
 import Lib
     (Cli (..), killNumberProcess, procNumber, spawnNumbersProcess)
 import Options.Generic          (getRecord)
-import Protolude
+
 
 main :: IO ()
 main = do
   n <- getRecord "Counter spawner"
 
-  let numberWriter i a = print (i, a)
+  let numberWriter i a = Prelude.print (i, a)
       delayMicros = 5000100
 
   _asyncList <- forM [1 .. procNumber n]

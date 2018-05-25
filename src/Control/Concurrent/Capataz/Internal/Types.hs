@@ -6,14 +6,10 @@
 {-| This module contains all the types used across all the other modules -}
 module Control.Concurrent.Capataz.Internal.Types where
 
-import Protolude
+import RIO
 
-import Control.Concurrent.STM.TVar (TVar)
-import Control.Teardown            (ITeardown (..), Teardown)
-import Data.Default                (Default (..))
-import Data.HashMap.Strict         (HashMap)
-import Data.IORef                  (IORef)
-import Data.Time.Clock             (NominalDiffTime, UTCTime)
+import Control.Teardown            (HasTeardown (..), Teardown)
+import Data.Time                   (NominalDiffTime, UTCTime)
 import Data.UUID                   (UUID)
 
 type CapatazId = UUID
@@ -148,9 +144,9 @@ data WorkerTerminationPolicy
   | TimeoutMillis !Int
   deriving (Generic, Show, Eq, Ord)
 
-instance Default WorkerTerminationPolicy where
-  -- | Default worker termination is a timeout of three (3) seconds.
-  def = TimeoutMillis 3000
+-- | Default worker termination is a timeout of three (3) seconds.
+defWorkerTerminationPolicy :: WorkerTerminationPolicy
+defWorkerTerminationPolicy = TimeoutMillis 3000
 
 instance NFData WorkerTerminationPolicy
 
@@ -181,9 +177,9 @@ data ProcessTerminationOrder
   | OldestFirst
   deriving (Generic, Show, Eq, Ord)
 
-instance Default ProcessTerminationOrder where
-  -- | default is "OldestFirst".
-  def = OldestFirst
+-- | default is "OldestFirst".
+defProcessTerminationOrder :: ProcessTerminationOrder
+defProcessTerminationOrder = OldestFirst
 
 instance NFData ProcessTerminationOrder
 
@@ -198,9 +194,9 @@ data SupervisorRestartStrategy
   | OneForOne
   deriving (Generic, Show, Eq, Ord)
 
-instance Default SupervisorRestartStrategy where
-  -- | Default restart strategy is "OneForOne".
-  def = OneForOne
+-- | Default restart strategy is "OneForOne".
+defSupervisorRestartStategy :: SupervisorRestartStrategy
+defSupervisorRestartStategy = OneForOne
 
 instance NFData SupervisorRestartStrategy
 
@@ -243,9 +239,10 @@ data WorkerRestartStrategy
   deriving (Generic, Show, Eq)
 
 instance NFData WorkerRestartStrategy
-instance Default WorkerRestartStrategy where
-  -- |  A worker default restart strategy is "Transient".
-  def = Transient
+
+-- |  A worker default restart strategy is "Transient".
+defWorkerRestartStrategy :: WorkerRestartStrategy
+defWorkerRestartStrategy = Transient
 
 -- | Specifies all options that can be used to create a Worker Process. You may
 -- create a record of this type via the smart constructor "buildWorkerOptions".
@@ -484,9 +481,9 @@ data Capataz
   , capatazTeardown   :: !Teardown
   }
 
-instance ITeardown Capataz where
-  teardown Capataz {capatazTeardown} =
-    teardown capatazTeardown
+instance HasTeardown Capataz where
+  getTeardown Capataz {capatazTeardown} =
+    capatazTeardown
 
 -- | Internal utility record used to hold part of the runtime information of a
 -- supervisor that acts as a parent of another supervisor.
@@ -538,7 +535,7 @@ defCapatazOptions supervisorName modFn = modFn CapatazOptions
   { supervisorName
   , supervisorIntensity               = 2
   , supervisorPeriodSeconds           = 5
-  , supervisorRestartStrategy         = def
+  , supervisorRestartStrategy         = defSupervisorRestartStategy
   , supervisorProcessSpecList         = []
   , supervisorProcessTerminationOrder = OldestFirst
   , supervisorOnIntensityReached      = return ()
@@ -571,7 +568,7 @@ supervisorSpec sName modFn =
 supervisorSpecWithDefaults
   :: SupervisorName -- ^ Name used for telemetry purposes
   -> ProcessSpec
-supervisorSpecWithDefaults sName = supervisorSpec sName identity
+supervisorSpecWithDefaults sName = supervisorSpec sName id
 {-# INLINE supervisorSpecWithDefaults #-}
 
 -- | Builds a "ProcessSpec" record for a worker process with defaults from
@@ -599,7 +596,7 @@ workerSpecWithDefaults
   :: WorkerName -- ^ Name used for telemetry purposes
   -> IO () -- ^ IO sub-routine to be supervised
   -> ProcessSpec
-workerSpecWithDefaults wName wAction = workerSpec wName wAction identity
+workerSpecWithDefaults wName wAction = workerSpec wName wAction id
 {-# INLINE workerSpecWithDefaults #-}
 
 -- | Builds a "SupervisorOptions" record with defaults from
@@ -617,7 +614,7 @@ buildSupervisorOptions supervisorName modFn = modFn SupervisorOptions
   { supervisorName
   , supervisorIntensity               = 2
   , supervisorPeriodSeconds           = 5
-  , supervisorRestartStrategy         = def
+  , supervisorRestartStrategy         = defSupervisorRestartStategy
   , supervisorProcessSpecList         = []
   , supervisorProcessTerminationOrder = OldestFirst
   , supervisorOnIntensityReached      = return ()
@@ -639,7 +636,7 @@ buildSupervisorOptions supervisorName modFn = modFn SupervisorOptions
 buildSupervisorOptionsWithDefaults
   :: SupervisorName -- ^ Name used for telemetry purposes
   -> SupervisorOptions
-buildSupervisorOptionsWithDefaults = flip buildSupervisorOptions identity
+buildSupervisorOptionsWithDefaults = flip buildSupervisorOptions id
 {-# INLINE buildSupervisorOptionsWithDefaults #-}
 
 -- | Builds a "WorkerOptions" record, keeps the defaults from
@@ -660,8 +657,8 @@ buildWorkerOptions workerName workerAction f = f WorkerOptions
   , workerOnFailure         = const $ return ()
   , workerOnCompletion      = return ()
   , workerOnTermination     = return ()
-  , workerTerminationPolicy = def
-  , workerRestartStrategy   = def
+  , workerTerminationPolicy = defWorkerTerminationPolicy
+  , workerRestartStrategy   = defWorkerRestartStrategy
   }
 {-# INLINE buildWorkerOptions #-}
 
@@ -687,5 +684,5 @@ buildWorkerOptionsWithDefaults
   -> IO () -- ^ IO sub-routine to be supervised
   -> WorkerOptions
 buildWorkerOptionsWithDefaults wName wAction =
-  buildWorkerOptions wName wAction identity
+  buildWorkerOptions wName wAction id
 {-# INLINE buildWorkerOptionsWithDefaults #-}

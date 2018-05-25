@@ -7,14 +7,11 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 module Control.Concurrent.Capataz.Internal.Supervisor where
 
-import Control.Concurrent.Async      (asyncWithUnmask)
-import Control.Concurrent.STM.TQueue (newTQueueIO, readTQueue, writeTQueue)
-import Control.Concurrent.STM.TVar   (newTVarIO)
-import Data.IORef                    (newIORef)
-import Data.Time.Clock               (NominalDiffTime, UTCTime, diffUTCTime, getCurrentTime)
-import Protolude
+import RIO
+import qualified RIO.HashMap as HashMap
 
-import qualified Data.HashMap.Strict as HashMap
+import Data.Time.Clock               (NominalDiffTime, UTCTime, diffUTCTime, getCurrentTime)
+
 import qualified Data.UUID.V4        as UUID
 
 import Control.Concurrent.Capataz.Internal.Types
@@ -155,7 +152,7 @@ supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorNa
 
     case loopResult of
       Left supervisorError -> do
-        haltSupervisor (show supervisorError) env
+        haltSupervisor (tshow supervisorError) env
         result <- Process.handleProcessException
           unmask
           parentEnv
@@ -179,7 +176,7 @@ supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorNa
           eContinueLoop <- try $ unmask $ handleSupervisorMessage env message
           case eContinueLoop of
             Left supervisorError -> do
-              haltSupervisor (show supervisorError) env
+              haltSupervisor (tshow supervisorError) env
               result <- Process.handleProcessException
                 unmask
                 parentEnv
@@ -359,7 +356,7 @@ execRestartAction supervisorEnv@SupervisorEnv { supervisorOnIntensityReached } p
         supervisorEnv
         processId
         processSpec
-        (succ processRestartCount)
+        (processRestartCount + 1)
 
 
 --------------------------------------------------------------------------------
@@ -472,7 +469,7 @@ handleProcessCompleted env processId completionTime = do
       case process of
         WorkerProcess worker -> handleWorkerCompleted env worker
         _ ->
-          panic
+          error
             $  "ERROR: Supervisor ("
             <> show (Process.getProcessId process)
             <> ") should never complete"

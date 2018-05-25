@@ -7,9 +7,8 @@
 -}
 module Control.Concurrent.Capataz.Internal.Worker where
 
-import Protolude
+import RIO
 
-import Control.Concurrent.Async (asyncWithUnmask)
 import Data.Time.Clock          (getCurrentTime)
 
 import qualified Data.UUID.V4 as UUID

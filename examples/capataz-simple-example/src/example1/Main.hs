@@ -2,7 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import qualified Prelude
 import RIO
 
 import Lib
@@ -13,9 +12,9 @@ import Options.Generic          (getRecord)
 main :: IO ()
 main = do
   n <- getRecord "Counter spawner"
-
-  let numberWriter i a = Prelude.print (i, a)
-      delayMicros = 5000100
+  let
+    numberWriter i a = logInfo $ displayShow (i :: Int, a :: Int)
+    delayMicros = 5000100
 
   _asyncList <- forM [1 .. procNumber n]
     $ \i -> async $ spawnNumbersProcess (numberWriter i)

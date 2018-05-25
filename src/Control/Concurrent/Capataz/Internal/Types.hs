@@ -9,21 +9,21 @@ module Control.Concurrent.Capataz.Internal.Types where
 import RIO
 
 import Control.Teardown            (HasTeardown (..), Teardown)
-import Data.Time                   (NominalDiffTime, UTCTime)
+import RIO.Time                   (NominalDiffTime, UTCTime)
 import Data.UUID                   (UUID)
 
 type CapatazId = UUID
 type WorkerId = UUID
 type SupervisorId = UUID
 type ProcessId = UUID
-type WorkerAction = IO ()
+type WorkerAction m = m ()
 type ProcessThreadId = ThreadId
 type ProcessName = Text
 type CapatazName = Text
 type SupervisorName = Text
 type WorkerName = Text
 type RestartCount = Int
-type ProcessMap = HashMap ProcessId Process
+type ProcessMap m = HashMap ProcessId (Process m)
 type ParentSupervisor = Supervisor
 
 -- | Event delivered to the "notifyEvent" callback sub-routine; these events can
@@ -206,19 +206,19 @@ instance NFData SupervisorRestartStrategy
 --
 -- * Provie a "notifyEvent" callback to monitor or log a capataz system.
 --
-data CapatazOptions
+data CapatazOptions m
   = CapatazOptions {
     supervisorName                    :: !SupervisorName
   , supervisorIntensity               :: !Int
   , supervisorPeriodSeconds           :: !NominalDiffTime
   , supervisorRestartStrategy         :: !SupervisorRestartStrategy
-  , supervisorProcessSpecList         :: ![ProcessSpec]
+  , supervisorProcessSpecList         :: ![ProcessSpec m]
   , supervisorProcessTerminationOrder :: !ProcessTerminationOrder
-  , supervisorOnIntensityReached      :: !(IO ())
+  , supervisorOnIntensityReached      :: !(m ())
     -- | Callback sub-routine that gets executed when the root supervisor fails.
-  , supervisorOnFailure               :: !(SomeException -> IO ())
+  , supervisorOnFailure               :: !(SomeException -> m ())
     -- | Callback used for telemetry purposes.
-  , notifyEvent                       :: !(CapatazEvent -> IO ())
+  , notifyEvent                       :: !(CapatazEvent -> m ())
   }
 
 
@@ -246,20 +246,20 @@ defWorkerRestartStrategy = Transient
 
 -- | Specifies all options that can be used to create a Worker Process. You may
 -- create a record of this type via the smart constructor "buildWorkerOptions".
-data WorkerOptions
+data WorkerOptions m
   = WorkerOptions {
     -- | An @IO ()@ sub-routine that will be executed when the worker
     -- thread is created, this attribute is lazy given we want to this
     -- value on a worker thread environment.
-    workerAction            :: WorkerAction
+    workerAction            :: WorkerAction m
     -- | Name of the Worker (present on "CapatazEvent" records)
   , workerName              :: !WorkerName
     -- | Callback used when the worker fails with an error
-  , workerOnFailure         :: !(SomeException -> IO ())
+  , workerOnFailure         :: !(SomeException -> m ())
     -- | Callback used when the worker completes execution without error
-  , workerOnCompletion      :: !(IO ())
+  , workerOnCompletion      :: !(m ())
     -- | Callback used when the worker is terminated
-  , workerOnTermination     :: !(IO ())
+  , workerOnTermination     :: !(m ())
     -- | Indicates how a worker should be terminated
   , workerTerminationPolicy :: !WorkerTerminationPolicy
     -- | Indicates how a worker should be restarted
@@ -268,7 +268,7 @@ data WorkerOptions
   deriving (Generic)
 
 -- | Record that contains the "Async" record (thread reference) of a worker
-data Worker
+data Worker m
   = Worker {
     -- | Unique identifier for a worker that is executing
     workerId           :: !WorkerId
@@ -280,7 +280,7 @@ data Worker
   , workerName         :: !WorkerName
     -- | "WorkerOptions" contains all the options around restart and termination
     -- policies
-  , workerOptions      :: !WorkerOptions
+  , workerOptions      :: !(WorkerOptions m)
   }
 
 data ProcessEnv
@@ -292,7 +292,7 @@ data ProcessEnv
   , processRestartStrategy :: !WorkerRestartStrategy
   }
 
-data SupervisorOptions
+data SupervisorOptions m
   = SupervisorOptions {
     -- | Name of the Supervisor (present on "CapatazEvent" records)
     supervisorName                    :: Text
@@ -305,40 +305,40 @@ data SupervisorOptions
     -- | What is the "SupervisorRestartStrategy" for this Capataz
   , supervisorRestartStrategy         :: !SupervisorRestartStrategy
     -- | Static set of workers that start as soon as the "Capataz" is created
-  , supervisorProcessSpecList         :: ![ProcessSpec]
+  , supervisorProcessSpecList         :: ![ProcessSpec m]
     -- | In which order the "Supervisor" record is going to terminate it's workers
   , supervisorProcessTerminationOrder :: !ProcessTerminationOrder
     -- | Callback used when the error intensity is reached
-  , supervisorOnIntensityReached      :: !(IO ())
-  , supervisorOnFailure               :: !(SomeException -> IO ())
+  , supervisorOnIntensityReached      :: !(m ())
+  , supervisorOnFailure               :: !(SomeException -> m ())
   }
 
-data Supervisor
+data Supervisor m
   = Supervisor {
     supervisorId           :: !SupervisorId
   , supervisorName         :: !SupervisorName
-  , supervisorOptions      :: !SupervisorOptions
+  , supervisorOptions      :: !(SupervisorOptions m)
   , supervisorCreationTime :: !UTCTime
   , supervisorAsync        :: !(Async ())
-  , supervisorNotify       :: SupervisorMessage -> IO ()
-  , supervisorEnv          :: !SupervisorEnv
+  , supervisorNotify       :: (SupervisorMessage m) -> m ()
+  , supervisorEnv          :: !(SupervisorEnv m)
   }
 
 -- | Internal record that represents an action being sent from threads using
 -- the Capataz public API.
-data ControlAction
+data ControlAction m
   = ForkWorker {
-    workerOptions  :: !WorkerOptions
-  , returnWorkerId :: !(WorkerId -> IO ())
+    workerOptions  :: !(WorkerOptions m)
+  , returnWorkerId :: !(WorkerId -> m ())
   }
   | ForkSupervisor {
-    supervisorOptions :: !SupervisorOptions
-  , returnSupervisor  :: !(Supervisor -> IO ())
+    supervisorOptions :: !(SupervisorOptions m)
+  , returnSupervisor  :: !(Supervisor m -> m ())
   }
   | TerminateProcess {
     processId                :: !ProcessId
   , processTerminationReason :: !Text
-  , notifyProcessTermination :: !(Bool -> IO ())
+  , notifyProcessTermination :: !(Bool -> m ())
   }
   deriving (Generic)
 
@@ -447,19 +447,19 @@ instance NFData SupervisorStatus
 
 -- | Internal message delivered to a supervisor process that can either be a
 -- call from public API or an event from its monitored worker process.
-data SupervisorMessage
+data SupervisorMessage m
   -- | Represents a request from done to the supervisor thread from another
   -- thread using the public API
-  = ControlAction !ControlAction
+  = ControlAction !(ControlAction m)
   -- | Represents an event (failure, completion, etc) from a monitored worker
   -- process to the supervisor
   | MonitorEvent !MonitorEvent
   deriving (Generic)
 
 -- | Internal Type to manage both Worker and Supervisor processes
-data Process
-  = WorkerProcess  Worker
-  | SupervisorProcess Supervisor
+data Process m
+  = WorkerProcess  !(Worker m)
+  | SupervisorProcess !(Supervisor m)
 
 -- | Record used to specify how to __build__ a runtime "Process" in a static
 -- supervision tree; to create values of this type, you must use:
@@ -469,51 +469,51 @@ data Process
 -- * "supervisorSpec" or "supervisorSpecWithDefaults" to build a supervisor
 -- process
 --
-data ProcessSpec
-  = WorkerSpec WorkerOptions
-  | SupervisorSpec SupervisorOptions
+data ProcessSpec m
+  = WorkerSpec (WorkerOptions m)
+  | SupervisorSpec (SupervisorOptions m)
 
 -- | Record that contains the environment of a capataz monitor, this is used as
 -- the main record to create workers and to stop the supervisor thread.
-data Capataz
+data Capataz m
   = Capataz {
-    capatazSupervisor :: !Supervisor
+    capatazSupervisor :: !(Supervisor m)
   , capatazTeardown   :: !Teardown
   }
 
-instance HasTeardown Capataz where
+instance HasTeardown (Capataz m) where
   getTeardown Capataz {capatazTeardown} =
     capatazTeardown
 
 -- | Internal utility record used to hold part of the runtime information of a
 -- supervisor that acts as a parent of another supervisor.
-data ParentSupervisorEnv
+data ParentSupervisorEnv m
   = ParentSupervisorEnv {
     supervisorId     :: !SupervisorId
   , supervisorName   :: !SupervisorName
-  , supervisorNotify :: !(SupervisorMessage -> IO ())
-  , notifyEvent      :: !(CapatazEvent -> IO ())
+  , supervisorNotify :: !((SupervisorMessage m) -> m ())
+  , notifyEvent      :: !(CapatazEvent -> m ())
   }
 
 -- | Convenience internal utility record that contains all values related to a
 -- supervisor process.
-data SupervisorEnv
+data SupervisorEnv m
   = SupervisorEnv {
     supervisorId                      :: !SupervisorId
   , supervisorName                    :: !SupervisorName
-  , supervisorNotify                  :: !(SupervisorMessage -> IO ())
-  , supervisorGetNotification         :: !(STM SupervisorMessage)
-  , supervisorProcessMap              :: !(IORef ProcessMap)
+  , supervisorNotify                  :: !((SupervisorMessage m) -> m ())
+  , supervisorGetNotification         :: !(STM (SupervisorMessage m))
+  , supervisorProcessMap              :: !(IORef (ProcessMap m))
   , supervisorStatusVar               :: !(TVar SupervisorStatus)
-  , supervisorOptions                 :: !SupervisorOptions
+  , supervisorOptions                 :: !(SupervisorOptions m)
   , supervisorIntensity               :: !Int
     -- ^ http://erlang.org/doc/design_principles/sup_princ.html#max_intensity
   , supervisorPeriodSeconds           :: !NominalDiffTime
   , supervisorRestartStrategy         :: !SupervisorRestartStrategy
   , supervisorProcessTerminationOrder :: !ProcessTerminationOrder
-  , supervisorOnIntensityReached      :: !(IO ())
-  , supervisorOnIntensityReached      :: !(SomeException -> IO ())
-  , notifyEvent                       :: !(CapatazEvent -> IO ())
+  , supervisorOnIntensityReached      :: !(m ())
+  , supervisorOnIntensityReached      :: !(SomeException -> m ())
+  , notifyEvent                       :: !(CapatazEvent -> m ())
   }
 
 -- | Builds a "CapatazOptions" record with defaults on how to create a capataz
@@ -528,9 +528,10 @@ data SupervisorEnv
 -- This function is intended to be used in combination with "forkCapataz".
 --
 defCapatazOptions
-  :: Text
-  -> (CapatazOptions -> CapatazOptions) -- ^ Function to modify root supervisor
-  -> CapatazOptions
+  :: Monad m
+  => Text
+  -> (CapatazOptions m -> CapatazOptions m) -- ^ Function to modify root supervisor
+  -> CapatazOptions m
 defCapatazOptions supervisorName modFn = modFn CapatazOptions
   { supervisorName
   , supervisorIntensity               = 2
@@ -551,10 +552,11 @@ defCapatazOptions supervisorName modFn = modFn CapatazOptions
 -- supervision trees.
 --
 supervisorSpec
-  :: SupervisorName -- ^ Name used for telemetry purposes
-  -> (SupervisorOptions -> SupervisorOptions) -- ^ Function to modify default
+  :: Monad m
+  => SupervisorName -- ^ Name used for telemetry purposes
+  -> (SupervisorOptions m -> SupervisorOptions m) -- ^ Function to modify default
                                               -- supervisor options
-  -> ProcessSpec
+  -> ProcessSpec m
 supervisorSpec sName modFn =
   SupervisorSpec (buildSupervisorOptions sName modFn)
 {-# INLINE supervisorSpec #-}
@@ -566,8 +568,9 @@ supervisorSpec sName modFn =
 -- supervision trees.
 --
 supervisorSpecWithDefaults
-  :: SupervisorName -- ^ Name used for telemetry purposes
-  -> ProcessSpec
+  :: Monad m
+  => SupervisorName -- ^ Name used for telemetry purposes
+  -> ProcessSpec m
 supervisorSpecWithDefaults sName = supervisorSpec sName id
 {-# INLINE supervisorSpecWithDefaults #-}
 
@@ -578,11 +581,12 @@ supervisorSpecWithDefaults sName = supervisorSpec sName id
 -- This function is used when building a worker in a static supervision tree.
 --
 workerSpec
-  :: WorkerName -- ^ Name used for telemetry purposes
-  -> IO () -- ^ IO sub-routine to be supervised
-  -> (WorkerOptions -> WorkerOptions) -- ^ Function to modify default worker
+  :: Monad m
+  => WorkerName -- ^ Name used for telemetry purposes
+  -> m () -- ^ IO sub-routine to be supervised
+  -> (WorkerOptions m -> WorkerOptions m) -- ^ Function to modify default worker
                                       -- options
-  -> ProcessSpec
+  -> ProcessSpec m
 workerSpec wName wAction modFn =
   WorkerSpec (buildWorkerOptions wName wAction modFn)
 {-# INLINE workerSpec #-}
@@ -593,9 +597,10 @@ workerSpec wName wAction modFn =
 -- This function is used when building a worker in a static supervision tree.
 --
 workerSpecWithDefaults
-  :: WorkerName -- ^ Name used for telemetry purposes
-  -> IO () -- ^ IO sub-routine to be supervised
-  -> ProcessSpec
+  :: Monad m
+  => WorkerName -- ^ Name used for telemetry purposes
+  -> m () -- ^ IO sub-routine to be supervised
+  -> ProcessSpec m
 workerSpecWithDefaults wName wAction = workerSpec wName wAction id
 {-# INLINE workerSpecWithDefaults #-}
 
@@ -606,10 +611,11 @@ workerSpecWithDefaults wName wAction = workerSpec wName wAction id
 -- This function is intended to be used in combination with "forkSupervisor".
 --
 buildSupervisorOptions
-  :: SupervisorName -- ^ Name used for telemetry purposes
-  -> (SupervisorOptions -> SupervisorOptions) -- ^ Function to modify default
+  :: Monad m
+  => SupervisorName -- ^ Name used for telemetry purposes
+  -> (SupervisorOptions m -> SupervisorOptions m) -- ^ Function to modify default
                                               -- supervisor options
-  -> SupervisorOptions
+  -> SupervisorOptions m
 buildSupervisorOptions supervisorName modFn = modFn SupervisorOptions
   { supervisorName
   , supervisorIntensity               = 2
@@ -634,8 +640,9 @@ buildSupervisorOptions supervisorName modFn = modFn SupervisorOptions
 -- This function is intended to be used in combination with "forkSupervisor".
 --
 buildSupervisorOptionsWithDefaults
-  :: SupervisorName -- ^ Name used for telemetry purposes
-  -> SupervisorOptions
+  :: Monad m
+  => SupervisorName -- ^ Name used for telemetry purposes
+  -> SupervisorOptions m
 buildSupervisorOptionsWithDefaults = flip buildSupervisorOptions id
 {-# INLINE buildSupervisorOptionsWithDefaults #-}
 
@@ -646,11 +653,12 @@ buildSupervisorOptionsWithDefaults = flip buildSupervisorOptions id
 -- the ... example in the examples directory for a demonstration.
 --
 buildWorkerOptions
-  :: WorkerName -- ^ Name used for telemetry purposes
-  -> IO () -- ^ IO sub-routine to be supervised
-  -> (WorkerOptions -> WorkerOptions) -- ^ Function to modify default worker
+  :: Monad m
+  => WorkerName -- ^ Name used for telemetry purposes
+  -> m () -- ^ Process sub-routine to be supervised
+  -> (WorkerOptions m -> WorkerOptions m) -- ^ Function to modify default worker
                                       -- options
-  -> WorkerOptions
+  -> WorkerOptions m
 buildWorkerOptions workerName workerAction f = f WorkerOptions
   { workerName
   , workerAction
@@ -680,9 +688,10 @@ buildWorkerOptions workerName workerAction f = f WorkerOptions
 -- instead. See the ... example for a demonstration.
 --
 buildWorkerOptionsWithDefaults
-  :: WorkerName -- ^ Name used for telemetry purposes
-  -> IO () -- ^ IO sub-routine to be supervised
-  -> WorkerOptions
+  :: Monad m
+  => WorkerName -- ^ Name used for telemetry purposes
+  -> m () -- ^ IO sub-routine to be supervised
+  -> WorkerOptions m
 buildWorkerOptionsWithDefaults wName wAction =
   buildWorkerOptions wName wAction id
 {-# INLINE buildWorkerOptionsWithDefaults #-}

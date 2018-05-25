@@ -272,11 +272,12 @@ mkCompletingOnceSubRoutine = mkCompletingBeforeNRestartsSubRoutine 1
 -- * A function to modify the default "CapatazOptions", this utility function injects
 --   a special @notifyEvent@ callback to execute given assertions.
 testCapatazStreamWithOptions
-  :: (SUT.CapatazOptions -> SUT.CapatazOptions) -- ^ Function to modify default
+  :: (MonadUnliftIO m, MonadIO m)
+  => (SUT.CapatazOptions m -> SUT.CapatazOptions m) -- ^ Function to modify default
                                                 -- @CapatazOptions@
   -> [SUT.CapatazEvent -> Bool] -- ^ Assertions happening before setup function
                                 -- is called
-  -> (SUT.Capataz -> IO ()) -- ^ Function used to test public the supervisor
+  -> (SUT.Capataz m -> m ()) -- ^ Function used to test public the supervisor
                             -- public API (a.k.a setup function)
   -> [SUT.CapatazEvent -> Bool] -- ^ Assertions happening after the setup
                                 -- function
@@ -286,7 +287,7 @@ testCapatazStreamWithOptions
                                       -- @CapatazEvents@ that happened in a
                                       -- test, great when testing that an event
                                       -- __did not__ happen
-  -> IO ()
+  -> m ()
 testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAssertions postTeardownAssertions mAllEventsAssertion
   = do
 
@@ -316,7 +317,7 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
 
     case setupResult of
       -- If the sub-routine fails, show exception
-      Left  err -> assertFailure (show (err :: SomeException))
+      Left  err -> liftIO $ assertFailure (show (err :: SomeException))
       Right _   -> do
         -- We now run post-setup assertions
         runAssertions "POST-SETUP"
@@ -326,7 +327,7 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
                       capataz
 
         -- We now shutdown the capataz instance
-        void $ SUT.runTeardown capataz
+        liftIO $ void $ SUT.runTeardown capataz
 
         -- We run assertions for after the capataz has been shut down
         runAssertions "POST-TEARDOWN"
@@ -342,7 +343,7 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
           Nothing                 -> return ()
           Just allEventsAssertion -> do
             events <- reverse <$> readIORef accRef
-            assertBool
+            liftIO $ assertBool
               ( "On AFTER-TEST, expected all events to match predicate, but didn't ("
               <> show (length events)
               <> " events tried)\n"
@@ -356,14 +357,14 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
   runAssertions stageName (eventStream, accRef) pendingCountVar assertions capataz
     = do
       raceResult <- race
-        (threadDelay 1000100)
+        (liftIO $ threadDelay 1000100)
         (readEventLoop eventStream pendingCountVar assertions)
       case raceResult of
         Left _ -> do
           events       <- reverse <$> readIORef accRef
           pendingCount <- readIORef pendingCountVar
-          void $ SUT.runTeardown capataz
-          assertFailure
+          liftIO $ void $ SUT.runTeardown capataz
+          liftIO $ assertFailure
             (  "On "
             <> stageName
             <> " stage, expected all assertions to match, but didn't ("
@@ -398,9 +399,10 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
 -- | A version of "testCapatazStreamWithOptions" that does not receive the
 -- function that modifies a "CapatazOptions" record.
 testCapatazStream
-  :: [SUT.CapatazEvent -> Bool] -- ^ Assertions happening before setup function
+  :: (MonadUnliftIO m, MonadIO m)
+  => [SUT.CapatazEvent -> Bool] -- ^ Assertions happening before setup function
                                 -- is called
-  -> (SUT.Capataz -> IO ()) -- ^ Function used to test public the supervisor
+  -> (SUT.Capataz m -> m ()) -- ^ Function used to test public the supervisor
                             -- public API (a.k.a setup function)
   -> [SUT.CapatazEvent -> Bool] -- ^ Assertions happening after the setup
                                 -- function
@@ -410,6 +412,6 @@ testCapatazStream
                                       -- @CapatazEvents@ that happened in a
                                       -- test, great when testing that an event
                                       -- __did not__ happen
-  -> IO ()
+  -> m ()
 testCapatazStream preSetupAssertions =
   testCapatazStreamWithOptions id preSetupAssertions

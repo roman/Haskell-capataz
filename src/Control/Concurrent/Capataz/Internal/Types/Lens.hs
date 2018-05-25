@@ -6,7 +6,7 @@ module Control.Concurrent.Capataz.Internal.Types.Lens where
 import RIO
 
 import Control.Concurrent.Capataz.Internal.Types
-import Data.Time.Clock                           (NominalDiffTime)
+import RIO.Time                           (NominalDiffTime)
 
 --------------------------------------------------------------------------------
 
@@ -41,9 +41,9 @@ class HasSupervisorProcessSpecList s where
   -- supervisor.
   supervisorProcessSpecListL
     :: Functor f
-    => ([ProcessSpec] -> f [ProcessSpec])
-    -> s
-    -> f s
+    => ([ProcessSpec m] -> f [ProcessSpec m])
+    -> s m
+    -> f (s m)
 
 class HasSupervisorProcessTerminationOrder s where
   -- | Specifies order in which a supervisor is going to terminate its
@@ -59,31 +59,31 @@ class HasSupervisorIntensityReachedCallback s where
   -- breach in a supervisor's error intensity.
   supervisorOnIntensityReachedL
     :: Functor f
-    => (IO () -> f (IO ()))
-    -> s
-    -> f s
+    => (m () -> f (m ()))
+    -> s m
+    -> f (s m)
 
 class HasSupervisorFailureCallback s where
   -- | Specifies callback sub-routine that gets executed when a supervisor
   -- fails.
   supervisorOnFailureL
     :: Functor f
-    => ((SomeException -> IO ()) -> f (SomeException -> IO ()))
-    -> s
-    -> f s
+    => ((SomeException -> m ()) -> f (SomeException -> m ()))
+    -> s m
+    -> f (s m)
 
 
-instance HasSupervisorIntensity SupervisorOptions where
+instance HasSupervisorIntensity (SupervisorOptions m) where
   supervisorIntensityL k SupervisorOptions {supervisorIntensity, ..} =
     fmap (\newSupIntensity -> SupervisorOptions { supervisorIntensity = newSupIntensity, .. })
          (k supervisorIntensity)
 
-instance HasSupervisorPeriodSeconds SupervisorOptions where
+instance HasSupervisorPeriodSeconds (SupervisorOptions m) where
   supervisorPeriodSecondsL k SupervisorOptions {supervisorPeriodSeconds, ..} =
     fmap (\newSupPeriodSeconds -> SupervisorOptions { supervisorPeriodSeconds = newSupPeriodSeconds, .. })
          (k supervisorPeriodSeconds)
 
-instance HasSupervisorRestartStrategy SupervisorOptions where
+instance HasSupervisorRestartStrategy (SupervisorOptions m) where
   supervisorRestartStrategyL k SupervisorOptions {supervisorRestartStrategy, ..} =
     fmap (\newSupRestartStrategy ->
             SupervisorOptions { supervisorRestartStrategy = newSupRestartStrategy, .. })
@@ -95,7 +95,7 @@ instance HasSupervisorProcessSpecList SupervisorOptions where
             SupervisorOptions { supervisorProcessSpecList = newSupProcessSpecList, .. })
          (k supervisorProcessSpecList)
 
-instance HasSupervisorProcessTerminationOrder SupervisorOptions where
+instance HasSupervisorProcessTerminationOrder (SupervisorOptions m) where
   supervisorProcessTerminationOrderL k SupervisorOptions {supervisorProcessTerminationOrder, ..} =
     fmap (\newSupProcessTerminationOrder ->
             SupervisorOptions { supervisorProcessTerminationOrder = newSupProcessTerminationOrder, .. })
@@ -113,17 +113,17 @@ instance HasSupervisorFailureCallback SupervisorOptions where
 
 --------------------
 
-instance HasSupervisorIntensity CapatazOptions where
+instance HasSupervisorIntensity (CapatazOptions m) where
   supervisorIntensityL k CapatazOptions {supervisorIntensity, ..} =
     fmap (\newSupIntensity -> CapatazOptions { supervisorIntensity = newSupIntensity, .. })
          (k supervisorIntensity)
 
-instance HasSupervisorPeriodSeconds CapatazOptions where
+instance HasSupervisorPeriodSeconds (CapatazOptions m) where
   supervisorPeriodSecondsL k CapatazOptions {supervisorPeriodSeconds, ..} =
     fmap (\newSupPeriodSeconds -> CapatazOptions { supervisorPeriodSeconds = newSupPeriodSeconds, .. })
          (k supervisorPeriodSeconds)
 
-instance HasSupervisorRestartStrategy CapatazOptions where
+instance HasSupervisorRestartStrategy (CapatazOptions m) where
   supervisorRestartStrategyL k CapatazOptions {supervisorRestartStrategy, ..} =
     fmap (\newSupRestartStrategy ->
             CapatazOptions { supervisorRestartStrategy = newSupRestartStrategy, .. })
@@ -135,7 +135,7 @@ instance HasSupervisorProcessSpecList CapatazOptions where
             CapatazOptions { supervisorProcessSpecList = newSupProcessSpecList, .. })
          (k supervisorProcessSpecList)
 
-instance HasSupervisorProcessTerminationOrder CapatazOptions where
+instance HasSupervisorProcessTerminationOrder (CapatazOptions m) where
   supervisorProcessTerminationOrderL k CapatazOptions {supervisorProcessTerminationOrder, ..} =
     fmap (\newSupProcessTerminationOrder ->
             CapatazOptions { supervisorProcessTerminationOrder = newSupProcessTerminationOrder, .. })
@@ -156,9 +156,9 @@ instance HasSupervisorFailureCallback CapatazOptions where
   -- telemetry purposes (e.g. logging, monitoring, etc).
 onSystemEventL
   :: Functor f
-  => ((CapatazEvent -> IO ()) -> f (CapatazEvent -> IO ()))
-  -> CapatazOptions
-  -> f CapatazOptions
+  => ((CapatazEvent -> m ()) -> f (CapatazEvent -> m ()))
+  -> CapatazOptions m
+  -> f (CapatazOptions m)
 onSystemEventL k CapatazOptions { notifyEvent, ..} = fmap
   (\newNotifyEvent -> CapatazOptions {notifyEvent = newNotifyEvent, ..})
   (k notifyEvent)
@@ -172,10 +172,10 @@ onSystemEventL k CapatazOptions { notifyEvent, ..} = fmap
 -- worker "WorkerTerminationPolicy".
 --
 workerOnFailureL
-  :: Functor f
-  => ((SomeException -> IO ()) -> f (SomeException -> IO ()))
-  -> WorkerOptions
-  -> f WorkerOptions
+  :: (MonadIO m, Functor f)
+  => ((SomeException -> m ()) -> f (SomeException -> m ()))
+  -> WorkerOptions m
+  -> f (WorkerOptions m)
 workerOnFailureL k WorkerOptions { workerOnFailure, ..} = fmap
   (\newWorkerAction -> WorkerOptions {workerOnFailure = newWorkerAction, ..})
   (k workerOnFailure)
@@ -187,7 +187,7 @@ workerOnFailureL k WorkerOptions { workerOnFailure, ..} = fmap
 -- worker "WorkerTerminationPolicy".
 --
 workerOnCompletionL
-  :: Functor f => (IO () -> f (IO ())) -> WorkerOptions -> f WorkerOptions
+  :: (MonadIO m, Functor f) => (m () -> f (m ())) -> WorkerOptions m -> f (WorkerOptions m)
 workerOnCompletionL k WorkerOptions { workerOnCompletion, ..} = fmap
   (\newWorkerAction -> WorkerOptions {workerOnCompletion = newWorkerAction, ..})
   (k workerOnCompletion)
@@ -200,7 +200,7 @@ workerOnCompletionL k WorkerOptions { workerOnCompletion, ..} = fmap
 -- worker "WorkerTerminationPolicy".
 --
 workerOnTerminationL
-  :: Functor f => (IO () -> f (IO ())) -> WorkerOptions -> f WorkerOptions
+  :: Functor f => (m () -> f (m ())) -> WorkerOptions m -> f (WorkerOptions m)
 workerOnTerminationL k WorkerOptions { workerOnTermination, ..} = fmap
   ( \newWorkerAction ->
     WorkerOptions {workerOnTermination = newWorkerAction, ..}
@@ -212,8 +212,8 @@ workerOnTerminationL k WorkerOptions { workerOnTermination, ..} = fmap
 workerTerminationPolicyL
   :: Functor f
   => (WorkerTerminationPolicy -> f WorkerTerminationPolicy)
-  -> WorkerOptions
-  -> f WorkerOptions
+  -> WorkerOptions m
+  -> f (WorkerOptions m)
 workerTerminationPolicyL k WorkerOptions { workerTerminationPolicy, ..} = fmap
   ( \newWorkerAction ->
     WorkerOptions {workerTerminationPolicy = newWorkerAction, ..}
@@ -225,8 +225,8 @@ workerTerminationPolicyL k WorkerOptions { workerTerminationPolicy, ..} = fmap
 workerRestartStrategyL
   :: Functor f
   => (WorkerRestartStrategy -> f WorkerRestartStrategy)
-  -> WorkerOptions
-  -> f WorkerOptions
+  -> WorkerOptions m
+  -> f (WorkerOptions m)
 workerRestartStrategyL k WorkerOptions { workerRestartStrategy, ..} = fmap
   ( \newWorkerAction ->
     WorkerOptions {workerRestartStrategy = newWorkerAction, ..}

@@ -4,8 +4,9 @@ module Main where
 
 import RIO
 
-import Control.Concurrent.Capataz
-    ( SupervisorRestartStrategy (..)
+import Capataz
+    ( CapatazOptions
+    , SupervisorRestartStrategy (..)
     , WorkerRestartStrategy (..)
     , buildWorkerOptions
     , buildWorkerOptionsWithDefaults
@@ -15,30 +16,35 @@ import Control.Concurrent.Capataz
     , onSystemEventL
     , set
     , supervisorRestartStrategyL
-    , runTeardown
+    , terminateCapataz_
     , workerRestartStrategyL
+    , buildLogWorkerOptions
     )
 import Lib                        (Cli (..), killNumberProcess, spawnNumbersProcess)
 import Options.Generic            (getRecord)
-import Text.Show.Pretty           (ppShow)
+
+rootSupervisorOptions :: (HasLogFunc env, MonadIO m, MonadReader env m) => (CapatazOptions m -> CapatazOptions m)
+rootSupervisorOptions =
+  set supervisorRestartStrategyL OneForOne
+  . set onSystemEventL (logDebug . display) -- Show all events of the capataz sub-system on debug
+
 
 main :: IO ()
 main = do
-  n       <- getRecord "Counter spawner"
-  logOptions <- logOptionsHandle stdout True
-  withLogFunc logOptions $ \logFunc -> runRIO logFunc $ do
+  n <- procNumber <$> getRecord "Counter spawner"
+  logOptions <- logOptionsHandle stdout False
+  (loggerOptions, logFunc) <- buildLogWorkerOptions logOptions "logger" n id
 
-    capataz <- forkCapataz
-      "unix-process-capataz"
-      (set supervisorRestartStrategyL OneForOne
-       . set onSystemEventL (logDebug . displayShow . ppShow))
+  runRIO logFunc $ do
+    capataz <- forkCapataz "unix-process-capataz" rootSupervisorOptions
 
+    _loggerWorker <- forkWorker loggerOptions capataz
     let numberWriter i a = logInfo $ displayShow (i :: Int, a :: Int)
         delayMicros = 5000100
 
-    _workerIdList <- forM [1 .. procNumber n] $ \i -> do
+    _workerIdList <- forM [1 .. n] $ \i -> do
       let counterWorkerOptions = buildWorkerOptions
-            ("Worker (" <> tshow i <> ")")
+            ("worker-" <> tshow i)
             (spawnNumbersProcess (numberWriter i))
             (set workerRestartStrategyL Permanent)
 
@@ -52,4 +58,4 @@ main = do
     void $ forkWorker workerKillerOptions capataz
 
     finally (joinCapatazThread capataz)
-            (liftIO (runTeardown capataz) >>= logDebug . displayShow)
+            (terminateCapataz_ capataz >>= logDebug . displayShow)

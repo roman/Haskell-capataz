@@ -11,14 +11,18 @@ import Options.Generic          (getRecord)
 
 main :: IO ()
 main = do
-  n <- getRecord "Counter spawner"
-  let
-    numberWriter i a = logInfo $ displayShow (i :: Int, a :: Int)
-    delayMicros = 5000100
+  logOptions <- logOptionsHandle stdout True
+  withLogFunc logOptions $ \logFunc -> runRIO logFunc $ do
 
-  _asyncList <- forM [1 .. procNumber n]
-    $ \i -> async $ spawnNumbersProcess (numberWriter i)
+    n <- liftIO $ getRecord "Counter spawner"
 
-  killerAsync <- async $ forever $ threadDelay delayMicros >> killNumberProcess
+    let
+      numberWriter i a = logInfo $ displayShow (i :: Int, a :: Int)
+      delayMicros = 5000100
 
-  wait killerAsync
+    _asyncList <- forM [1 .. procNumber n]
+      $ \i -> async $ spawnNumbersProcess (numberWriter i)
+
+    killerAsync <- async $ forever $ threadDelay delayMicros >> killNumberProcess
+
+    wait killerAsync

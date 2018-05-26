@@ -12,6 +12,7 @@ module Control.Concurrent.Capataz
 , Control.Concurrent.Capataz.Internal.Types.CallbackType (..)
 
 , Control.Concurrent.Capataz.Internal.Types.WorkerId
+, Control.Concurrent.Capataz.Internal.Types.WorkerName
 , Control.Concurrent.Capataz.Internal.Types.WorkerRestartStrategy (..)
 , Control.Concurrent.Capataz.Internal.Types.WorkerTerminationPolicy (..)
 , Control.Concurrent.Capataz.Internal.Types.WorkerOptions
@@ -23,6 +24,7 @@ module Control.Concurrent.Capataz
 , Control.Concurrent.Capataz.Internal.Types.ProcessError (..)
 
 , Control.Concurrent.Capataz.Internal.Types.SupervisorId
+, Control.Concurrent.Capataz.Internal.Types.SupervisorName
 , Control.Concurrent.Capataz.Internal.Types.Supervisor
 , Control.Concurrent.Capataz.Internal.Types.SupervisorRestartStrategy (..)
 , Control.Concurrent.Capataz.Internal.Types.SupervisorStatus (..)

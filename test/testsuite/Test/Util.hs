@@ -327,7 +327,7 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
                       capataz
 
         -- We now shutdown the capataz instance
-        liftIO $ void $ SUT.runTeardown capataz
+        SUT.terminateCapataz_ capataz
 
         -- We run assertions for after the capataz has been shut down
         runAssertions "POST-TEARDOWN"
@@ -363,7 +363,7 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
         Left _ -> do
           events       <- reverse <$> readIORef accRef
           pendingCount <- readIORef pendingCountVar
-          liftIO $ void $ SUT.runTeardown capataz
+          SUT.terminateCapataz_ capataz
           liftIO $ assertFailure
             (  "On "
             <> stageName

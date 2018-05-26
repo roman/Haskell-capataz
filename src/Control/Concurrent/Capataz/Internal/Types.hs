@@ -26,10 +26,12 @@ type RestartCount = Int
 type ProcessMap m = HashMap ProcessId (Process m)
 type ParentSupervisor = Supervisor
 
--- | Event delivered to the "notifyEvent" callback sub-routine; these events can
+-- | Event delivered to the 'notifyEvent' callback sub-routine; these events can
 -- be used to monitor the capataz system and track what is doing, providing high
 -- levels of telemetry for all supervisors and workers of a capataz system,
 -- ergo, should be used for logging, monitoring and testing purposes.
+--
+-- @since 0.1.0.0
 data CapatazEvent
   = InvalidSupervisorStatusReached {
     supervisorId   :: !SupervisorId
@@ -127,8 +129,10 @@ data CapatazEvent
   }
   deriving (Generic, Show)
 
--- | Defines how a "Worker" process termination should be handled by its
+-- | Defines how a 'Worker' process termination should be handled by its
 -- supervisor.
+--
+-- @since 0.0.0.0
 data WorkerTerminationPolicy
   -- | Supervisor waits until infinity for the worker termination callback to
   -- finish execution.
@@ -145,6 +149,8 @@ data WorkerTerminationPolicy
   deriving (Generic, Show, Eq, Ord)
 
 -- | Default worker termination is a timeout of three (3) seconds.
+--
+-- @since 0.2.0.0
 defWorkerTerminationPolicy :: WorkerTerminationPolicy
 defWorkerTerminationPolicy = TimeoutMillis 3000
 
@@ -170,6 +176,8 @@ instance NFData ProcessRestartAction
 
 -- | Specifies the order in which supervised process should be terminated by a
 -- Supervisor in case of a restart or shutdown.
+--
+-- @since 0.0.0.0
 data ProcessTerminationOrder
   -- | Supervisor terminates supervised process from most recent to oldest.
   = NewestFirst
@@ -177,13 +185,17 @@ data ProcessTerminationOrder
   | OldestFirst
   deriving (Generic, Show, Eq, Ord)
 
--- | default is "OldestFirst".
+-- | Default termination order is 'OldestFirst'.
+--
+-- @since 0.2.0.0
 defProcessTerminationOrder :: ProcessTerminationOrder
 defProcessTerminationOrder = OldestFirst
 
 instance NFData ProcessTerminationOrder
 
 -- | Specifies how a Supervisor restarts a failing process.
+--
+-- @since 0.0.0.0
 data SupervisorRestartStrategy
   -- | Supervisor terminates all sibling supervised processes that didn't fail,
   -- and then restarts all of them together. This strategy serves best when all
@@ -194,7 +206,9 @@ data SupervisorRestartStrategy
   | OneForOne
   deriving (Generic, Show, Eq, Ord)
 
--- | Default restart strategy is "OneForOne".
+-- | Default restart strategy is 'OneForOne'.
+--
+-- @since 0.2.0.0
 defSupervisorRestartStategy :: SupervisorRestartStrategy
 defSupervisorRestartStategy = OneForOne
 
@@ -202,10 +216,11 @@ instance NFData SupervisorRestartStrategy
 
 -- | Allows to:
 --
--- * Specify options for The root supervisor of a capataz system.
+-- * Specify options for the root 'Supervisor' of a capataz system.
 --
--- * Provie a "notifyEvent" callback to monitor or log a capataz system.
+-- * Provide a 'notifyEvent' callback to monitor or log a capataz system.
 --
+-- @since 0.1.0.0
 data CapatazOptions m
   = CapatazOptions {
     supervisorName                    :: !SupervisorName
@@ -245,7 +260,9 @@ defWorkerRestartStrategy :: WorkerRestartStrategy
 defWorkerRestartStrategy = Transient
 
 -- | Specifies all options that can be used to create a Worker Process. You may
--- create a record of this type via the smart constructor "buildWorkerOptions".
+-- create a record of this type via the smart constructor 'buildWorkerOptions'.
+--
+-- @since 0.1.0.0
 data WorkerOptions m
   = WorkerOptions {
     -- | An @IO ()@ sub-routine that will be executed when the worker
@@ -268,6 +285,8 @@ data WorkerOptions m
   deriving (Generic)
 
 -- | Record that contains the "Async" record (thread reference) of a worker
+--
+-- @since 0.1.0.0
 data Worker m
   = Worker {
     -- | Unique identifier for a worker that is executing
@@ -456,25 +475,30 @@ data SupervisorMessage m
   | MonitorEvent !MonitorEvent
   deriving (Generic)
 
--- | Internal Type to manage both Worker and Supervisor processes
+-- | Internal Type to manage both 'Worker' and 'Supervisor' processes
+--
+-- @since 0.1.0.0
 data Process m
   = WorkerProcess  !(Worker m)
   | SupervisorProcess !(Supervisor m)
 
--- | Record used to specify how to __build__ a runtime "Process" in a static
+-- | Record used to specify how to __build__ a runtime 'Process' in a static
 -- supervision tree; to create values of this type, you must use:
 --
--- * "workerSpec" or "workerSpecWithDefaults" to build a worker process
+-- * 'workerSpec' or 'workerSpecWithDefaults' to build a worker process
 --
--- * "supervisorSpec" or "supervisorSpecWithDefaults" to build a supervisor
+-- * 'supervisorSpec' or 'supervisorSpecWithDefaults' to build a supervisor
 -- process
 --
+-- @since 0.1.0.0
 data ProcessSpec m
   = WorkerSpec (WorkerOptions m)
   | SupervisorSpec (SupervisorOptions m)
 
 -- | Record that contains the environment of a capataz monitor, this is used as
 -- the main record to create workers and to stop the supervisor thread.
+--
+-- @since 0.0.0.0
 data Capataz m
   = Capataz {
     capatazSupervisor :: !(Supervisor m)
@@ -516,17 +540,18 @@ data SupervisorEnv m
   , notifyEvent                       :: !(CapatazEvent -> m ())
   }
 
--- | Builds a "CapatazOptions" record with defaults on how to create a capataz
+-- | Builds a 'CapatazOptions' record with defaults on how to create a capataz
 -- root supervisor, these defaults are:
 --
 -- * Intensity error tolerance is set to 1 error every 5 seconds
 --
--- * A "SupervisorRestartStrategy" of "OneForOne"
+-- * A 'SupervisorRestartStrategy' of 'OneForOne'
 --
--- * A "ProcessTerminationOrder" of "OldestFirst"
+-- * A 'ProcessTerminationOrder' of 'OldestFirst'
 --
--- This function is intended to be used in combination with "forkCapataz".
+-- This function is intended to be used in combination with 'forkCapataz'.
 --
+-- @since 0.1.0.0
 defCapatazOptions
   :: Monad m
   => Text
@@ -544,29 +569,30 @@ defCapatazOptions supervisorName modFn = modFn CapatazOptions
   , notifyEvent                       = const $ return ()
   }
 
--- | Builds a "ProcessSpec" record for a supervisor process with defaults from
--- "supervisorSpecWithDefaults". This function allows overrides of these
+-- | Builds a 'ProcessSpec' record for a supervisor process with defaults from
+-- 'supervisorSpecWithDefaults'. This function allows overrides of these
 -- defaults using lenses.
 --
 -- This function is used when building a supervisor branch in a static
 -- supervision trees.
 --
+-- @since 0.1.0.0
 supervisorSpec
   :: Monad m
   => SupervisorName -- ^ Name used for telemetry purposes
-  -> (SupervisorOptions m -> SupervisorOptions m) -- ^ Function to modify default
-                                              -- supervisor options
+  -> (SupervisorOptions m -> SupervisorOptions m) -- ^ 'SupervisorOptions' modifier
   -> ProcessSpec m
 supervisorSpec sName modFn =
   SupervisorSpec (buildSupervisorOptions sName modFn)
 {-# INLINE supervisorSpec #-}
 
--- | Builds a "ProcessSpec" record for a supervisor process with defaults from
---  "buildSupervisorOptionsWithDefaults".
+-- | Builds a 'ProcessSpec' record for a supervisor process with defaults from
+--  'buildSupervisorOptionsWithDefaults'.
 --
 -- This function is used when building a supervisor branch in a static
 -- supervision trees.
 --
+-- @since 0.1.0.0
 supervisorSpecWithDefaults
   :: Monad m
   => SupervisorName -- ^ Name used for telemetry purposes
@@ -574,16 +600,17 @@ supervisorSpecWithDefaults
 supervisorSpecWithDefaults sName = supervisorSpec sName id
 {-# INLINE supervisorSpecWithDefaults #-}
 
--- | Builds a "ProcessSpec" record for a worker process with defaults from
--- "workerSpecWithDefaults". This function allows overrides of these
+-- | Builds a 'ProcessSpec' record for a worker process with defaults from
+-- 'workerSpecWithDefaults'. This function allows overrides of these
 -- defaults using lenses.
 --
 -- This function is used when building a worker in a static supervision tree.
 --
+-- @since 0.1.0.0
 workerSpec
   :: Monad m
   => WorkerName -- ^ Name used for telemetry purposes
-  -> m () -- ^ IO sub-routine to be supervised
+  -> m () -- ^ 'IO' sub-routine to be supervised
   -> (WorkerOptions m -> WorkerOptions m) -- ^ Function to modify default worker
                                       -- options
   -> ProcessSpec m
@@ -591,11 +618,12 @@ workerSpec wName wAction modFn =
   WorkerSpec (buildWorkerOptions wName wAction modFn)
 {-# INLINE workerSpec #-}
 
--- | Builds a "ProcessSpec" record for a worker process with defaults from
--- "buildSupervisorOptionsWithDefaults".
+-- | Builds a 'ProcessSpec' record for a worker process with defaults from
+-- 'buildSupervisorOptionsWithDefaults'.
 --
 -- This function is used when building a worker in a static supervision tree.
 --
+-- @since 0.1.0.0
 workerSpecWithDefaults
   :: Monad m
   => WorkerName -- ^ Name used for telemetry purposes
@@ -604,12 +632,13 @@ workerSpecWithDefaults
 workerSpecWithDefaults wName wAction = workerSpec wName wAction id
 {-# INLINE workerSpecWithDefaults #-}
 
--- | Builds a "SupervisorOptions" record with defaults from
--- "buildSupervisorOptionsWithDefaults". This function allows overrides of these
+-- | Builds a 'SupervisorOptions' record with defaults from
+-- 'buildSupervisorOptionsWithDefaults'. This function allows overrides of these
 -- defaults using lenses.
 --
--- This function is intended to be used in combination with "forkSupervisor".
+-- This function is intended to be used in combination with 'forkSupervisor'.
 --
+-- @since 0.1.0.0
 buildSupervisorOptions
   :: Monad m
   => SupervisorName -- ^ Name used for telemetry purposes
@@ -628,17 +657,18 @@ buildSupervisorOptions supervisorName modFn = modFn SupervisorOptions
   }
 {-# INLINE buildSupervisorOptions #-}
 
--- | Builds a "SupervisorOptions" record with defaults to create a supervisor
+-- | Builds a 'SupervisorOptions' record with defaults to create a supervisor
 -- process, these defaults are:
 --
 -- * Intensity error tolerance is set to 1 error every 5 seconds
 --
--- * A "SupervisorRestartStrategy" of "OneForOne"
+-- * A 'SupervisorRestartStrategy' of 'OneForOne'
 --
--- * A "ProcessTerminationOrder" of "OldestFirst"
+-- * A 'ProcessTerminationOrder' of 'OldestFirst'
 --
--- This function is intended to be used in combination with "forkSupervisor".
+-- This function is intended to be used in combination with 'forkSupervisor'.
 --
+-- @since 0.1.0.0
 buildSupervisorOptionsWithDefaults
   :: Monad m
   => SupervisorName -- ^ Name used for telemetry purposes
@@ -646,12 +676,13 @@ buildSupervisorOptionsWithDefaults
 buildSupervisorOptionsWithDefaults = flip buildSupervisorOptions id
 {-# INLINE buildSupervisorOptionsWithDefaults #-}
 
--- | Builds a "WorkerOptions" record, keeps the defaults from
---   "buildWorkerOptionsWithDefaults" but allows overrides using lenses.
+-- | Builds a 'WorkerOptions' record, keeps the defaults from
+--   'buildWorkerOptionsWithDefaults' but allows overrides using lenses.
 --
--- This function is intended to be used in combination with "forkWorker". See
--- the ... example in the examples directory for a demonstration.
+-- This function is intended to be used in combination with 'forkWorker'. See the
+-- capataz-simple-example project in the examples directory for a demonstration.
 --
+-- @since 0.1.0.0
 buildWorkerOptions
   :: Monad m
   => WorkerName -- ^ Name used for telemetry purposes
@@ -670,12 +701,12 @@ buildWorkerOptions workerName workerAction f = f WorkerOptions
   }
 {-# INLINE buildWorkerOptions #-}
 
--- | Builds a "WorkerOptions" record with defaults to create a worker process,
+-- | Builds a 'WorkerOptions' record with defaults to create a worker process,
 -- the defaults are:
 --
--- * A "Transient" "WorkerRestartStrategy"
+-- * A 'Transient' 'WorkerRestartStrategy'
 --
--- * A "WorkerTerminationPolicy" of a 3 seconds timeout
+-- * A 'WorkerTerminationPolicy' of a 3 seconds timeout
 --
 -- * A _completion_ callback that just returns unit
 --
@@ -683,14 +714,15 @@ buildWorkerOptions workerName workerAction f = f WorkerOptions
 --
 -- * A _failure_ callback that just returns unit
 --
--- This function is intended to be used in combination with "forkWorker", for
--- creating a worker in an static supervision tree, use "workerSpecWithDefaults"
--- instead. See the ... example for a demonstration.
+-- This function is intended to be used in combination with 'forkWorker', for creating a
+-- worker in an static supervision tree, use "workerSpecWithDefaults" instead. See the
+-- capataz-simple-example project in the examples directory for a demonstration.
 --
+-- @since 0.1.0.0
 buildWorkerOptionsWithDefaults
   :: Monad m
   => WorkerName -- ^ Name used for telemetry purposes
-  -> m () -- ^ IO sub-routine to be supervised
+  -> m () -- ^ 'IO' sub-routine to be supervised
   -> WorkerOptions m
 buildWorkerOptionsWithDefaults wName wAction =
   buildWorkerOptions wName wAction id

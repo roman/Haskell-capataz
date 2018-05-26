@@ -53,9 +53,9 @@ instance HasSupervisor Supervisor where
   getSupervisor = id
 
 -- | Creates a Capataz record, which holds both a root supervisor and a
--- "Teardown" to shut down the system. The root supervisor monitors failures on
--- process threads defined with "supervisorProcessSpecList" or created
--- dynamically using "forkWorker" or "forkSupervisor".
+-- 'Teardown' to shut down the system. The root supervisor monitors failures on
+-- process threads defined with 'supervisorProcessSpecList' or created
+-- dynamically using 'forkWorker' or 'forkSupervisor'.
 forkCapataz :: (MonadUnliftIO m, MonadIO m) => Text -> (CapatazOptions m -> CapatazOptions m) -> m (Capataz m)
 forkCapataz capatazName modOptionsFn = do
   capatazId    <- liftIO UUID.nextRandom
@@ -101,34 +101,33 @@ forkCapataz capatazName modOptionsFn = do
     parentSupervisorEnv
     supervisorOptions
     supervisorId
-    0
+    0 -- initial restart count
 
   capatazTeardown <- withRunInIO $ \run ->
     newTeardown
     "capataz"
     ( run $ do
-      Supervisor.haltSupervisor "capataz system shutdown" supervisorEnv
-      eventTime <- getCurrentTime
-      notifyEvent CapatazTerminated {supervisorId , supervisorName , eventTime }
+        Supervisor.haltSupervisor "capataz system shutdown" supervisorEnv
+        eventTime <- getCurrentTime
+        notifyEvent CapatazTerminated {supervisorId , supervisorName , eventTime }
     )
 
   return Capataz {capatazSupervisor , capatazTeardown }
 
--- | Creates a green thread from an "IO ()" sub-routine. Depending in options
--- defined in the "WorkerOptions" record, it will automatically restart this
+-- | Creates a green thread from an @IO ()@ sub-routine. Depending in options
+-- defined in the 'WorkerOptions' record, it will automatically restart this
 -- sub-routine in case of failures.
 --
 -- See documentation of related functions:
 --
--- * "buildWorkerOptionsWithDefault"
--- * "buildWorkerOptions"
+-- * 'buildWorkerOptionsWithDefaults'
+-- * 'buildWorkerOptions'
 --
 forkWorker
-  :: MonadIO m
-  => HasSupervisor supervisor
+  :: (MonadIO m, HasSupervisor supervisor)
   => WorkerOptions m -- ^ Worker options (restart, name, callbacks, etc)
-  -> supervisor m   -- ^ "Supervisor" that supervises the worker
-  -> m WorkerId   -- ^ An identifier that can be used to terminate the "Worker"
+  -> supervisor m   -- ^ 'Supervisor' that supervises the worker
+  -> m WorkerId   -- ^ An identifier that can be used to terminate the 'Worker'
 forkWorker workerOptions sup = do
   let Supervisor { supervisorNotify } = getSupervisor sup
   workerIdVar <- newEmptyMVar
@@ -141,12 +140,12 @@ forkWorker workerOptions sup = do
   takeMVar workerIdVar
 
 -- | Creates a green thread which monitors other green threads for failures and
--- restarts them using settings defined on "SupervisorOptions".
+-- restarts them using settings defined on 'SupervisorOptions'.
 --
 -- See documentation of related functions:
 --
--- * "buildSupervisorOptionsWithDefault"
--- * "buildSupervisorOptions"
+-- * 'buildSupervisorOptionsWithDefault'
+-- * 'buildSupervisorOptions'
 --
 forkSupervisor
   :: (MonadIO m, HasSupervisor parentSupervisor)
@@ -168,8 +167,9 @@ forkSupervisor supervisorOptions parentSup = do
 -- | Stops the execution of a green thread being supervised by the given
 -- supervisor.
 --
--- NOTE: If "ProcessId" maps to a worker that is configured with a "Permanent"
--- worker restart strategy, the worker green thread __will be restarted again__.
+-- __IMPORTANT__ If 'ProcessId' maps to a worker that is configured with a
+-- 'Permanent' worker restart strategy, the worker green thread __will be
+-- restarted again__.
 --
 terminateProcess
   :: (MonadIO m, HasSupervisor supervisor) => Text -> ProcessId -> supervisor m -> m Bool
@@ -208,13 +208,13 @@ terminateCapataz_ = liftIO . runTeardown_
 getCapatazTeardown :: Capataz m -> Teardown
 getCapatazTeardown Capataz { capatazTeardown } = capatazTeardown
 
--- | Gets the "Async" of a Supervisor thread.
+-- | Gets the 'Async' of a Supervisor thread.
 --
--- NOTE: There is no way to get the "Async" value of the root supervisor; this
--- is to avoid error scenarios.
+-- NOTE: There is no way to get the 'Async' value of the root supervisor; this
+-- is done on-purpose to avoid error scenarios.
 getSupervisorAsync :: Supervisor m -> Async ()
 getSupervisorAsync Supervisor { supervisorAsync } = supervisorAsync
 
--- | Gets the process identifier of a Supervisor; normally used for termination.
+-- | Gets the process identifier of a 'Supervisor'; normally used for termination.
 getSupervisorProcessId :: Supervisor m -> ProcessId
 getSupervisorProcessId Supervisor { supervisorId } = supervisorId

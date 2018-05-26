@@ -144,7 +144,7 @@ supervisorLoop
   -> m ()
 supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorName, supervisorNotify = notifyParentSupervisor } env@SupervisorEnv { supervisorId = processId, supervisorName = processName, supervisorOptions, supervisorStatusVar, supervisorGetNotification, notifyEvent } restartCount
   = do
-    processThreadId <- myThreadId
+    processThreadId <- PTID <$> myThreadId
     loopResult      <-
       unmask
       $   try

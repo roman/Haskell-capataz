@@ -17,7 +17,6 @@ type WorkerId = UUID
 type SupervisorId = UUID
 type ProcessId = UUID
 type WorkerAction m = m ()
-type ProcessThreadId = ThreadId
 type ProcessName = Text
 type CapatazName = Text
 type SupervisorName = Text
@@ -25,6 +24,20 @@ type WorkerName = Text
 type RestartCount = Int
 type ProcessMap m = HashMap ProcessId (Process m)
 type ParentSupervisor = Supervisor
+
+-- | Wrapper for 'ThreadId'
+--
+-- @since 0.2.0.0
+newtype ProcessThreadId
+  = PTID ThreadId
+  deriving (Generic, Eq, Show)
+
+-- | @since 0.2.0.0
+instance Pretty ProcessThreadId where
+  pretty (PTID tid) =
+    case words (show tid) of
+      (_:threadNumber:_) -> pretty threadNumber
+      _ -> "unknown"
 
 -- | Event delivered to the 'notifyEvent' callback sub-routine; these events can
 -- be used to monitor the capataz system and track what is doing, providing high

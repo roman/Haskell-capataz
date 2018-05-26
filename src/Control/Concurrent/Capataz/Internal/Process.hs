@@ -20,8 +20,8 @@ getProcessAsync process = case process of
   SupervisorProcess Supervisor { supervisorAsync } -> supervisorAsync
 
 -- | Gets "ThreadId" from a given Process.
-getProcessThreadId :: Process m -> ThreadId
-getProcessThreadId = asyncThreadId . getProcessAsync
+getProcessThreadId :: Process m -> ProcessThreadId
+getProcessThreadId = PTID . asyncThreadId . getProcessAsync
 
 -- | Gets "ProcessId" from a given Process.
 getProcessId :: Process m -> ProcessId
@@ -157,7 +157,7 @@ handleProcessException
 handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName, notifyEvent } procSpec processId restartCount err
   = do
     let processName = getProcessName procSpec
-    processThreadId  <- myThreadId
+    processThreadId  <- PTID <$> myThreadId
     monitorEventTime <- getCurrentTime
     case fromException err of
       Just RestartProcessException -> return ProcessForcedRestart
@@ -260,7 +260,7 @@ handleProcessCompletion
 handleProcessCompletion unmask ParentSupervisorEnv { supervisorId, supervisorName, notifyEvent } procSpec processId restartCount
   = do
     let processName = getProcessName procSpec
-    processThreadId  <- myThreadId
+    processThreadId  <- PTID <$> myThreadId
     monitorEventTime <- getCurrentTime
     eCompResult      <- try $ unmask $ callProcessOnCompletion procSpec
 

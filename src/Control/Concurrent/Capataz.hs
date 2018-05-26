@@ -63,6 +63,8 @@ module Control.Concurrent.Capataz
 , Control.Concurrent.Capataz.Internal.Core.forkWorker
 , Control.Concurrent.Capataz.Internal.Core.forkSupervisor
 , Control.Concurrent.Capataz.Internal.Core.forkCapataz
+, Control.Concurrent.Capataz.Internal.Core.terminateCapataz
+, Control.Concurrent.Capataz.Internal.Core.terminateCapataz_
 , Control.Concurrent.Capataz.Internal.Core.terminateProcess
 
 -- * Utility functions
@@ -72,7 +74,7 @@ module Control.Concurrent.Capataz
 , Control.Concurrent.Capataz.Internal.Core.getCapatazTeardown
 
 -- * Teardown (re-exported)
-, Control.Teardown.runTeardown
+, Control.Teardown.TeardownResult
 
 -- * Lens (re-exported)
 , (&)

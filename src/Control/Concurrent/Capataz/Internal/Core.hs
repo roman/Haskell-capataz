@@ -17,6 +17,8 @@ module Control.Concurrent.Capataz.Internal.Core
 , forkSupervisor
 , forkCapataz
 , terminateProcess
+, terminateCapataz
+, terminateCapataz_
 , joinCapatazThread
 , getSupervisorProcessId
 , getSupervisorAsync
@@ -26,7 +28,7 @@ where
 
 import RIO
 
-import Control.Teardown        (Teardown, newTeardown)
+import Control.Teardown        (Teardown, TeardownResult, newTeardown, runTeardown, runTeardown_)
 import RIO.Time         (getCurrentTime)
 
 import qualified Data.UUID.V4 as UUID (nextRandom)
@@ -190,7 +192,19 @@ joinCapatazThread Capataz { capatazSupervisor } =
   let Supervisor { supervisorAsync } = capatazSupervisor
   in  wait supervisorAsync
 
--- | Gets "Teardown" record of this capataz system.
+-- | Terminates a 'Capataz' system (all supervised threads) and returns a 'TeardownResult'
+--
+-- @since 0.2.0.0
+terminateCapataz :: MonadIO m => Capataz m -> m TeardownResult
+terminateCapataz = liftIO . runTeardown
+
+-- | Terminates a 'Capataz' system (all supervised threads)
+--
+-- @since 0.2.0.0
+terminateCapataz_ :: MonadIO m => Capataz m -> m ()
+terminateCapataz_ = liftIO . runTeardown_
+
+-- | Gets 'Teardown' record of this capataz system.
 getCapatazTeardown :: Capataz m -> Teardown
 getCapatazTeardown Capataz { capatazTeardown } = capatazTeardown
 

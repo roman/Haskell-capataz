@@ -52,6 +52,7 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
+  - Capataz
   - Control.Concurrent.Capataz
   - Control.Concurrent.Capataz.Event
   - Control.Concurrent.Capataz.Lens

@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
 
 {-| This module contains all the types used across all the other modules -}
@@ -9,8 +10,12 @@ module Control.Concurrent.Capataz.Internal.Types where
 import RIO
 
 import Control.Teardown            (HasTeardown (..), Teardown)
-import RIO.Time                   (NominalDiffTime, UTCTime)
+import RIO.Time                    (NominalDiffTime, UTCTime)
 import Data.UUID                   (UUID)
+
+import Text.Show.Pretty          (ppShow)
+import Data.Text.Prettyprint.Doc (Pretty(..), (<+>))
+import qualified Data.Text.Prettyprint.Doc as Pretty
 
 type CapatazId = UUID
 type WorkerId = UUID
@@ -141,6 +146,208 @@ data CapatazEvent
   , eventTime      :: !UTCTime
   }
   deriving (Generic, Show)
+
+-- | @since 0.2.0.0
+instance Pretty CapatazEvent where
+  pretty ev =
+    case ev of
+      InvalidSupervisorStatusReached {supervisorId, supervisorName} ->
+        "Supervisor got into an state that should never have happened, please"
+        <+> "report a ticket to"
+        <+> "https://github.com/roman/Haskell-capataz/issues/new with title:"
+        <+> Pretty.dquotes "InvalidSupervisorStatusReached error"
+        <> prettyAttributes [("Supervisor ID"
+                             , prettySupervisorId supervisorId supervisorName)]
+
+      SupervisorStatusChanged {
+          supervisorId
+        , supervisorName
+        , prevSupervisorStatus
+        , newSupervisorStatus
+        } ->
+        "Supervisor changed state"
+        <> prettyAttributes [ ("Supervisor ID"
+                              , prettySupervisorId supervisorId supervisorName)
+                            , ("Previous State"
+                              , Pretty.dquotes $ Pretty.viaShow prevSupervisorStatus)
+                            , ("New State"
+                              , Pretty.dquotes (Pretty.viaShow newSupervisorStatus))
+                            ]
+
+      ProcessStarted {
+          supervisorId
+        , supervisorName
+        , processId
+        , processThreadId
+        , processName
+        , processType
+        } ->
+        "Supervisor spawned new process"
+        <> prettyAttributes [ ("Supervisor ID"
+                              , prettySupervisorId supervisorId supervisorName)
+                            , ( "Process ID"
+                              , prettyProcessId processId processName processThreadId)
+                            , ( "Process Type",
+                                pretty processType)
+                            ]
+
+      ProcessFailed {
+          processId
+        , processThreadId
+        , processName
+        , processType
+        , processError
+        } ->
+        "Process failed with error"
+        <> prettyAttributes [ ( "Process ID"
+                              , prettyProcessId processId processName processThreadId)
+                            , ( "Process Type", pretty processType)
+                            , ( "Error"
+                              , Pretty.nest 2 (Pretty.hardline
+                                               <> "|" <+> pretty (ppShow processError)))
+                            ]
+
+      ProcessRestarted {
+          supervisorId
+        , supervisorName
+        , processId
+        , processThreadId
+        , processName
+        , processType
+        } ->
+        "Supervisor restarted failed process"
+        <> prettyAttributes [ ("Supervisor ID"
+                              , prettySupervisorId supervisorId supervisorName)
+                            , ( "Process ID"
+                              , prettyProcessId processId processName processThreadId)
+                            , ( "Process Type", pretty processType)
+                            ]
+
+      ProcessTerminated {
+          supervisorId
+        , supervisorName
+        , processId
+        , processThreadId
+        , processName
+        , processType
+        , terminationReason
+        } ->
+        "Supervisor terminated process"
+        <> prettyAttributes [ ("Supervisor ID"
+                              , prettySupervisorId supervisorId supervisorName)
+                            , ( "Process ID"
+                              , prettyProcessId processId processName processThreadId)
+                            , ( "Process Type", pretty processType)
+                            , ( "Reason"
+                              , Pretty.nest 2
+                                  (Pretty.fillBreak 10 $ pretty terminationReason))
+                            ]
+
+
+      ProcessCompleted {
+          processId
+        , processThreadId
+        , processName
+        , processType
+        } ->
+        "Process completed execution with no errors"
+        <> prettyAttributes [ ( "Process ID"
+                              , prettyProcessId processId processName processThreadId)
+                            , ( "Process Type", pretty processType)
+                            ]
+
+      ProcessCallbackExecuted {
+          processId
+        , processThreadId
+        , processName
+        , processType
+        , processCallbackError
+        , processCallbackType
+        } ->
+        case processCallbackError of
+          Nothing ->
+            "Process executed callback"
+             <> prettyAttributes [ ( "Process ID"
+                                   , prettyProcessId processId processName processThreadId)
+                                 , ( "Process Type", pretty processType)
+                                 , ( "Callback", pretty processCallbackType)
+                                 ]
+          Just err ->
+            "Process executed callback and it failed"
+             <> prettyAttributes [ ( "Process ID"
+                                   , prettyProcessId processId processName processThreadId)
+                                 , ( "Process Type", pretty processType)
+                                 , ( "Callback", pretty processCallbackType)
+                                 , ( "Error"
+                                   , Pretty.nest 2
+                                       (Pretty.hardline
+                                         <> "|"
+                                         <+> pretty (ppShow err)))
+                                 ]
+
+      ProcessTerminationStarted {
+          supervisorId
+        , supervisorName
+        , terminationReason
+        } ->
+        "Supervisor started termination of its children"
+        <> prettyAttributes [ ("Supervisor ID"
+                              , prettySupervisorId supervisorId supervisorName)
+                            , ( "Reason"
+                              , Pretty.nest 2
+                                  (Pretty.fillBreak 10 $ pretty terminationReason))
+                            ]
+
+      ProcessTerminationFinished {
+          supervisorId
+        , supervisorName
+        } ->
+        "Supervisor finished termination of its children"
+        <> prettyAttributes [ ("Supervisor ID"
+                              , prettySupervisorId supervisorId supervisorName)
+                            ]
+
+      CapatazFailed {
+          supervisorId
+        , supervisorName
+        , supervisorError
+        } ->
+        "Root Supervisor had a fatal failure"
+        <> prettyAttributes [ ("Supervisor ID"
+                              , prettySupervisorId supervisorId supervisorName)
+                            , ( "Error"
+                              , Pretty.nest 2
+                                  (Pretty.hardline
+                                    <> "|"
+                                    <+> pretty (ppShow supervisorError)))
+                            ]
+
+      CapatazTerminated {
+          supervisorId
+        , supervisorName
+        } ->
+        "Root supervisor was terminated"
+        <> prettyAttributes [ ("Supervisor ID"
+                              , prettySupervisorId supervisorId supervisorName)
+                            ]
+    where
+      prettyAttributes attrList =
+        Pretty.nest 4
+          (Pretty.hardline
+           <> (Pretty.vsep $ map (\(k, v) -> Pretty.fill 20 (k <> ":") <+> v)
+                                attrList))
+
+      prettySupervisorId supId supName =
+        Pretty.angles
+        $ (Pretty.viaShow supId) <> "/" <> pretty supName
+
+      prettyProcessId procId procName procTid =
+        Pretty.angles
+        $ Pretty.viaShow procId <> "/" <> pretty procName <> "/" <> pretty procTid
+
+-- | @since 0.2.0.0
+instance Display CapatazEvent where
+  display = displayShow . pretty
 
 -- | Defines how a 'Worker' process termination should be handled by its
 -- supervisor.
@@ -413,10 +620,19 @@ data CallbackType
   | OnTermination
   deriving (Generic, Show, Eq)
 
+instance Pretty CallbackType where
+  pretty = Pretty.viaShow
+
 data ProcessType
   = SupervisorType
   | WorkerType
   deriving (Show, Eq)
+
+instance Pretty ProcessType  where
+  pretty ty =
+    case ty of
+      SupervisorType -> "Supervisor"
+      WorkerType -> "Worker"
 
 -- | Internal exception triggered when a callback of a Worker fails
 data ProcessError

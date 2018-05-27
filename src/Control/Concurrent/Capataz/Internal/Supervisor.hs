@@ -88,10 +88,7 @@ handleMonitorEvent env monitorEv = do
 
 -- | Handles an action triggered by the public Capataz API.
 handleControlAction
-  :: (MonadUnliftIO m)
-  => SupervisorEnv m
-  -> ControlAction m
-  -> m Bool
+  :: (MonadUnliftIO m) => SupervisorEnv m -> ControlAction m -> m Bool
 handleControlAction env controlAction = case controlAction of
   ForkWorker { workerOptions, returnWorkerId } -> do
     worker@Worker { workerId } <- Worker.forkWorker
@@ -124,8 +121,7 @@ handleControlAction env controlAction = case controlAction of
 
 -- | Executes the shutdown operation of a Supervisor, including the termination
 -- of its supervised processes.
-haltSupervisor
-  :: (MonadUnliftIO m) => Text -> SupervisorEnv m -> m ()
+haltSupervisor :: (MonadUnliftIO m) => Text -> SupervisorEnv m -> m ()
 haltSupervisor reason env = do
   Util.writeSupervisorStatus  env    Halting
   Process.terminateProcessMap reason env
@@ -136,10 +132,7 @@ haltSupervisor reason env = do
 -- | Handles all messages that a Supervisor can receive from its monitored
 -- processes or from the public API.
 handleSupervisorMessage
-  :: (MonadUnliftIO m)
-  => SupervisorEnv m
-  -> SupervisorMessage m
-  -> m Bool
+  :: (MonadUnliftIO m) => SupervisorEnv m -> SupervisorMessage m -> m Bool
 handleSupervisorMessage env message = case message of
   ControlAction controlAction -> handleControlAction env controlAction
   MonitorEvent  monitorEvent  -> handleMonitorEvent env monitorEvent
@@ -486,11 +479,7 @@ handleWorkerCompleted env worker = do
 -- | Executes restart strategy for when a process finishes it execution because
 -- of a completion (e.g. worker sub-routine finished without any errors).
 handleProcessCompleted
-  :: (MonadUnliftIO m)
-  => SupervisorEnv m
-  -> ProcessId
-  -> UTCTime
-  -> m ()
+  :: (MonadUnliftIO m) => SupervisorEnv m -> ProcessId -> UTCTime -> m ()
 handleProcessCompleted env processId completionTime = do
   mProcess <- Util.fetchProcess env processId
   case mProcess of
@@ -525,11 +514,7 @@ handleWorkerFailed env worker restartCount = do
 -- | Executes restart strategy for when a supervisor finishes it execution because
 -- of a failure.
 handleSupervisorFailed
-  :: (MonadUnliftIO m)
-  => SupervisorEnv m
-  -> Supervisor m
-  -> Int
-  -> m ()
+  :: (MonadUnliftIO m) => SupervisorEnv m -> Supervisor m -> Int -> m ()
 handleSupervisorFailed env supervisor restartCount = do
   let Supervisor { supervisorId, supervisorCreationTime, supervisorOptions } =
         supervisor
@@ -583,11 +568,7 @@ handleWorkerTerminated env worker restartCount = do
 -- | Executes restart strategy for when a supervisor finishes it execution
 -- because of a termination from its parent supervisor.
 handleSupervisorTerminated
-  :: (MonadUnliftIO m)
-  => SupervisorEnv m
-  -> Supervisor m
-  -> Int
-  -> m ()
+  :: (MonadUnliftIO m) => SupervisorEnv m -> Supervisor m -> Int -> m ()
 handleSupervisorTerminated env supervisor restartCount = do
   let Supervisor { supervisorId, supervisorCreationTime, supervisorOptions } =
         supervisor
@@ -602,12 +583,7 @@ handleSupervisorTerminated env supervisor restartCount = do
 -- | Executes restart strategy for when a process finishes it execution because
 -- of a termination from its supervisor.
 handleProcessTerminated
-  :: (MonadUnliftIO m)
-  => SupervisorEnv m
-  -> ProcessId
-  -> Text
-  -> Int
-  -> m ()
+  :: (MonadUnliftIO m) => SupervisorEnv m -> ProcessId -> Text -> Int -> m ()
 handleProcessTerminated env processId terminationReason restartCount = do
   mProcess <- Util.fetchProcess env processId
   case mProcess of

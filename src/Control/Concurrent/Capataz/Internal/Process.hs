@@ -118,8 +118,7 @@ notifyProcessStarted mRestartInfo ParentSupervisorEnv { supervisorId, supervisor
 
 -- | Utility function to send notifications when a Process sub-routine completes
 -- without errors.
-notifyProcessCompleted
-  :: SupervisorEnv m -> Process m -> UTCTime -> m ()
+notifyProcessCompleted :: SupervisorEnv m -> Process m -> UTCTime -> m ()
 notifyProcessCompleted SupervisorEnv { supervisorId, supervisorName, notifyEvent } process eventTime
   = notifyEvent ProcessCompleted
     { supervisorId
@@ -368,8 +367,7 @@ terminateSupervisor processTerminationReason Supervisor { supervisorId = process
 
 -- | Internal sub-routine that terminates workers of a supervisor, used when a
 -- supervisor instance is terminated.
-terminateProcessMap
-  :: (MonadUnliftIO m) => Text -> SupervisorEnv m -> m ()
+terminateProcessMap :: (MonadUnliftIO m) => Text -> SupervisorEnv m -> m ()
 terminateProcessMap terminationReason env@SupervisorEnv { supervisorId, supervisorName, supervisorProcessTerminationOrder, notifyEvent }
   = do
     eventTime  <- getCurrentTime

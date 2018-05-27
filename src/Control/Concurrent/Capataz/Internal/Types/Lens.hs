@@ -187,10 +187,7 @@ workerOnFailureL k WorkerOptions { workerOnFailure, ..} = fmap
 -- worker "WorkerTerminationPolicy".
 --
 workerOnCompletionL
-  :: (Functor f)
-  => (m () -> f (m ()))
-  -> WorkerOptions m
-  -> f (WorkerOptions m)
+  :: (Functor f) => (m () -> f (m ())) -> WorkerOptions m -> f (WorkerOptions m)
 workerOnCompletionL k WorkerOptions { workerOnCompletion, ..} = fmap
   (\newWorkerAction -> WorkerOptions {workerOnCompletion = newWorkerAction, ..})
   (k workerOnCompletion)

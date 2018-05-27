@@ -165,8 +165,7 @@ sendSyncControlMsg SupervisorEnv { supervisorNotify } mkCtrlMsg = do
 
 -- | Utility function to transform a 'CapatazOptions' record to a
 -- 'SupervisorOptions' record.
-capatazOptionsToSupervisorOptions
-  :: CapatazOptions m -> SupervisorOptions m
+capatazOptionsToSupervisorOptions :: CapatazOptions m -> SupervisorOptions m
 capatazOptionsToSupervisorOptions CapatazOptions {..} = SupervisorOptions {..}
 
 -- | Utility function to transform a 'SupervisorEnv' record to a

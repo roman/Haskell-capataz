@@ -624,7 +624,7 @@ data CallbackType
   deriving (Generic, Show, Eq)
 
 instance Pretty CallbackType where
-  pretty = Pretty.viaShow
+  pretty = Pretty.pretty . show
 
 data ProcessType
   = SupervisorType

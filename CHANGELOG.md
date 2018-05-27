@@ -12,7 +12,7 @@ The change log is available [on GitHub][2].
 
 * Allow the creation of Supervision Trees on Monad Transformer stacks 🎉
 * Move to latest stable stackage snapshot (lts-11.10)
-* Remove `protolude` in favor of `rio` (see #9)
+* Remove `protolude` in favor of `rio` (closes #9)
 * Add convinience module `Capataz`
 * Add `Control.Concurrent.Capataz.Util` which provide `ProcessSpec` for normal use-cases
 * Add `buildLogWorkerSpec` and `buildLogWorkerOptions` which create a dedicated supervised
@@ -27,6 +27,8 @@ The change log is available [on GitHub][2].
 * Add `Pretty` instance for `CapatazEvent`
 * Add `Display` instance for `CapatazEvent`
 * Add `ProcessThreadId` newtype to better render `ThreadId` values
+* Add `buildWorkerOptions1` and `workerSpec1` (closes #17)
+* Move to CircleCI
 
 ## v0.1.0.1
 

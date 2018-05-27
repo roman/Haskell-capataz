@@ -10,3 +10,4 @@ target/*
 *.cabal
 /tutorial.md
 .dir-locals.el
+out/*

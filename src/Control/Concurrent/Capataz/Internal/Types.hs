@@ -24,7 +24,7 @@ type CapatazId = UUID
 type WorkerId = UUID
 type SupervisorId = UUID
 type ProcessId = UUID
-type WorkerAction m = m ()
+type WorkerAction m = WorkerId -> m ()
 type ProcessName = Text
 type CapatazName = Text
 type SupervisorName = Text
@@ -855,6 +855,25 @@ workerSpec wName wAction modFn =
 {-# INLINE workerSpec #-}
 
 -- | Builds a 'ProcessSpec' record for a worker process with defaults from
+-- 'workerSpecWithDefaults'. This function allows overrides of these
+-- defaults using lenses.
+--
+-- This function is used when building a worker in a static supervision tree.
+-- The given sub-routine will receive the 'WorkerId' as a parameter
+--
+-- @since 0.2.0.0
+workerSpec1
+  :: Monad m
+  => WorkerName -- ^ Name used for telemetry purposes
+  -> (WorkerId -> m ()) -- ^ sub-routine to be supervised
+  -> (WorkerOptions m -> WorkerOptions m) -- ^ Function to modify default worker
+                                      -- options
+  -> ProcessSpec m
+workerSpec1 wName wAction modFn =
+  WorkerSpec (buildWorkerOptions1 wName wAction modFn)
+{-# INLINE workerSpec1 #-}
+
+-- | Builds a 'ProcessSpec' record for a worker process with defaults from
 -- 'buildSupervisorOptionsWithDefaults'.
 --
 -- This function is used when building a worker in a static supervision tree.
@@ -926,16 +945,37 @@ buildWorkerOptions
   -> (WorkerOptions m -> WorkerOptions m) -- ^ Function to modify default worker
                                       -- options
   -> WorkerOptions m
-buildWorkerOptions workerName workerAction f = f WorkerOptions
+buildWorkerOptions workerName workerAction f =
+  buildWorkerOptions1 workerName (const workerAction) f
+{-# INLINE buildWorkerOptions #-}
+
+-- | Builds a 'WorkerOptions' record, keeps the defaults from
+--   'buildWorkerOptionsWithDefaults' but allows overrides using lenses.
+--
+-- This function is intended to be used in combination with 'forkWorker'. See the
+-- capataz-simple-example project in the examples directory for a demonstration.
+--
+-- The given sub-routine will receive the 'WorkerId' as a parameter.
+--
+-- @since 0.2.0.0
+buildWorkerOptions1
+  :: Monad m
+  => WorkerName -- ^ Name used for telemetry purposes
+  -> (WorkerId -> m ()) -- ^ Process sub-routine to be supervised
+  -> (WorkerOptions m -> WorkerOptions m) -- ^ Function to modify default worker
+                                      -- options
+  -> WorkerOptions m
+buildWorkerOptions1 workerName workerAction f = f WorkerOptions
   { workerName
-  , workerAction
+  , workerAction            = workerAction
   , workerOnFailure         = const $ return ()
   , workerOnCompletion      = return ()
   , workerOnTermination     = return ()
   , workerTerminationPolicy = defWorkerTerminationPolicy
   , workerRestartStrategy   = defWorkerRestartStrategy
   }
-{-# INLINE buildWorkerOptions #-}
+{-# INLINE buildWorkerOptions1 #-}
+
 
 -- | Builds a 'WorkerOptions' record with defaults to create a worker process,
 -- the defaults are:
@@ -951,7 +991,7 @@ buildWorkerOptions workerName workerAction f = f WorkerOptions
 -- * A _failure_ callback that just returns unit
 --
 -- This function is intended to be used in combination with 'forkWorker', for creating a
--- worker in an static supervision tree, use "workerSpecWithDefaults" instead. See the
+-- worker in an static supervision tree, use 'workerSpecWithDefaults' instead. See the
 -- capataz-simple-example project in the examples directory for a demonstration.
 --
 -- @since 0.1.0.0

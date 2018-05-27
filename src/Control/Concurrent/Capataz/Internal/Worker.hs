@@ -31,7 +31,7 @@ workerMain env@ParentSupervisorEnv { supervisorNotify } workerOptions@WorkerOpti
     workerCreationTime <- getCurrentTime
     workerAsync        <- asyncWithUnmask $ \unmask -> do
       Util.setProcessThreadName workerId workerName
-      eResult     <- unsafeTry $ unmask workerAction
+      eResult     <- unsafeTry $ unmask (workerAction workerId)
 
       resultEvent <- case eResult of
         Left err -> Process.handleProcessException unmask

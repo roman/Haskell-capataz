@@ -130,9 +130,10 @@ haltSupervisor reason env = do
 -- | Handles all messages that a Supervisor can receive from its monitored
 -- processes or from the public API.
 handleSupervisorMessage :: (MonadUnliftIO m, MonadIO m) => SupervisorEnv m -> SupervisorMessage m -> m Bool
-handleSupervisorMessage env message = case message of
-  ControlAction controlAction -> handleControlAction env controlAction
-  MonitorEvent  monitorEvent  -> handleMonitorEvent env monitorEvent
+handleSupervisorMessage env message = do
+  case message of
+    ControlAction controlAction -> handleControlAction env controlAction
+    MonitorEvent  monitorEvent  -> handleMonitorEvent env monitorEvent
 
 -- | This sub-routine executes the main thread loop of a "Supervisor" instance.
 supervisorLoop
@@ -146,8 +147,8 @@ supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorNa
   = do
     processThreadId <- PTID <$> myThreadId
     loopResult      <-
-      unmask
-      $   try
+      unsafeTry
+      $   unmask
       $   atomically
       $   (,)
       <$> Util.readSupervisorStatusSTM supervisorStatusVar
@@ -176,7 +177,7 @@ supervisorLoop unmask parentEnv@ParentSupervisorEnv { supervisorId, supervisorNa
           supervisorLoop unmask parentEnv env restartCount
 
         Running -> do
-          eContinueLoop <- try $ unmask $ handleSupervisorMessage env message
+          eContinueLoop <- unsafeTry $ unmask $ handleSupervisorMessage env message
           case eContinueLoop of
             Left supervisorError -> do
               haltSupervisor (tshow supervisorError) env
@@ -348,7 +349,7 @@ execRestartAction supervisorEnv@SupervisorEnv { supervisorOnIntensityReached } p
     case restartAction of
       HaltSupervisor -> do
         -- skip exceptions on callback
-        (_ :: Either SomeException ()) <- try supervisorOnIntensityReached
+        (_ :: Either SomeException ()) <- unsafeTry supervisorOnIntensityReached
         throwIO SupervisorIntensityReached
           { processId
           , processName

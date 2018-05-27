@@ -159,7 +159,7 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
     let processName = getProcessName procSpec
     processThreadId  <- PTID <$> myThreadId
     monitorEventTime <- getCurrentTime
-    case fromException err of
+    case fromAnyException err of
       Just RestartProcessException -> return ProcessForcedRestart
         { processId
         , processName
@@ -167,7 +167,7 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
         }
 
       Just TerminateProcessException { processTerminationReason } -> do
-        eErrResult <- try $ unmask $ callProcessOnTermination procSpec
+        eErrResult <- unsafeTry $ unmask $ callProcessOnTermination procSpec
 
         notifyEvent ProcessCallbackExecuted
           { supervisorId
@@ -181,19 +181,21 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
           , eventTime            = monitorEventTime
           }
 
+
         case eErrResult of
-          Left processCallbackError -> return ProcessFailed'
-            { processId
-            , processName
-            , processError        = toException ProcessCallbackFailed
+          Left processCallbackError ->
+            return ProcessFailed'
               { processId
-              , processCallbackError
-              , processCallbackType  = OnTermination
-              , processError         = Just err
+              , processName
+              , processError        = toException ProcessCallbackFailed
+                { processId
+                , processCallbackError
+                , processCallbackType  = OnTermination
+                , processError         = Just err
+                }
+              , processRestartCount = restartCount
+              , monitorEventTime
               }
-            , processRestartCount = restartCount
-            , monitorEventTime
-            }
           Right _ -> return ProcessTerminated'
             { processId
             , processName
@@ -211,9 +213,8 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
           , processRestartCount      = restartCount
           }
 
-      -- This exception was an error from the given sub-routine
       _ -> do
-        eErrResult <- try $ unmask $ callProcessOnFailure procSpec err
+        eErrResult <- unsafeTry $ unmask $ callProcessOnFailure procSpec err
 
         notifyEvent ProcessCallbackExecuted
           { supervisorId
@@ -262,7 +263,7 @@ handleProcessCompletion unmask ParentSupervisorEnv { supervisorId, supervisorNam
     let processName = getProcessName procSpec
     processThreadId  <- PTID <$> myThreadId
     monitorEventTime <- getCurrentTime
-    eCompResult      <- try $ unmask $ callProcessOnCompletion procSpec
+    eCompResult      <- unsafeTry $ unmask $ callProcessOnCompletion procSpec
 
     notifyEvent ProcessCallbackExecuted
       { supervisorId
@@ -330,20 +331,22 @@ terminateWorker processTerminationReason Worker { workerId, workerOptions, worke
           , processTerminationReason
           }
 
-      TimeoutMillis millis -> race_
-        ( do
-          threadDelay (millis * 1000)
-          cancelWith
-            workerAsync
-            BrutallyTerminateProcessException
-              { processId
-              , processTerminationReason
-              }
-        )
-        ( cancelWith
-          workerAsync
-          TerminateProcessException {processId , processTerminationReason }
-        )
+      TimeoutMillis millis -> do
+        -- NOTE: Given Teardown executes teardown operations in an uninterruptible mask
+        -- we need to run asyncWithUnmask to come back to a unmasked state, sadly, race
+        -- doesn't use asyncWithUnmask_, so we need to use it here
+        result <- asyncWithUnmask $ \unmask ->
+          unmask $ race_
+            (do threadDelay (millis * 1000)
+                cancelWith
+                  workerAsync
+                  BrutallyTerminateProcessException
+                    { processId
+                    , processTerminationReason
+                    }
+            )
+            (cancelWith workerAsync TerminateProcessException {processId , processTerminationReason })
+        wait result
 
 -- | Internal utility function that manages execution of a termination policy
 -- for a Supervisor.

@@ -8,10 +8,13 @@
 module Control.Concurrent.Capataz.Internal.Types where
 
 import RIO
+import RIO.Time                    (NominalDiffTime, UTCTime)
 
 import Control.Teardown            (HasTeardown (..), Teardown)
-import RIO.Time                    (NominalDiffTime, UTCTime)
 import Data.UUID                   (UUID)
+
+import qualified Control.Exception as UnsafeE
+import Data.Typeable (cast)
 
 import Text.Show.Pretty          (ppShow)
 import Data.Text.Prettyprint.Doc (Pretty(..), (<+>))
@@ -956,3 +959,29 @@ buildWorkerOptionsWithDefaults
 buildWorkerOptionsWithDefaults wName wAction =
   buildWorkerOptions wName wAction id
 {-# INLINE buildWorkerOptionsWithDefaults #-}
+
+-- | Used for debugging purposes
+getMaskingState :: MonadIO m => m UnsafeE.MaskingState
+getMaskingState = liftIO UnsafeE.getMaskingState
+
+-- | Given we want to capture async exceptions to send them back to a supervisor
+-- and we are running on masked states, we need to have a try that catches all
+-- kinds of exceptions
+unsafeTry :: (Exception e, MonadUnliftIO m) => m a -> m (Either e a)
+unsafeTry action = withRunInIO $ \run ->
+  UnsafeE.try (run action)
+
+-- | Given unliftio wraps exceptions in 3 layers of Exceptions, and we are using
+-- vanilla exceptions, we need to make sure that we account for all different
+-- exception types
+fromAnyException :: Exception e => SomeException -> Maybe e
+fromAnyException ex =
+  case UnsafeE.fromException ex of
+    Just (UnsafeE.SomeAsyncException innerEx1) ->
+      case cast innerEx1 of
+        Just (AsyncExceptionWrapper innerEx2) ->
+          cast innerEx2
+        Nothing ->
+          cast innerEx1
+    Nothing ->
+      fromException ex

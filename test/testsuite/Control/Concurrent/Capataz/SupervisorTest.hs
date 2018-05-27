@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings     #-}
 module Control.Concurrent.Capataz.SupervisorTest where
 
-import Protolude
+import RIO
 
 import           Control.Concurrent.Capataz (set)
 import qualified Control.Concurrent.Capataz as SUT
@@ -17,11 +17,11 @@ tests = testGroup
   "supervision trees"
   [ testCase "initialize and teardown of supervision tree works as expected"
     $ testCapatazStreamWithOptions
-        ( & set
+        (& set
           SUT.supervisorProcessSpecListL
           [ SUT.supervisorSpec
             "tree-1"
-            ( set
+            (set
               SUT.supervisorProcessSpecListL
               [ SUT.workerSpecWithDefaults "1-A"
                                            (forever $ threadDelay 10001000)
@@ -31,7 +31,7 @@ tests = testGroup
             )
           , SUT.supervisorSpec
             "tree-2"
-            ( set
+            (set
               SUT.supervisorProcessSpecListL
               [ SUT.workerSpecWithDefaults "2-A"
                                            (forever $ threadDelay 10001000)
@@ -85,7 +85,7 @@ tests = testGroup
   , testCase "supervision sub-tree gets restarted on failure" $ do
     failingAction <- mkFailingSubRoutine 2
     testCapatazStreamWithOptions
-      ( set SUT.supervisorIntensityL 3 . set
+      (set SUT.supervisorIntensityL 3 . set
         SUT.supervisorProcessSpecListL
         [ SUT.supervisorSpec
             "tree-1"
@@ -123,11 +123,11 @@ tests = testGroup
             )
           , SUT.supervisorSpec
             "tree-2"
-            ( set
+            (set
               SUT.supervisorProcessSpecListL
               [ SUT.workerSpec "stable-worker"
                                (forever $ threadDelay 1000100)
-                               identity
+                               id
               ]
             )
           ]

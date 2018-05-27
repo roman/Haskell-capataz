@@ -7,10 +7,9 @@
 -}
 module Control.Concurrent.Capataz.Internal.Worker where
 
-import Protolude
+import RIO
 
-import Control.Concurrent.Async (asyncWithUnmask)
-import Data.Time.Clock          (getCurrentTime)
+import RIO.Time (getCurrentTime)
 
 import qualified Data.UUID.V4 as UUID
 
@@ -21,19 +20,18 @@ import Control.Concurrent.Capataz.Internal.Types
 
 -- | Decorates the given @IO ()@ sub-routine with failure handling
 workerMain
-  :: ParentSupervisorEnv
-  -> WorkerOptions
+  :: (MonadUnliftIO m)
+  => ParentSupervisorEnv m
+  -> WorkerOptions m
   -> WorkerId
   -> RestartCount
-  -> IO Worker
+  -> m (Worker m)
 workerMain env@ParentSupervisorEnv { supervisorNotify } workerOptions@WorkerOptions { workerName, workerAction } workerId restartCount
   = do
     workerCreationTime <- getCurrentTime
     workerAsync        <- asyncWithUnmask $ \unmask -> do
-
-      eResult <- try $ do
-        Util.setProcessThreadName workerId workerName
-        unmask workerAction
+      Util.setProcessThreadName workerId workerName
+      eResult     <- unsafeTry $ unmask workerAction
 
       resultEvent <- case eResult of
         Left err -> Process.handleProcessException unmask
@@ -62,14 +60,15 @@ workerMain env@ParentSupervisorEnv { supervisorNotify } workerOptions@WorkerOpti
 -- this is different from the public @forkWorker@ function which sends a message
 -- to the capataz loop
 forkWorker
-  :: ParentSupervisorEnv
-  -> WorkerOptions
+  :: (MonadUnliftIO m)
+  => ParentSupervisorEnv m
+  -> WorkerOptions m
   -> Maybe (WorkerId, RestartCount)
-  -> IO Worker
+  -> m (Worker m)
 forkWorker env workerOptions mRestartInfo = do
   (workerId, restartCount) <- case mRestartInfo of
     Just (workerId, restartCount) -> pure (workerId, restartCount)
-    Nothing                       -> (,) <$> UUID.nextRandom <*> pure 0
+    Nothing                       -> (,) <$> liftIO UUID.nextRandom <*> pure 0
 
   worker <- workerMain env workerOptions workerId restartCount
   Process.notifyProcessStarted mRestartInfo env (WorkerProcess worker)

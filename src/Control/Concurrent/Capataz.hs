@@ -12,6 +12,7 @@ module Control.Concurrent.Capataz
 , Control.Concurrent.Capataz.Internal.Types.CallbackType (..)
 
 , Control.Concurrent.Capataz.Internal.Types.WorkerId
+, Control.Concurrent.Capataz.Internal.Types.WorkerName
 , Control.Concurrent.Capataz.Internal.Types.WorkerRestartStrategy (..)
 , Control.Concurrent.Capataz.Internal.Types.WorkerTerminationPolicy (..)
 , Control.Concurrent.Capataz.Internal.Types.WorkerOptions
@@ -23,6 +24,7 @@ module Control.Concurrent.Capataz
 , Control.Concurrent.Capataz.Internal.Types.ProcessError (..)
 
 , Control.Concurrent.Capataz.Internal.Types.SupervisorId
+, Control.Concurrent.Capataz.Internal.Types.SupervisorName
 , Control.Concurrent.Capataz.Internal.Types.Supervisor
 , Control.Concurrent.Capataz.Internal.Types.SupervisorRestartStrategy (..)
 , Control.Concurrent.Capataz.Internal.Types.SupervisorStatus (..)
@@ -61,6 +63,8 @@ module Control.Concurrent.Capataz
 , Control.Concurrent.Capataz.Internal.Core.forkWorker
 , Control.Concurrent.Capataz.Internal.Core.forkSupervisor
 , Control.Concurrent.Capataz.Internal.Core.forkCapataz
+, Control.Concurrent.Capataz.Internal.Core.terminateCapataz
+, Control.Concurrent.Capataz.Internal.Core.terminateCapataz_
 , Control.Concurrent.Capataz.Internal.Core.terminateProcess
 
 -- * Utility functions
@@ -70,10 +74,9 @@ module Control.Concurrent.Capataz
 , Control.Concurrent.Capataz.Internal.Core.getCapatazTeardown
 
 -- * Teardown (re-exported)
-, Control.Teardown.teardown
+, Control.Teardown.TeardownResult
 
 -- * Lens (re-exported)
-, (.~)
 , (&)
 , Control.Concurrent.Capataz.Lens.set
 )
@@ -81,6 +84,6 @@ where
 
 import qualified Control.Concurrent.Capataz.Internal.Core
 import qualified Control.Concurrent.Capataz.Internal.Types
-import           Control.Concurrent.Capataz.Lens           ((&), (.~))
+import           Control.Concurrent.Capataz.Lens           ((&))
 import qualified Control.Concurrent.Capataz.Lens
 import qualified Control.Teardown

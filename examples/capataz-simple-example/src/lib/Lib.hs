@@ -1,20 +1,21 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators     #-}
 module Lib where
 
-import qualified Data.ByteString.Char8 as C
-import           Data.List             ((!!))
-import qualified Data.Text             as T
-import           Options.Generic       (ParseRecord)
-import           Protolude
-import           System.IO             (hGetLine, hIsEOF)
-import qualified System.Process        as Process
-import qualified System.Random         as Random
-import qualified Turtle
+import           RIO
+import qualified RIO.ByteString.Lazy  as LB
+import qualified RIO.Text             as T
+import qualified System.Process.Typed as Process
+
+import RIO.List.Partial ((!!))
+
+import           Options.Generic (ParseRecord)
+import qualified System.Random   as Random
 
 newtype Cli =
   Cli { procNumber :: Int }
@@ -22,72 +23,77 @@ newtype Cli =
 
 instance ParseRecord Cli
 
-data SimpleProcess =
-  SimpleProcess { readStdOut       :: !(IO (Either ExitCode ByteString))
-                , terminateProcess :: !(IO ())
-                , waitProcess      :: !(IO ExitCode)
-                }
 
-spawnSimpleProcess :: Text -> [Text] -> IO SimpleProcess
-spawnSimpleProcess program args = do
-  let processSpec = (Process.proc (T.unpack program) (fmap T.unpack args))
-        { Process.std_out = Process.CreatePipe
-        }
+pgrepProc :: String -> Process.ProcessConfig () () ()
+pgrepProc processName = Process.proc "pgrep" ["-f", processName]
 
-  (_, Just hout, _, procHandle) <- Process.createProcess processSpec
+killProc :: Text -> Process.ProcessConfig () () ()
+killProc procId = Process.proc "kill" [T.unpack procId]
 
-  let readStdOut :: IO (Either ExitCode ByteString)
-      readStdOut = do
-        isEof <- hIsEOF hout
-        if not isEof
-          then (Right . C.pack) <$> hGetLine hout
-          else Left <$> Process.waitForProcess procHandle
-
-      terminateProcess :: IO ()
-      terminateProcess = Process.terminateProcess procHandle
-
-      waitProcess :: IO ExitCode
-      waitProcess = Process.waitForProcess procHandle
-
-  return SimpleProcess {readStdOut , terminateProcess , waitProcess }
-
-processKiller :: Text -> IO ()
+processKiller
+  :: (HasLogFunc env, MonadUnliftIO m, MonadReader env m) => String -> m ()
 processKiller processName = do
-  (_, pgrepOutput) <- Turtle.procStrict "pgrep" ["-f", processName] Turtle.empty
-  let procNumbers = T.lines pgrepOutput
-  case procNumbers of
-    [] -> return ()
-    _  -> do
-      theOneToKill <- Random.randomRIO (0, pred $ length procNumbers)
-      putText $ "Process running: " <> show procNumbers
-      putText $ "Killing: " <> (procNumbers !! theOneToKill)
-      void $ Turtle.procStrict "kill" [procNumbers !! theOneToKill] Turtle.empty
+  eoutput <- T.decodeUtf8' . LB.toStrict <$> Process.readProcessStdout_
+    (pgrepProc processName)
+  case eoutput of
+    Left  err         -> logWarn $ "Encoding error: " <> displayShow err
+    Right pgrepOutput -> do
+      let procNumbers = T.lines pgrepOutput
+      case procNumbers of
+        [] -> return ()
+        _  -> do
+          theOneToKill <- liftIO $ Random.randomRIO (0, length procNumbers - 1)
+          logInfo $ "Process running: " <> displayShow procNumbers
+          logInfo $ "Killing: " <> display (procNumbers !! theOneToKill)
+          Process.runProcess_ (killProc (procNumbers !! theOneToKill))
+
+
+killNumberProcess :: (HasLogFunc env) => RIO env ()
+killNumberProcess = processKiller "while"
 
 --------------------------------------------------------------------------------
 
-spawnNumbersProcess :: (Int -> IO ()) -> IO ()
-spawnNumbersProcess writeNumber = do
-  proc' <- spawnSimpleProcess
-    "/bin/bash"
-    [ "-c"
-    , "COUNTER=1; while [ $COUNTER -gt 0 ]; do "
-    <> "echo $COUNTER; sleep 1; let COUNTER=COUNTER+1; "
-    <> "done"
-    ]
 
-  let loop = do
-        eInput <- ((readMaybe . C.unpack) <$>) <$> readStdOut proc'
-        case eInput of
-          Left exitCode | exitCode == ExitSuccess -> return ()
-                        | otherwise               -> throwIO exitCode
-          Right Nothing -> do
-            putText "didn't get a number?"
-            loop
-          Right (Just number) -> do
-            writeNumber number
-            loop
+counterProc :: Process.ProcessConfig () (STM LB.ByteString) ()
+counterProc =
+  Process.proc
+      "/bin/bash"
+      [ "-c"
+      , "COUNTER=1; while [ $COUNTER -gt 0 ]; do "
+      <> "echo $COUNTER; sleep 1; let COUNTER=COUNTER+1; "
+      <> "done"
+      ]
+    & Process.setStdout Process.byteStringOutput
 
-  loop `finally` terminateProcess proc'
 
-killNumberProcess :: IO ()
-killNumberProcess = processKiller "while"
+spawnNumbersProcess :: (HasLogFunc env) => (Int -> RIO env ()) -> RIO env ()
+spawnNumbersProcess writeNumber =
+  bracket (Process.startProcess counterProc) Process.stopProcess
+    $ \countProcess -> do
+
+        let
+          stmOut = Process.getStdout countProcess
+
+          readNumber =
+            fmap (readMaybe . T.unpack) . T.decodeUtf8' . LB.toStrict <$> stmOut
+
+          loop = do
+            eInput <-
+              atomically
+              $   (Right <$> readNumber)
+              <|> (Left <$> Process.waitExitCodeSTM countProcess)
+
+            case eInput of
+              Left exitCode | exitCode == ExitSuccess -> return ()
+                            | otherwise               -> throwM exitCode
+
+              Right (Left err) ->
+                logError $ "Encoding error: " <> displayShow err
+
+              Right (Right Nothing      ) -> logWarn "Didn't get a number?"
+
+              Right (Right (Just number)) -> do
+                writeNumber number
+                loop
+
+        loop

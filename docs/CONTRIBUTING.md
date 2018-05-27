@@ -1,6 +1,6 @@
 # Developer Guidelines
 [![Build Status](https://travis-ci.org/roman/Haskell-capataz.svg?branch=master)](https://travis-ci.org/roman/Haskell-capataz)
-[![Github](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.1.0.1.svg)](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.1.0.1.svg)
+[![Github](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.2.0.0.svg)](https://img.shields.io/github/commits-since/roman/haskell-capataz/v0.2.0.0.svg)
 [![Hackage Dependencies](https://img.shields.io/hackage-deps/v/capataz.svg)](https://img.shields.io/hackage/v/capataz.svg)
 
 ## Dependencies

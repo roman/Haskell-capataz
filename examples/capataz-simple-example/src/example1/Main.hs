@@ -2,22 +2,26 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Control.Concurrent.Async (async)
-import Lib
-    (Cli (..), killNumberProcess, procNumber, spawnNumbersProcess)
-import Options.Generic          (getRecord)
-import Protolude
+import RIO
+
+import Lib             (Cli (..), killNumberProcess, procNumber, spawnNumbersProcess)
+import Options.Generic (getRecord)
+
 
 main :: IO ()
 main = do
-  n <- getRecord "Counter spawner"
+  logOptions <- logOptionsHandle stdout True
+  withLogFunc logOptions $ \logFunc -> runRIO logFunc $ do
 
-  let numberWriter i a = print (i, a)
-      delayMicros = 5000100
+    n <- liftIO $ getRecord "Counter spawner"
 
-  _asyncList <- forM [1 .. procNumber n]
-    $ \i -> async $ spawnNumbersProcess (numberWriter i)
+    let numberWriter i a = logInfo $ displayShow (i :: Int, a :: Int)
+        delayMicros = 5000100
 
-  killerAsync <- async $ forever $ threadDelay delayMicros >> killNumberProcess
+    _asyncList <- forM [1 .. procNumber n]
+      $ \i -> async $ spawnNumbersProcess (numberWriter i)
 
-  wait killerAsync
+    killerAsync <-
+      async $ forever $ threadDelay delayMicros >> killNumberProcess
+
+    wait killerAsync

@@ -4,14 +4,12 @@
 {-# LANGUAGE OverloadedStrings     #-}
 module Test.Util where
 
-import Protolude
+import           RIO
+import qualified RIO.Text as T
 
-import Control.Concurrent.STM.TQueue (newTQueueIO, readTQueue, writeTQueue)
-import Data.IORef                    (atomicModifyIORef', newIORef, readIORef, writeIORef)
-import Test.Tasty.HUnit              (assertBool, assertFailure)
-import Text.Show.Pretty              (ppShow)
+import Test.Tasty.HUnit (assertBool, assertFailure)
+import Text.Show.Pretty (ppShow)
 
-import qualified Data.Text as T
 
 import qualified Control.Concurrent.Capataz       as SUT
 import qualified Control.Concurrent.Capataz.Event as SUT
@@ -22,7 +20,7 @@ import qualified Control.Concurrent.Capataz.Event as SUT
 -- | Utility function that gets the type name of a Record through it's Show
 -- output.
 fetchRecordName :: Show a => a -> Text
-fetchRecordName = T.takeWhile (/= ' ') . show
+fetchRecordName = T.takeWhile (/= ' ') . tshow
 
 -- | Composes two predicate functions together with a boolean AND
 andP :: [a -> Bool] -> a -> Bool
@@ -235,14 +233,15 @@ instance Exception TimeoutError
 -- | Utility function to create a Worker sub-routine that fails at least a
 -- number of times
 mkFailingSubRoutine
-  :: Int  -- ^ Number of times the Worker sub-routine will fail
-  -> IO (IO ()) -- ^ Sub-routine used on worker creation
+  :: (MonadIO m, MonadThrow m1, MonadIO m1)
+  => Int  -- ^ Number of times the Worker sub-routine will fail
+  -> m (m1 ()) -- ^ Sub-routine used on worker creation
 mkFailingSubRoutine failCount = do
   countRef <- newIORef failCount
   let subRoutine = do
         shouldFail <- atomicModifyIORef' countRef
-                                         (\count -> (pred count, count > 0))
-        when shouldFail (throwIO RestartingWorkerError)
+                                         (\count -> (count - 1, count > 0))
+        when shouldFail (throwM RestartingWorkerError)
 
   return subRoutine
 
@@ -250,19 +249,19 @@ mkFailingSubRoutine failCount = do
 -- function works great when testing `Permanent` strategies, as you would like
 -- to assert restart events once (if it keeps completing it will fill up the log
 -- with restart events)
-mkCompletingBeforeNRestartsSubRoutine :: Int -> IO (IO ())
+mkCompletingBeforeNRestartsSubRoutine :: MonadIO m => Int -> m (m ())
 mkCompletingBeforeNRestartsSubRoutine initCount = do
   countRef <- newIORef initCount
   let subRoutine = do
         shouldStop <- atomicModifyIORef' countRef
-                                         (\count -> (pred count, count > 0))
+                                         (\count -> (count - 1, count > 0))
         if shouldStop then return () else forever $ threadDelay 1000100
   return subRoutine
 
 -- | A sub-routine that will complete once. This function works great when
 -- testing `Permanent` strategies, as you would like to assert restart events
 -- once (if it keeps completing it will fill up the log with restart events)
-mkCompletingOnceSubRoutine :: IO (IO ())
+mkCompletingOnceSubRoutine :: MonadIO m => m (m ())
 mkCompletingOnceSubRoutine = mkCompletingBeforeNRestartsSubRoutine 1
 
 -- | Utility function to build a test environment for a Capataz execution.
@@ -274,11 +273,12 @@ mkCompletingOnceSubRoutine = mkCompletingBeforeNRestartsSubRoutine 1
 -- * A function to modify the default "CapatazOptions", this utility function injects
 --   a special @notifyEvent@ callback to execute given assertions.
 testCapatazStreamWithOptions
-  :: (SUT.CapatazOptions -> SUT.CapatazOptions) -- ^ Function to modify default
+  :: (MonadUnliftIO m)
+  => (SUT.CapatazOptions (RIO LogFunc) -> SUT.CapatazOptions (RIO LogFunc)) -- ^ Function to modify default
                                                 -- @CapatazOptions@
   -> [SUT.CapatazEvent -> Bool] -- ^ Assertions happening before setup function
                                 -- is called
-  -> (SUT.Capataz -> IO ()) -- ^ Function used to test public the supervisor
+  -> (SUT.Capataz (RIO LogFunc) -> RIO LogFunc ()) -- ^ Function used to test public the supervisor
                             -- public API (a.k.a setup function)
   -> [SUT.CapatazEvent -> Bool] -- ^ Assertions happening after the setup
                                 -- function
@@ -288,69 +288,75 @@ testCapatazStreamWithOptions
                                       -- @CapatazEvents@ that happened in a
                                       -- test, great when testing that an event
                                       -- __did not__ happen
-  -> IO ()
+  -> m ()
 testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAssertions postTeardownAssertions mAllEventsAssertion
   = do
 
     eventStream     <- newTQueueIO
     accRef          <- newIORef []
     pendingCountVar <- newIORef
-      ( sum $ fmap
+      (sum $ fmap
         length
         [preSetupAssertion, postSetupAssertions, postTeardownAssertions]
       )
 
-    capataz <- SUT.forkCapataz
-      rootSupervisorName
-      (SUT.set SUT.onSystemEventL (trackEvent accRef eventStream) . optionModFn)
+    logOptions <- logOptionsHandle stdout False
+    withLogFunc logOptions $ \logFunc -> runRIO logFunc $ do
+      capataz <- SUT.forkCapataz
+        rootSupervisorName
+        ( set
+            SUT.onSystemEventL
+            (\ev -> logDebug (display ev) >> trackEvent accRef eventStream ev)
+        . optionModFn
+        )
 
-    -- We check preSetup assertions are met before we execute the setup
-    -- function. This serves to test initialization of capataz instance
-    runAssertions "PRE-SETUP"
-                  (eventStream, accRef)
-                  pendingCountVar
-                  preSetupAssertion
-                  capataz
+      -- We check preSetup assertions are met before we execute the setup
+      -- function. This serves to test initialization of capataz instance
+      runAssertions "PRE-SETUP"
+                    (eventStream, accRef)
+                    pendingCountVar
+                    preSetupAssertion
+                    capataz
 
-    -- We execute the setup sub-routine, which is going to use the Capataz public
-    -- API to assert events
-    setupResult <- try (setupFn capataz)
+      -- We execute the setup sub-routine, which is going to use the Capataz public
+      -- API to assert events
+      setupResult <- try (setupFn capataz)
 
-    case setupResult of
-      -- If the sub-routine fails, show exception
-      Left  err -> assertFailure (show (err :: SomeException))
-      Right _   -> do
-        -- We now run post-setup assertions
-        runAssertions "POST-SETUP"
-                      (eventStream, accRef)
-                      pendingCountVar
-                      postSetupAssertions
-                      capataz
+      case setupResult of
+        -- If the sub-routine fails, show exception
+        Left  err -> liftIO $ assertFailure (show (err :: SomeException))
+        Right _   -> do
+          -- We now run post-setup assertions
+          runAssertions "POST-SETUP"
+                        (eventStream, accRef)
+                        pendingCountVar
+                        postSetupAssertions
+                        capataz
 
-        -- We now shutdown the capataz instance
-        void $ SUT.teardown capataz
+          -- We now shutdown the capataz instance
+          SUT.terminateCapataz_ capataz
 
-        -- We run assertions for after the capataz has been shut down
-        runAssertions "POST-TEARDOWN"
-                      (eventStream, accRef)
-                      pendingCountVar
-                      postTeardownAssertions
-                      capataz
+          -- We run assertions for after the capataz has been shut down
+          runAssertions "POST-TEARDOWN"
+                        (eventStream, accRef)
+                        pendingCountVar
+                        postTeardownAssertions
+                        capataz
 
-        -- Lastly, we check if there is a function that we want to execute
-        -- across all events that happened in the test, this is to assert the
-        -- absence of an event
-        case mAllEventsAssertion of
-          Nothing                 -> return ()
-          Just allEventsAssertion -> do
-            events <- reverse <$> readIORef accRef
-            assertBool
-              ( "On AFTER-TEST, expected all events to match predicate, but didn't ("
-              <> show (length events)
-              <> " events tried)\n"
-              <> ppShow (zip ([0 ..] :: [Int]) events)
-              )
-              (all allEventsAssertion events)
+          -- Lastly, we check if there is a function that we want to execute
+          -- across all events that happened in the test, this is to assert the
+          -- absence of an event
+          case mAllEventsAssertion of
+            Nothing                 -> return ()
+            Just allEventsAssertion -> do
+              events <- reverse <$> readIORef accRef
+              liftIO $ assertBool
+                ("On AFTER-TEST, expected all events to match predicate, but didn't ("
+                <> show (length events)
+                <> " events tried)\n"
+                <> ppShow (zip ([0 ..] :: [Int]) events)
+                )
+                (all allEventsAssertion events)
  where
   -- Utility functions that runs the readEventLoop function with a timeout
   -- of a second, this way we can guarantee assertions are met without having
@@ -358,14 +364,14 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
   runAssertions stageName (eventStream, accRef) pendingCountVar assertions capataz
     = do
       raceResult <- race
-        (threadDelay 1000100)
+        (liftIO $ threadDelay 1000100)
         (readEventLoop eventStream pendingCountVar assertions)
       case raceResult of
         Left _ -> do
           events       <- reverse <$> readIORef accRef
           pendingCount <- readIORef pendingCountVar
-          void $ SUT.teardown capataz
-          assertFailure
+          SUT.terminateCapataz_ capataz
+          liftIO $ assertFailure
             (  "On "
             <> stageName
             <> " stage, expected all assertions to match, but didn't ("
@@ -389,8 +395,8 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
   readEventLoop eventStream pendingCount assertions = do
     writeIORef pendingCount (length assertions)
     case assertions of
-      []                        -> return ()
-      (assertionFn:assertions1) -> do
+      []                          -> return ()
+      (assertionFn : assertions1) -> do
         event <- atomically $ readTQueue eventStream
         if assertionFn event
           then readEventLoop eventStream pendingCount assertions1
@@ -400,9 +406,10 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
 -- | A version of "testCapatazStreamWithOptions" that does not receive the
 -- function that modifies a "CapatazOptions" record.
 testCapatazStream
-  :: [SUT.CapatazEvent -> Bool] -- ^ Assertions happening before setup function
+  :: (MonadUnliftIO m)
+  => [SUT.CapatazEvent -> Bool] -- ^ Assertions happening before setup function
                                 -- is called
-  -> (SUT.Capataz -> IO ()) -- ^ Function used to test public the supervisor
+  -> (SUT.Capataz (RIO LogFunc) -> RIO LogFunc ()) -- ^ Function used to test public the supervisor
                             -- public API (a.k.a setup function)
   -> [SUT.CapatazEvent -> Bool] -- ^ Assertions happening after the setup
                                 -- function
@@ -412,6 +419,5 @@ testCapatazStream
                                       -- @CapatazEvents@ that happened in a
                                       -- test, great when testing that an event
                                       -- __did not__ happen
-  -> IO ()
-testCapatazStream preSetupAssertions =
-  testCapatazStreamWithOptions identity preSetupAssertions
+  -> m ()
+testCapatazStream = testCapatazStreamWithOptions id

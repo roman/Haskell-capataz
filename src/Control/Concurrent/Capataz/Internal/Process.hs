@@ -6,43 +6,43 @@
 -- Worker process types.
 module Control.Concurrent.Capataz.Internal.Process where
 
-import Protolude
+import RIO
 
 import Control.Concurrent.Capataz.Internal.Types
 import Control.Concurrent.Capataz.Internal.Util
     (readProcessMap, sortProcessesByTerminationOrder)
-import Data.Time.Clock                           (UTCTime, getCurrentTime)
+import RIO.Time                                  (UTCTime, getCurrentTime)
 
 -- | Gets "Async" from a given Process.
-getProcessAsync :: Process -> Async ()
+getProcessAsync :: Process m -> Async ()
 getProcessAsync process = case process of
   WorkerProcess     Worker { workerAsync }         -> workerAsync
   SupervisorProcess Supervisor { supervisorAsync } -> supervisorAsync
 
 -- | Gets "ThreadId" from a given Process.
-getProcessThreadId :: Process -> ThreadId
-getProcessThreadId = asyncThreadId . getProcessAsync
+getProcessThreadId :: Process m -> ProcessThreadId
+getProcessThreadId = PTID . asyncThreadId . getProcessAsync
 
 -- | Gets "ProcessId" from a given Process.
-getProcessId :: Process -> ProcessId
+getProcessId :: Process m -> ProcessId
 getProcessId process = case process of
   WorkerProcess     Worker { workerId }         -> workerId
   SupervisorProcess Supervisor { supervisorId } -> supervisorId
 
 -- | Gets "ProcessName" from a given "ProcessSpec".
-getProcessName :: ProcessSpec -> ProcessName
+getProcessName :: ProcessSpec m -> ProcessName
 getProcessName procSpec = case procSpec of
   WorkerSpec     WorkerOptions { workerName }         -> workerName
   SupervisorSpec SupervisorOptions { supervisorName } -> supervisorName
 
 -- | Gets "ProcessType" from a given "ProcessSpec".
-getProcessType :: ProcessSpec -> ProcessType
+getProcessType :: ProcessSpec m -> ProcessType
 getProcessType processSpec = case processSpec of
   WorkerSpec{}     -> WorkerType
   SupervisorSpec{} -> SupervisorType
 
 -- | Gets "ProcessSpec" of a given "Process".
-getProcessSpec :: Process -> ProcessSpec
+getProcessSpec :: Process m -> ProcessSpec m
 getProcessSpec process = case process of
   WorkerProcess Worker { workerOptions } -> WorkerSpec workerOptions
   SupervisorProcess Supervisor { supervisorOptions } ->
@@ -50,7 +50,8 @@ getProcessSpec process = case process of
 
 -- | Utility function to send notifications to the capataz system callback when
 -- a Process fails.
-notifyProcessFailed :: SupervisorEnv -> Process -> SomeException -> IO ()
+notifyProcessFailed
+  :: MonadIO m => SupervisorEnv m -> Process m -> SomeException -> m ()
 notifyProcessFailed SupervisorEnv { supervisorId, supervisorName, notifyEvent } process processError
   = do
     eventTime <- getCurrentTime
@@ -67,7 +68,8 @@ notifyProcessFailed SupervisorEnv { supervisorId, supervisorName, notifyEvent } 
 
 -- | Utility function to send notifications to the capataz system callback when
 -- a Process is terminated.
-notifyProcessTerminated :: SupervisorEnv -> Process -> Text -> IO ()
+notifyProcessTerminated
+  :: MonadIO m => SupervisorEnv m -> Process m -> Text -> m ()
 notifyProcessTerminated SupervisorEnv { supervisorId, supervisorName, notifyEvent } process terminationReason
   = do
     eventTime <- getCurrentTime
@@ -85,7 +87,11 @@ notifyProcessTerminated SupervisorEnv { supervisorId, supervisorName, notifyEven
 -- | Utility function to send notifications to the capataz system callback when
 -- a Process is started or restarted.
 notifyProcessStarted
-  :: Maybe (ProcessId, RestartCount) -> ParentSupervisorEnv -> Process -> IO ()
+  :: MonadIO m
+  => Maybe (ProcessId, RestartCount)
+  -> ParentSupervisorEnv m
+  -> Process m
+  -> m ()
 notifyProcessStarted mRestartInfo ParentSupervisorEnv { supervisorId, supervisorName, notifyEvent } process
   = do
     eventTime <- getCurrentTime
@@ -112,7 +118,7 @@ notifyProcessStarted mRestartInfo ParentSupervisorEnv { supervisorId, supervisor
 
 -- | Utility function to send notifications when a Process sub-routine completes
 -- without errors.
-notifyProcessCompleted :: SupervisorEnv -> Process -> UTCTime -> IO ()
+notifyProcessCompleted :: SupervisorEnv m -> Process m -> UTCTime -> m ()
 notifyProcessCompleted SupervisorEnv { supervisorId, supervisorName, notifyEvent } process eventTime
   = notifyEvent ProcessCompleted
     { supervisorId
@@ -126,39 +132,41 @@ notifyProcessCompleted SupervisorEnv { supervisorId, supervisorName, notifyEvent
 
 
 -- | Utility function to execute a Process onCompletion sub-routine.
-callProcessOnCompletion :: ProcessSpec -> IO ()
+callProcessOnCompletion :: Monad m => ProcessSpec m -> m ()
 callProcessOnCompletion procSpec = case procSpec of
   WorkerSpec WorkerOptions { workerOnCompletion } -> workerOnCompletion
   _                                               -> return ()
 
 -- | Utility function to execute a Process onFailure sub-routine.
-callProcessOnFailure :: ProcessSpec -> SomeException -> IO ()
+callProcessOnFailure :: ProcessSpec m -> SomeException -> m ()
 callProcessOnFailure procSpec err = case procSpec of
   WorkerSpec WorkerOptions { workerOnFailure } -> workerOnFailure err
   SupervisorSpec SupervisorOptions { supervisorOnFailure } ->
     supervisorOnFailure err
 
 -- | Utility function to execute a Process onTermination sub-routine.
-callProcessOnTermination :: ProcessSpec -> IO ()
+callProcessOnTermination :: Monad m => ProcessSpec m -> m ()
 callProcessOnTermination procSpec = case procSpec of
   WorkerSpec WorkerOptions { workerOnTermination } -> workerOnTermination
   _                                                -> return ()
 
 -- | Handles errors produced - or thrown to - a process thread.
 handleProcessException
-  :: (IO () -> IO a)
-  -> ParentSupervisorEnv
-  -> ProcessSpec
+  :: (MonadUnliftIO m)
+  => (m () -> m a)
+  -> ParentSupervisorEnv m
+  -> ProcessSpec m
   -> ProcessId
   -> RestartCount
   -> SomeException
-  -> IO MonitorEvent
+  -> m MonitorEvent
 handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName, notifyEvent } procSpec processId restartCount err
   = do
     let processName = getProcessName procSpec
-    processThreadId  <- myThreadId
+    processThreadId  <- PTID <$> myThreadId
     monitorEventTime <- getCurrentTime
-    case fromException err of
+
+    case fromAnyException err of
       Just RestartProcessException -> return ProcessForcedRestart
         { processId
         , processName
@@ -166,7 +174,7 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
         }
 
       Just TerminateProcessException { processTerminationReason } -> do
-        eErrResult <- try $ unmask $ callProcessOnTermination procSpec
+        eErrResult <- unsafeTry $ unmask $ callProcessOnTermination procSpec
 
         notifyEvent ProcessCallbackExecuted
           { supervisorId
@@ -179,6 +187,7 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
           , processCallbackType  = OnTermination
           , eventTime            = monitorEventTime
           }
+
 
         case eErrResult of
           Left processCallbackError -> return ProcessFailed'
@@ -210,9 +219,8 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
           , processRestartCount      = restartCount
           }
 
-      -- This exception was an error from the given sub-routine
       _ -> do
-        eErrResult <- try $ unmask $ callProcessOnFailure procSpec err
+        eErrResult <- unsafeTry $ unmask $ callProcessOnFailure procSpec err
 
         notifyEvent ProcessCallbackExecuted
           { supervisorId
@@ -249,18 +257,19 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
 
 -- | Handles completion of a Process sub-routine.
 handleProcessCompletion
-  :: (IO () -> IO a)
-  -> ParentSupervisorEnv
-  -> ProcessSpec
+  :: (MonadUnliftIO m)
+  => (m () -> m a)
+  -> ParentSupervisorEnv m
+  -> ProcessSpec m
   -> ProcessId
   -> RestartCount
-  -> IO MonitorEvent
+  -> m MonitorEvent
 handleProcessCompletion unmask ParentSupervisorEnv { supervisorId, supervisorName, notifyEvent } procSpec processId restartCount
   = do
     let processName = getProcessName procSpec
-    processThreadId  <- myThreadId
+    processThreadId  <- PTID <$> myThreadId
     monitorEventTime <- getCurrentTime
-    eCompResult      <- try $ unmask $ callProcessOnCompletion procSpec
+    eCompResult      <- unsafeTry $ unmask $ callProcessOnCompletion procSpec
 
     notifyEvent ProcessCallbackExecuted
       { supervisorId
@@ -296,10 +305,11 @@ handleProcessCompletion unmask ParentSupervisorEnv { supervisorId, supervisorNam
 -- function gets executed on the supervisor's thread.
 --
 terminateProcess
-  :: Text -- ^ Description that indicates _why_ there is a termination
-  -> SupervisorEnv
-  -> Process
-  -> IO ()
+  :: (MonadUnliftIO m)
+  => Text -- ^ Description that indicates _why_ there is a termination
+  -> SupervisorEnv m
+  -> Process m
+  -> m ()
 terminateProcess processTerminationReason env process = do
   case process of
     WorkerProcess worker -> terminateWorker processTerminationReason worker
@@ -310,7 +320,7 @@ terminateProcess processTerminationReason env process = do
 
 -- | Internal utility function that manages execution of a termination policy
 -- for a Worker.
-terminateWorker :: Text -> Worker -> IO ()
+terminateWorker :: (MonadUnliftIO m) => Text -> Worker m -> m ()
 terminateWorker processTerminationReason Worker { workerId, workerOptions, workerAsync }
   = do
     let processId = workerId
@@ -327,24 +337,29 @@ terminateWorker processTerminationReason Worker { workerId, workerOptions, worke
           , processTerminationReason
           }
 
-      TimeoutMillis millis -> race_
-        ( do
-          threadDelay (millis * 1000)
-          cancelWith
+      TimeoutMillis millis -> do
+        -- NOTE: Given Teardown executes teardown operations in an uninterruptible mask
+        -- we need to run asyncWithUnmask to come back to a unmasked state, sadly, race
+        -- doesn't use asyncWithUnmask_, so we need to use it here
+        result <- asyncWithUnmask $ \unmask -> unmask $ race_
+          (do
+            threadDelay (millis * 1000)
+            cancelWith
+              workerAsync
+              BrutallyTerminateProcessException
+                { processId
+                , processTerminationReason
+                }
+          )
+          (cancelWith
             workerAsync
-            BrutallyTerminateProcessException
-              { processId
-              , processTerminationReason
-              }
-        )
-        ( cancelWith
-          workerAsync
-          TerminateProcessException {processId , processTerminationReason }
-        )
+            TerminateProcessException {processId , processTerminationReason }
+          )
+        wait result
 
 -- | Internal utility function that manages execution of a termination policy
 -- for a Supervisor.
-terminateSupervisor :: Text -> Supervisor -> IO ()
+terminateSupervisor :: MonadIO m => Text -> Supervisor m -> m ()
 terminateSupervisor processTerminationReason Supervisor { supervisorId = processId, supervisorAsync }
   = cancelWith
     supervisorAsync
@@ -352,7 +367,7 @@ terminateSupervisor processTerminationReason Supervisor { supervisorId = process
 
 -- | Internal sub-routine that terminates workers of a supervisor, used when a
 -- supervisor instance is terminated.
-terminateProcessMap :: Text -> SupervisorEnv -> IO ()
+terminateProcessMap :: (MonadUnliftIO m) => Text -> SupervisorEnv m -> m ()
 terminateProcessMap terminationReason env@SupervisorEnv { supervisorId, supervisorName, supervisorProcessTerminationOrder, notifyEvent }
   = do
     eventTime  <- getCurrentTime

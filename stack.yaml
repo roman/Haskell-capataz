@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-10.3
+resolver: lts-11.10
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -38,13 +38,15 @@ resolver: lts-10.3
 packages:
 - .
 - examples/capataz-simple-example
-- examples/capataz-repo-watcher
+# - examples/capataz-repo-watcher
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-- teardown-0.3.0.0
-- rio-0.0.0.0
-- unliftio-0.2.4.0
+- teardown-0.5.0.0
+- rio-0.1.2.0
+- unliftio-0.2.7.0
+- unliftio-core-0.1.1.0
+- typed-process-0.2.2.0
 
 # Override default flag values for local packages and extra-deps
 flags: {}

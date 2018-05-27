@@ -2,9 +2,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Control.Concurrent.Capataz
-    ( SupervisorRestartStrategy (..)
+import RIO
+
+import Capataz
+    ( CapatazOptions
+    , SupervisorRestartStrategy (..)
     , WorkerRestartStrategy (..)
+    , buildLogWorkerOptions
     , buildWorkerOptions
     , buildWorkerOptionsWithDefaults
     , forkCapataz
@@ -13,41 +17,46 @@ import Control.Concurrent.Capataz
     , onSystemEventL
     , set
     , supervisorRestartStrategyL
-    , teardown
+    , terminateCapataz_
     , workerRestartStrategyL
     )
-import Lib                        (Cli (..), killNumberProcess, spawnNumbersProcess)
-import Options.Generic            (getRecord)
-import Protolude
-import Text.Show.Pretty           (pPrint)
+import Lib             (Cli (..), killNumberProcess, spawnNumbersProcess)
+import Options.Generic (getRecord)
+
+rootSupervisorOptions
+  :: (HasLogFunc env, MonadIO m, MonadReader env m)
+  => (CapatazOptions m -> CapatazOptions m)
+rootSupervisorOptions = set supervisorRestartStrategyL OneForOne
+  . set onSystemEventL (logDebug . display) -- Show all events of the capataz sub-system on debug
+
 
 main :: IO ()
 main = do
-  n       <- getRecord "Counter spawner"
+  n                        <- procNumber <$> getRecord "Counter spawner"
+  logOptions               <- logOptionsHandle stdout False
+  (loggerOptions, logFunc) <- buildLogWorkerOptions logOptions "logger" n id
 
-  capataz <- forkCapataz
-    "unix-process-capataz" -- (1)
-    (set supervisorRestartStrategyL OneForOne -- (2)
-                                              . set onSystemEventL pPrint)                -- (3)
+  runRIO logFunc $ do
+    capataz       <- forkCapataz "unix-process-capataz" rootSupervisorOptions
 
-  let numberWriter i a = print (i, a)
-      delayMicros = 5000100
+    _loggerWorker <- forkWorker loggerOptions capataz
+    let numberWriter i a = logInfo $ displayShow (i :: Int, a :: Int)
+        delayMicros = 5000100
 
-  _workerIdList <- forM [1 .. procNumber n] $ \i -> do
-    let counterWorkerOptions = buildWorkerOptions -- (4)
-          ("Worker (" <> show i <> ")")
-          (spawnNumbersProcess (numberWriter i)) -- (5)
-          (set workerRestartStrategyL Permanent) -- (6)
+    _workerIdList <- forM [1 .. n] $ \i -> do
+      let counterWorkerOptions = buildWorkerOptions
+            ("worker-" <> tshow i)
+            (spawnNumbersProcess (numberWriter i))
+            (set workerRestartStrategyL Permanent)
 
-    forkWorker -- (7)
-               counterWorkerOptions capataz
+      forkWorker counterWorkerOptions capataz
 
-  let workerKillerOptions = buildWorkerOptionsWithDefaults -- (8)
-        "worker-killer"
-        (forever $ threadDelay delayMicros >> killNumberProcess)
+    let workerKillerOptions = buildWorkerOptionsWithDefaults
+          "worker-killer"
+          (forever $ threadDelay delayMicros >> killNumberProcess)
 
-  -- ignore returned ProcessId, as we won't use it in our example
-  void $ forkWorker workerKillerOptions capataz
+    -- ignore returned ProcessId, as we won't use it in our example
+    void $ forkWorker workerKillerOptions capataz
 
-  joinCapatazThread capataz  -- (9)
-                            `finally` (teardown capataz >>= print) -- (10)
+    finally (joinCapatazThread capataz)
+            (terminateCapataz_ capataz >>= logDebug . displayShow)

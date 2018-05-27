@@ -6,6 +6,28 @@ The change log is available [on GitHub][2].
 [1]: http://semver.org/spec/v2.0.0.html
 [2]: https://github.com/roman/capataz/releases
 
+## v0.2.0.0 Bumblebee release
+
+**BREAKING CHANGES**
+
+* Allow the creation of Supervision Trees on Monad Transformer stacks 🎉
+* Move to latest stable stackage snapshot (lts-11.10)
+* Remove `protolude` in favor of `rio` (see #9)
+* Add convinience module `Capataz`
+* Add `Control.Concurrent.Capataz.Util` which provide `ProcessSpec` for normal use-cases
+* Add `buildLogWorkerSpec` and `buildLogWorkerOptions` which create a dedicated supervised
+  thread that logs messages (sits on top of `rio` logger utilities)
+* Add `terminateCapataz` and `terminateCapataz_` , these functions replace the
+  re-exported `runTeardown`
+* Add re-export of `TeardownResult` from the `teardown` package
+* Update the `capataz-simple-example` project to use `typed-process` and `rio`
+* Add export for `WorkerName` and `SupervisorName` aliases
+* Add new dependency `prettyprinter`
+* Add new dependency `pretty-show` to prettify exceptions
+* Add `Pretty` instance for `CapatazEvent`
+* Add `Display` instance for `CapatazEvent`
+* Add `ProcessThreadId` newtype to better render `ThreadId` values
+
 ## v0.1.0.1
 
 * Bump bounds of `async` dependency

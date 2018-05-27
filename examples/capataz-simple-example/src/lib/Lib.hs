@@ -1,6 +1,6 @@
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -8,14 +8,14 @@
 module Lib where
 
 import           RIO
-import qualified RIO.Text             as T
 import qualified RIO.ByteString.Lazy  as LB
+import qualified RIO.Text             as T
 import qualified System.Process.Typed as Process
 
 import RIO.List.Partial ((!!))
 
-import           Options.Generic       (ParseRecord)
-import qualified System.Random         as Random
+import           Options.Generic (ParseRecord)
+import qualified System.Random   as Random
 
 newtype Cli =
   Cli { procNumber :: Int }
@@ -25,19 +25,18 @@ instance ParseRecord Cli
 
 
 pgrepProc :: String -> Process.ProcessConfig () () ()
-pgrepProc processName =
-  Process.proc "pgrep" ["-f", processName]
+pgrepProc processName = Process.proc "pgrep" ["-f", processName]
 
 killProc :: Text -> Process.ProcessConfig () () ()
-killProc procId =
-  Process.proc "kill" [T.unpack procId]
+killProc procId = Process.proc "kill" [T.unpack procId]
 
-processKiller :: (HasLogFunc env, MonadUnliftIO m, MonadReader env m) => String -> m ()
+processKiller
+  :: (HasLogFunc env, MonadUnliftIO m, MonadReader env m) => String -> m ()
 processKiller processName = do
-  eoutput <- (T.decodeUtf8' . LB.toStrict) <$> Process.readProcessStdout_ (pgrepProc processName)
+  eoutput <- T.decodeUtf8' . LB.toStrict <$> Process.readProcessStdout_
+    (pgrepProc processName)
   case eoutput of
-    Left err ->
-      logWarn $ "Encoding error: " <> displayShow err
+    Left  err         -> logWarn $ "Encoding error: " <> displayShow err
     Right pgrepOutput -> do
       let procNumbers = T.lines pgrepOutput
       case procNumbers of
@@ -58,44 +57,43 @@ killNumberProcess = processKiller "while"
 counterProc :: Process.ProcessConfig () (STM LB.ByteString) ()
 counterProc =
   Process.proc
-    "/bin/bash"
-    [ "-c"
-    , "COUNTER=1; while [ $COUNTER -gt 0 ]; do "
+      "/bin/bash"
+      [ "-c"
+      , "COUNTER=1; while [ $COUNTER -gt 0 ]; do "
       <> "echo $COUNTER; sleep 1; let COUNTER=COUNTER+1; "
       <> "done"
-    ]
-  & Process.setStdout Process.byteStringOutput
+      ]
+    & Process.setStdout Process.byteStringOutput
 
 
 spawnNumbersProcess :: (HasLogFunc env) => (Int -> RIO env ()) -> RIO env ()
-spawnNumbersProcess writeNumber = do
-  bracket
-    (Process.startProcess counterProc) Process.stopProcess $ \countProcess -> do
+spawnNumbersProcess writeNumber =
+  bracket (Process.startProcess counterProc) Process.stopProcess
+    $ \countProcess -> do
 
-    let stmOut =
-          Process.getStdout countProcess
+        let
+          stmOut = Process.getStdout countProcess
 
-        readNumber =
-          (fmap (readMaybe . T.unpack) . T.decodeUtf8' . LB.toStrict) <$> stmOut
+          readNumber =
+            fmap (readMaybe . T.unpack) . T.decodeUtf8' . LB.toStrict <$> stmOut
 
-        loop = do
-          eInput <-
-            atomically
-              $ (Right <$> readNumber)
-                <|> (Left <$> Process.waitExitCodeSTM countProcess)
+          loop = do
+            eInput <-
+              atomically
+              $   (Right <$> readNumber)
+              <|> (Left <$> Process.waitExitCodeSTM countProcess)
 
-          case eInput of
-            Left exitCode | exitCode == ExitSuccess -> return ()
-                          | otherwise               -> throwM exitCode
+            case eInput of
+              Left exitCode | exitCode == ExitSuccess -> return ()
+                            | otherwise               -> throwM exitCode
 
-            Right (Left err) ->
-              logError $ "Encoding error: " <> displayShow err
+              Right (Left err) ->
+                logError $ "Encoding error: " <> displayShow err
 
-            Right (Right Nothing) -> do
-              logWarn $ "Didn't get a number?"
+              Right (Right Nothing      ) -> logWarn "Didn't get a number?"
 
-            Right (Right (Just number)) -> do
-              writeNumber number
-              loop
+              Right (Right (Just number)) -> do
+                writeNumber number
+                loop
 
-    loop
+        loop

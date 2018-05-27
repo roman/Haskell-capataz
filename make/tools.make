@@ -1,7 +1,7 @@
 # -*- mode: Makefile; -*-
 ################################################################################
 
-TOOLS_DIR ?= ./tools/bin
+TOOLS_DIR ?= $$(pwd)/tools/bin
 
 BRITTANY_BIN := $(TOOLS_DIR)/brittany
 STYLISH_BIN := $(TOOLS_DIR)/stylish-haskell

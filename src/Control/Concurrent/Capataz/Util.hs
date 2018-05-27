@@ -1,21 +1,21 @@
 {-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
+
 {-# LANGUAGE NoImplicitPrelude #-}
 module Control.Concurrent.Capataz.Util (
     buildLogWorkerSpec
   , buildLogWorkerOptions
   ) where
 
+import Control.Concurrent.Capataz
+    ( ProcessSpec
+    , WorkerName
+    , WorkerOptions
+    , WorkerRestartStrategy (Permanent)
+    , buildWorkerOptions
+    , workerRestartStrategyL
+    , workerSpec
+    )
 import RIO
-import Control.Concurrent.Capataz (
-    WorkerName
-  , WorkerOptions
-  , WorkerRestartStrategy(Permanent)
-  , ProcessSpec
-  , buildWorkerOptions
-  , workerSpec
-  , workerRestartStrategyL
-  )
 
 data LogMsg
   = LogMsg
@@ -28,10 +28,10 @@ data LogMsg
 
 
 runLoggerThread :: MonadUnliftIO m => LogOptions -> TBQueue LogMsg -> m a
-runLoggerThread logOptions inputQueue = do
-  withLogFunc logOptions $ \logFunc -> runRIO logFunc $ forever $ do
+runLoggerThread logOptions inputQueue = withLogFunc logOptions $ \logFunc ->
+  runRIO logFunc $ forever $ do
     logMsg <- atomically $ readTBQueue inputQueue
-    let LogMsg {lmLogSource, lmLogLevel, lmPayload} = logMsg
+    let LogMsg { lmLogSource, lmLogLevel, lmPayload } = logMsg
     -- TODO: create a ticket for a logGenericWithStack function in rio
     logGeneric lmLogSource lmLogLevel lmPayload
 
@@ -72,25 +72,20 @@ buildLogWorkerSpec
   -> (WorkerOptions m -> WorkerOptions m) -- ^ worker process modifier
   -> m0 (ProcessSpec m, LogFunc)
 buildLogWorkerSpec logOptions procName bufferSize modOptions = do
-    inputQueue <- newTBQueueIO bufferSize
-    let
-      myLogFunc =
-        mkLogFunc
-        $ \lmCallStack lmLogSource lmLogLevel lmPayload ->
-            atomically (writeTBQueue inputQueue
-                        $ LogMsg { lmCallStack
-                                 , lmLogSource
-                                 , lmLogLevel
-                                 , lmPayload })
+  inputQueue <- newTBQueueIO bufferSize
+  let myLogFunc =
+        mkLogFunc $ \lmCallStack lmLogSource lmLogLevel lmPayload -> atomically
+          (writeTBQueue
+            inputQueue
+            LogMsg {lmCallStack , lmLogSource , lmLogLevel , lmPayload }
+          )
 
-      loggerSpec =
-        workerSpec
-          procName
-          (runLoggerThread logOptions inputQueue)
-          (modOptions
-           . set workerRestartStrategyL Permanent)
+      loggerSpec = workerSpec
+        procName
+        (runLoggerThread logOptions inputQueue)
+        (modOptions . set workerRestartStrategyL Permanent)
 
-    return (loggerSpec, myLogFunc)
+  return (loggerSpec, myLogFunc)
 
 -- | Builds a 'WorkerOptions' record that spawns a thread that logs messages
 -- written with the returned 'LogFunc'. Use this function if you want to build a
@@ -127,24 +122,20 @@ buildLogWorkerOptions
   => LogOptions
   -> WorkerName
   -> Int
-  -> (WorkerOptions m -> WorkerOptions m) -> m0 (WorkerOptions m, LogFunc)
+  -> (WorkerOptions m -> WorkerOptions m)
+  -> m0 (WorkerOptions m, LogFunc)
 buildLogWorkerOptions logOptions procName bufferSize modOptions = do
-    inputQueue <- newTBQueueIO bufferSize
-    let
-      myLogFunc =
-        mkLogFunc
-        $ \lmCallStack lmLogSource lmLogLevel lmPayload ->
-            atomically (writeTBQueue inputQueue
-                        $ LogMsg { lmCallStack
-                                 , lmLogSource
-                                 , lmLogLevel
-                                 , lmPayload })
+  inputQueue <- newTBQueueIO bufferSize
+  let myLogFunc =
+        mkLogFunc $ \lmCallStack lmLogSource lmLogLevel lmPayload -> atomically
+          (writeTBQueue
+            inputQueue
+            LogMsg {lmCallStack , lmLogSource , lmLogLevel , lmPayload }
+          )
 
-      loggerSpec =
-        buildWorkerOptions
-          procName
-          (runLoggerThread logOptions inputQueue)
-          (modOptions
-           . set workerRestartStrategyL Permanent)
+      loggerSpec = buildWorkerOptions
+        procName
+        (runLoggerThread logOptions inputQueue)
+        (modOptions . set workerRestartStrategyL Permanent)
 
-    return (loggerSpec, myLogFunc)
+  return (loggerSpec, myLogFunc)

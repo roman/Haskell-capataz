@@ -28,7 +28,7 @@ where
 
 import RIO
 
-import Control.Teardown        (Teardown, TeardownResult, newTeardown, runTeardown, runTeardown_)
+import Control.Teardown (Teardown, TeardownResult, newTeardown, runTeardown, runTeardown_)
 import RIO.Time         (getCurrentTime)
 
 import qualified Data.UUID.V4 as UUID (nextRandom)
@@ -56,7 +56,11 @@ instance HasSupervisor Supervisor where
 -- 'Teardown' to shut down the system. The root supervisor monitors failures on
 -- process threads defined with 'supervisorProcessSpecList' or created
 -- dynamically using 'forkWorker' or 'forkSupervisor'.
-forkCapataz :: (MonadUnliftIO m, MonadIO m) => Text -> (CapatazOptions m -> CapatazOptions m) -> m (Capataz m)
+forkCapataz
+  :: (MonadUnliftIO m, MonadIO m)
+  => Text
+  -> (CapatazOptions m -> CapatazOptions m)
+  -> m (Capataz m)
 forkCapataz capatazName modOptionsFn = do
   capatazId    <- liftIO UUID.nextRandom
   supervisorId <- liftIO UUID.nextRandom
@@ -103,13 +107,12 @@ forkCapataz capatazName modOptionsFn = do
     supervisorId
     0 -- initial restart count
 
-  capatazTeardown <- withRunInIO $ \run ->
-    newTeardown
+  capatazTeardown <- withRunInIO $ \run -> newTeardown
     "capataz"
-    ( run $ do
-        Supervisor.haltSupervisor "capataz system shutdown" supervisorEnv
-        eventTime <- getCurrentTime
-        notifyEvent CapatazTerminated {supervisorId , supervisorName , eventTime }
+    (run $ do
+      Supervisor.haltSupervisor "capataz system shutdown" supervisorEnv
+      eventTime <- getCurrentTime
+      notifyEvent CapatazTerminated {supervisorId , supervisorName , eventTime }
     )
 
   return Capataz {capatazSupervisor , capatazTeardown }
@@ -132,7 +135,7 @@ forkWorker workerOptions sup = do
   let Supervisor { supervisorNotify } = getSupervisor sup
   workerIdVar <- newEmptyMVar
   supervisorNotify
-    ( ControlAction ForkWorker
+    (ControlAction ForkWorker
       { workerOptions
       , returnWorkerId = putMVar workerIdVar
       }
@@ -157,7 +160,7 @@ forkSupervisor supervisorOptions parentSup = do
   let Supervisor { supervisorNotify } = getSupervisor parentSup
   supervisorVar <- newEmptyMVar
   supervisorNotify
-    ( ControlAction ForkSupervisor
+    (ControlAction ForkSupervisor
       { supervisorOptions
       , returnSupervisor  = putMVar supervisorVar
       }
@@ -172,12 +175,16 @@ forkSupervisor supervisorOptions parentSup = do
 -- restarted again__.
 --
 terminateProcess
-  :: (MonadIO m, HasSupervisor supervisor) => Text -> ProcessId -> supervisor m -> m Bool
+  :: (MonadIO m, HasSupervisor supervisor)
+  => Text
+  -> ProcessId
+  -> supervisor m
+  -> m Bool
 terminateProcess processTerminationReason processId supervisor = do
   let Supervisor { supervisorNotify } = getSupervisor supervisor
   result <- newEmptyMVar
   supervisorNotify
-    ( ControlAction TerminateProcess
+    (ControlAction TerminateProcess
       { processId
       , processTerminationReason
       , notifyProcessTermination = putMVar result

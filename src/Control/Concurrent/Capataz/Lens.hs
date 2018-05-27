@@ -17,4 +17,4 @@ import Control.Concurrent.Capataz.Internal.Types.Lens as X
     , workerRestartStrategyL
     , workerTerminationPolicyL
     )
-import RIO                                     as X (set, (&), (^.), view)
+import RIO                                            as X (set, view, (&), (^.))

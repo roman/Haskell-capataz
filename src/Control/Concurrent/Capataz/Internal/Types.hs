@@ -1,24 +1,24 @@
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns        #-}
-{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
 
 {-| This module contains all the types used across all the other modules -}
 module Control.Concurrent.Capataz.Internal.Types where
 
 import RIO
-import RIO.Time                    (NominalDiffTime, UTCTime)
+import RIO.Time (NominalDiffTime, UTCTime)
 
-import Control.Teardown            (HasTeardown (..), Teardown)
-import Data.UUID                   (UUID)
+import Control.Teardown (HasTeardown (..), Teardown)
+import Data.UUID        (UUID)
 
 import qualified Control.Exception as UnsafeE
-import Data.Typeable (cast)
+import           Data.Typeable     (cast)
 
-import Text.Show.Pretty          (ppShow)
-import Data.Text.Prettyprint.Doc (Pretty(..), (<+>))
+import           Data.Text.Prettyprint.Doc (Pretty (..), (<+>))
 import qualified Data.Text.Prettyprint.Doc as Pretty
+import           Text.Show.Pretty          (ppShow)
 
 type CapatazId = UUID
 type WorkerId = UUID
@@ -45,7 +45,7 @@ instance Pretty ProcessThreadId where
   pretty (PTID tid) =
     case words (show tid) of
       (_:threadNumber:_) -> pretty threadNumber
-      _ -> "unknown"
+      _                  -> "unknown"
 
 -- | Event delivered to the 'notifyEvent' callback sub-routine; these events can
 -- be used to monitor the capataz system and track what is doing, providing high
@@ -337,12 +337,12 @@ instance Pretty CapatazEvent where
       prettyAttributes attrList =
         Pretty.nest 4
           (Pretty.hardline
-           <> (Pretty.vsep $ map (\(k, v) -> Pretty.fill 20 (k <> ":") <+> v)
+           <> Pretty.vsep (map (\(k, v) -> Pretty.fill 20 (k <> ":") <+> v)
                                 attrList))
 
       prettySupervisorId supId supName =
         Pretty.angles
-        $ (Pretty.viaShow supId) <> "/" <> pretty supName
+        $ Pretty.viaShow supId <> "/" <> pretty supName
 
       prettyProcessId procId procName procTid =
         Pretty.angles
@@ -562,7 +562,7 @@ data Supervisor m
   , supervisorOptions      :: !(SupervisorOptions m)
   , supervisorCreationTime :: !UTCTime
   , supervisorAsync        :: !(Async ())
-  , supervisorNotify       :: (SupervisorMessage m) -> m ()
+  , supervisorNotify       :: SupervisorMessage m -> m ()
   , supervisorEnv          :: !(SupervisorEnv m)
   }
 
@@ -635,7 +635,7 @@ instance Pretty ProcessType  where
   pretty ty =
     case ty of
       SupervisorType -> "Supervisor"
-      WorkerType -> "Worker"
+      WorkerType     -> "Worker"
 
 -- | Internal exception triggered when a callback of a Worker fails
 data ProcessError
@@ -747,7 +747,7 @@ data ParentSupervisorEnv m
   = ParentSupervisorEnv {
     supervisorId     :: !SupervisorId
   , supervisorName   :: !SupervisorName
-  , supervisorNotify :: !((SupervisorMessage m) -> m ())
+  , supervisorNotify :: !(SupervisorMessage m -> m ())
   , notifyEvent      :: !(CapatazEvent -> m ())
   }
 
@@ -757,7 +757,7 @@ data SupervisorEnv m
   = SupervisorEnv {
     supervisorId                      :: !SupervisorId
   , supervisorName                    :: !SupervisorName
-  , supervisorNotify                  :: !((SupervisorMessage m) -> m ())
+  , supervisorNotify                  :: !(SupervisorMessage m -> m ())
   , supervisorGetNotification         :: !(STM (SupervisorMessage m))
   , supervisorProcessMap              :: !(IORef (ProcessMap m))
   , supervisorStatusVar               :: !(TVar SupervisorStatus)
@@ -968,20 +968,14 @@ getMaskingState = liftIO UnsafeE.getMaskingState
 -- and we are running on masked states, we need to have a try that catches all
 -- kinds of exceptions
 unsafeTry :: (Exception e, MonadUnliftIO m) => m a -> m (Either e a)
-unsafeTry action = withRunInIO $ \run ->
-  UnsafeE.try (run action)
+unsafeTry action = withRunInIO $ \run -> UnsafeE.try (run action)
 
 -- | Given unliftio wraps exceptions in 3 layers of Exceptions, and we are using
 -- vanilla exceptions, we need to make sure that we account for all different
 -- exception types
 fromAnyException :: Exception e => SomeException -> Maybe e
-fromAnyException ex =
-  case UnsafeE.fromException ex of
-    Just (UnsafeE.SomeAsyncException innerEx1) ->
-      case cast innerEx1 of
-        Just (AsyncExceptionWrapper innerEx2) ->
-          cast innerEx2
-        Nothing ->
-          cast innerEx1
-    Nothing ->
-      fromException ex
+fromAnyException ex = case UnsafeE.fromException ex of
+  Just (UnsafeE.SomeAsyncException innerEx1) -> case cast innerEx1 of
+    Just (AsyncExceptionWrapper innerEx2) -> cast innerEx2
+    Nothing                               -> cast innerEx1
+  Nothing -> fromException ex

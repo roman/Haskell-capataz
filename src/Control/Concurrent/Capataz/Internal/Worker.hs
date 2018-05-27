@@ -9,7 +9,7 @@ module Control.Concurrent.Capataz.Internal.Worker where
 
 import RIO
 
-import RIO.Time          (getCurrentTime)
+import RIO.Time (getCurrentTime)
 
 import qualified Data.UUID.V4 as UUID
 
@@ -31,7 +31,7 @@ workerMain env@ParentSupervisorEnv { supervisorNotify } workerOptions@WorkerOpti
     workerCreationTime <- getCurrentTime
     workerAsync        <- asyncWithUnmask $ \unmask -> do
       Util.setProcessThreadName workerId workerName
-      eResult <- unsafeTry $ unmask workerAction
+      eResult     <- unsafeTry $ unmask workerAction
 
       resultEvent <- case eResult of
         Left err -> Process.handleProcessException unmask

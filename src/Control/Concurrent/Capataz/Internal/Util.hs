@@ -13,21 +13,21 @@
 module Control.Concurrent.Capataz.Internal.Util where
 
 import           RIO
-import qualified RIO.Text as T
 import qualified RIO.HashMap as HashMap
-import qualified RIO.List as List
+import qualified RIO.List    as List
+import qualified RIO.Text    as T
 
-import           RIO.Time             (getCurrentTime)
+import RIO.Time (getCurrentTime)
 
-import           GHC.Conc            (labelThread)
+import GHC.Conc (labelThread)
 
 import Control.Concurrent.Capataz.Internal.Types
 
 -- | Returns only the number of the ThreadId.
 getTidNumber :: ThreadId -> Maybe Text
 getTidNumber tid = case T.words $ tshow tid of
-  (_:tidNumber:_) -> Just tidNumber
-  _               -> Nothing
+  (_ : tidNumber : _) -> Just tidNumber
+  _                   -> Nothing
 
 --------------------------------------------------------------------------------
 
@@ -50,7 +50,8 @@ getProcessId process = case process of
   SupervisorProcess Supervisor { supervisorId } -> supervisorId
 
 -- | Gets a supervised 'Process' from a 'Supervisor' instance.
-fetchProcess :: MonadIO m => SupervisorEnv m -> ProcessId -> m (Maybe (Process m))
+fetchProcess
+  :: MonadIO m => SupervisorEnv m -> ProcessId -> m (Maybe (Process m))
 fetchProcess SupervisorEnv { supervisorProcessMap } processId = do
   processMap <- readIORef supervisorProcessMap
   case HashMap.lookup processId processMap of
@@ -70,13 +71,14 @@ removeProcessFromMap :: MonadIO m => SupervisorEnv m -> ProcessId -> m ()
 removeProcessFromMap SupervisorEnv { supervisorProcessMap } processId =
   atomicModifyIORef'
     supervisorProcessMap
-    ( \processMap -> maybe (processMap, ())
-                           (const (HashMap.delete processId processMap, ()))
-                           (HashMap.lookup processId processMap)
+    (\processMap -> maybe (processMap, ())
+                          (const (HashMap.delete processId processMap, ()))
+                          (HashMap.lookup processId processMap)
     )
 
 -- | Function to modify a 'Supervisor' process map using a pure function.
-resetProcessMap :: MonadIO m => SupervisorEnv m -> (ProcessMap m -> ProcessMap m) -> m ()
+resetProcessMap
+  :: MonadIO m => SupervisorEnv m -> (ProcessMap m -> ProcessMap m) -> m ()
 resetProcessMap SupervisorEnv { supervisorProcessMap } processMapFn =
   atomicModifyIORef' supervisorProcessMap
                      (\processMap -> (processMapFn processMap, ()))
@@ -101,7 +103,8 @@ sortProcessesByTerminationOrder terminationOrder processMap =
   processCreationTime (SupervisorProcess Supervisor { supervisorCreationTime })
     = supervisorCreationTime
 
-  workers = List.sortBy (comparing processCreationTime) (HashMap.elems processMap)
+  workers =
+    List.sortBy (comparing processCreationTime) (HashMap.elems processMap)
 
 --------------------------------------------------------------------------------
 
@@ -122,7 +125,8 @@ readSupervisorStatus SupervisorEnv { supervisorStatusVar } =
 -- __IMPORTANT__ This is the only function that should be used for this purpose
 -- given it has the side-effect of notifying a status change via the
 -- 'notifyEvent' sub-routine, orginally given in the 'CapatazOption' record.
-writeSupervisorStatus :: MonadIO m => SupervisorEnv m -> SupervisorStatus -> m ()
+writeSupervisorStatus
+  :: MonadIO m => SupervisorEnv m -> SupervisorStatus -> m ()
 writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorStatusVar, notifyEvent } newSupervisorStatus
   = do
 
@@ -161,7 +165,8 @@ sendSyncControlMsg SupervisorEnv { supervisorNotify } mkCtrlMsg = do
 
 -- | Utility function to transform a 'CapatazOptions' record to a
 -- 'SupervisorOptions' record.
-capatazOptionsToSupervisorOptions :: Monad m => CapatazOptions m -> SupervisorOptions m
+capatazOptionsToSupervisorOptions
+  :: Monad m => CapatazOptions m -> SupervisorOptions m
 capatazOptionsToSupervisorOptions CapatazOptions {..} = SupervisorOptions {..}
 
 -- | Utility function to transform a 'SupervisorEnv' record to a

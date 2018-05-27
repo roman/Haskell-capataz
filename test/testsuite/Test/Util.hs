@@ -4,11 +4,11 @@
 {-# LANGUAGE OverloadedStrings     #-}
 module Test.Util where
 
-import RIO
+import           RIO
 import qualified RIO.Text as T
 
-import Test.Tasty.HUnit              (assertBool, assertFailure)
-import Text.Show.Pretty              (ppShow)
+import Test.Tasty.HUnit (assertBool, assertFailure)
+import Text.Show.Pretty (ppShow)
 
 
 import qualified Control.Concurrent.Capataz       as SUT
@@ -295,7 +295,7 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
     eventStream     <- newTQueueIO
     accRef          <- newIORef []
     pendingCountVar <- newIORef
-      ( sum $ fmap
+      (sum $ fmap
         length
         [preSetupAssertion, postSetupAssertions, postTeardownAssertions]
       )
@@ -304,7 +304,11 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
     withLogFunc logOptions $ \logFunc -> runRIO logFunc $ do
       capataz <- SUT.forkCapataz
         rootSupervisorName
-        (set SUT.onSystemEventL (\ev -> logDebug (display ev) >> trackEvent accRef eventStream ev) . optionModFn)
+        ( set
+            SUT.onSystemEventL
+            (\ev -> logDebug (display ev) >> trackEvent accRef eventStream ev)
+        . optionModFn
+        )
 
       -- We check preSetup assertions are met before we execute the setup
       -- function. This serves to test initialization of capataz instance
@@ -347,7 +351,7 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
             Just allEventsAssertion -> do
               events <- reverse <$> readIORef accRef
               liftIO $ assertBool
-                ( "On AFTER-TEST, expected all events to match predicate, but didn't ("
+                ("On AFTER-TEST, expected all events to match predicate, but didn't ("
                 <> show (length events)
                 <> " events tried)\n"
                 <> ppShow (zip ([0 ..] :: [Int]) events)
@@ -391,8 +395,8 @@ testCapatazStreamWithOptions optionModFn preSetupAssertion setupFn postSetupAsse
   readEventLoop eventStream pendingCount assertions = do
     writeIORef pendingCount (length assertions)
     case assertions of
-      []                        -> return ()
-      (assertionFn:assertions1) -> do
+      []                          -> return ()
+      (assertionFn : assertions1) -> do
         event <- atomically $ readTQueue eventStream
         if assertionFn event
           then readEventLoop eventStream pendingCount assertions1
@@ -416,5 +420,4 @@ testCapatazStream
                                       -- test, great when testing that an event
                                       -- __did not__ happen
   -> m ()
-testCapatazStream preSetupAssertions =
-  testCapatazStreamWithOptions id preSetupAssertions
+testCapatazStream = testCapatazStreamWithOptions id

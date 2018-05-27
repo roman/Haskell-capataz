@@ -9,5 +9,5 @@ module Capataz
     module X
   ) where
 
-import Control.Concurrent.Capataz as X
+import Control.Concurrent.Capataz      as X
 import Control.Concurrent.Capataz.Util as X

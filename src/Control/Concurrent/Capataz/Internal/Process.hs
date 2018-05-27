@@ -11,7 +11,7 @@ import RIO
 import Control.Concurrent.Capataz.Internal.Types
 import Control.Concurrent.Capataz.Internal.Util
     (readProcessMap, sortProcessesByTerminationOrder)
-import RIO.Time                           (UTCTime, getCurrentTime)
+import RIO.Time                                  (UTCTime, getCurrentTime)
 
 -- | Gets "Async" from a given Process.
 getProcessAsync :: Process m -> Async ()
@@ -50,7 +50,8 @@ getProcessSpec process = case process of
 
 -- | Utility function to send notifications to the capataz system callback when
 -- a Process fails.
-notifyProcessFailed :: MonadIO m => SupervisorEnv m -> Process m -> SomeException -> m ()
+notifyProcessFailed
+  :: MonadIO m => SupervisorEnv m -> Process m -> SomeException -> m ()
 notifyProcessFailed SupervisorEnv { supervisorId, supervisorName, notifyEvent } process processError
   = do
     eventTime <- getCurrentTime
@@ -67,7 +68,8 @@ notifyProcessFailed SupervisorEnv { supervisorId, supervisorName, notifyEvent } 
 
 -- | Utility function to send notifications to the capataz system callback when
 -- a Process is terminated.
-notifyProcessTerminated :: MonadIO m => SupervisorEnv m -> Process m -> Text -> m ()
+notifyProcessTerminated
+  :: MonadIO m => SupervisorEnv m -> Process m -> Text -> m ()
 notifyProcessTerminated SupervisorEnv { supervisorId, supervisorName, notifyEvent } process terminationReason
   = do
     eventTime <- getCurrentTime
@@ -85,7 +87,11 @@ notifyProcessTerminated SupervisorEnv { supervisorId, supervisorName, notifyEven
 -- | Utility function to send notifications to the capataz system callback when
 -- a Process is started or restarted.
 notifyProcessStarted
-  :: MonadIO m => Maybe (ProcessId, RestartCount) -> ParentSupervisorEnv m -> Process m -> m ()
+  :: MonadIO m
+  => Maybe (ProcessId, RestartCount)
+  -> ParentSupervisorEnv m
+  -> Process m
+  -> m ()
 notifyProcessStarted mRestartInfo ParentSupervisorEnv { supervisorId, supervisorName, notifyEvent } process
   = do
     eventTime <- getCurrentTime
@@ -112,7 +118,8 @@ notifyProcessStarted mRestartInfo ParentSupervisorEnv { supervisorId, supervisor
 
 -- | Utility function to send notifications when a Process sub-routine completes
 -- without errors.
-notifyProcessCompleted :: MonadIO m => SupervisorEnv m -> Process m -> UTCTime -> m ()
+notifyProcessCompleted
+  :: MonadIO m => SupervisorEnv m -> Process m -> UTCTime -> m ()
 notifyProcessCompleted SupervisorEnv { supervisorId, supervisorName, notifyEvent } process eventTime
   = notifyEvent ProcessCompleted
     { supervisorId
@@ -159,6 +166,7 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
     let processName = getProcessName procSpec
     processThreadId  <- PTID <$> myThreadId
     monitorEventTime <- getCurrentTime
+
     case fromAnyException err of
       Just RestartProcessException -> return ProcessForcedRestart
         { processId
@@ -183,19 +191,18 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
 
 
         case eErrResult of
-          Left processCallbackError ->
-            return ProcessFailed'
+          Left processCallbackError -> return ProcessFailed'
+            { processId
+            , processName
+            , processError        = toException ProcessCallbackFailed
               { processId
-              , processName
-              , processError        = toException ProcessCallbackFailed
-                { processId
-                , processCallbackError
-                , processCallbackType  = OnTermination
-                , processError         = Just err
-                }
-              , processRestartCount = restartCount
-              , monitorEventTime
+              , processCallbackError
+              , processCallbackType  = OnTermination
+              , processError         = Just err
               }
+            , processRestartCount = restartCount
+            , monitorEventTime
+            }
           Right _ -> return ProcessTerminated'
             { processId
             , processName
@@ -335,17 +342,20 @@ terminateWorker processTerminationReason Worker { workerId, workerOptions, worke
         -- NOTE: Given Teardown executes teardown operations in an uninterruptible mask
         -- we need to run asyncWithUnmask to come back to a unmasked state, sadly, race
         -- doesn't use asyncWithUnmask_, so we need to use it here
-        result <- asyncWithUnmask $ \unmask ->
-          unmask $ race_
-            (do threadDelay (millis * 1000)
-                cancelWith
-                  workerAsync
-                  BrutallyTerminateProcessException
-                    { processId
-                    , processTerminationReason
-                    }
-            )
-            (cancelWith workerAsync TerminateProcessException {processId , processTerminationReason })
+        result <- asyncWithUnmask $ \unmask -> unmask $ race_
+          (do
+            threadDelay (millis * 1000)
+            cancelWith
+              workerAsync
+              BrutallyTerminateProcessException
+                { processId
+                , processTerminationReason
+                }
+          )
+          (cancelWith
+            workerAsync
+            TerminateProcessException {processId , processTerminationReason }
+          )
         wait result
 
 -- | Internal utility function that manages execution of a termination policy
@@ -358,7 +368,8 @@ terminateSupervisor processTerminationReason Supervisor { supervisorId = process
 
 -- | Internal sub-routine that terminates workers of a supervisor, used when a
 -- supervisor instance is terminated.
-terminateProcessMap :: (MonadUnliftIO m, MonadIO m) => Text -> SupervisorEnv m -> m ()
+terminateProcessMap
+  :: (MonadUnliftIO m, MonadIO m) => Text -> SupervisorEnv m -> m ()
 terminateProcessMap terminationReason env@SupervisorEnv { supervisorId, supervisorName, supervisorProcessTerminationOrder, notifyEvent }
   = do
     eventTime  <- getCurrentTime

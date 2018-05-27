@@ -6,7 +6,7 @@ module Control.Concurrent.Capataz.Internal.Types.Lens where
 import RIO
 
 import Control.Concurrent.Capataz.Internal.Types
-import RIO.Time                           (NominalDiffTime)
+import RIO.Time                                  (NominalDiffTime)
 
 --------------------------------------------------------------------------------
 
@@ -187,7 +187,10 @@ workerOnFailureL k WorkerOptions { workerOnFailure, ..} = fmap
 -- worker "WorkerTerminationPolicy".
 --
 workerOnCompletionL
-  :: (MonadIO m, Functor f) => (m () -> f (m ())) -> WorkerOptions m -> f (WorkerOptions m)
+  :: (MonadIO m, Functor f)
+  => (m () -> f (m ()))
+  -> WorkerOptions m
+  -> f (WorkerOptions m)
 workerOnCompletionL k WorkerOptions { workerOnCompletion, ..} = fmap
   (\newWorkerAction -> WorkerOptions {workerOnCompletion = newWorkerAction, ..})
   (k workerOnCompletion)
@@ -202,8 +205,7 @@ workerOnCompletionL k WorkerOptions { workerOnCompletion, ..} = fmap
 workerOnTerminationL
   :: Functor f => (m () -> f (m ())) -> WorkerOptions m -> f (WorkerOptions m)
 workerOnTerminationL k WorkerOptions { workerOnTermination, ..} = fmap
-  ( \newWorkerAction ->
-    WorkerOptions {workerOnTermination = newWorkerAction, ..}
+  (\newWorkerAction -> WorkerOptions {workerOnTermination = newWorkerAction, ..}
   )
   (k workerOnTermination)
 
@@ -215,7 +217,7 @@ workerTerminationPolicyL
   -> WorkerOptions m
   -> f (WorkerOptions m)
 workerTerminationPolicyL k WorkerOptions { workerTerminationPolicy, ..} = fmap
-  ( \newWorkerAction ->
+  (\newWorkerAction ->
     WorkerOptions {workerTerminationPolicy = newWorkerAction, ..}
   )
   (k workerTerminationPolicy)
@@ -228,7 +230,7 @@ workerRestartStrategyL
   -> WorkerOptions m
   -> f (WorkerOptions m)
 workerRestartStrategyL k WorkerOptions { workerRestartStrategy, ..} = fmap
-  ( \newWorkerAction ->
+  (\newWorkerAction ->
     WorkerOptions {workerRestartStrategy = newWorkerAction, ..}
   )
   (k workerRestartStrategy)

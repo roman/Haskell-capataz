@@ -8,6 +8,7 @@ import Capataz
     ( CapatazOptions
     , SupervisorRestartStrategy (..)
     , WorkerRestartStrategy (..)
+    , buildLogWorkerOptions
     , buildWorkerOptions
     , buildWorkerOptionsWithDefaults
     , forkCapataz
@@ -18,25 +19,25 @@ import Capataz
     , supervisorRestartStrategyL
     , terminateCapataz_
     , workerRestartStrategyL
-    , buildLogWorkerOptions
     )
-import Lib                        (Cli (..), killNumberProcess, spawnNumbersProcess)
-import Options.Generic            (getRecord)
+import Lib             (Cli (..), killNumberProcess, spawnNumbersProcess)
+import Options.Generic (getRecord)
 
-rootSupervisorOptions :: (HasLogFunc env, MonadIO m, MonadReader env m) => (CapatazOptions m -> CapatazOptions m)
-rootSupervisorOptions =
-  set supervisorRestartStrategyL OneForOne
+rootSupervisorOptions
+  :: (HasLogFunc env, MonadIO m, MonadReader env m)
+  => (CapatazOptions m -> CapatazOptions m)
+rootSupervisorOptions = set supervisorRestartStrategyL OneForOne
   . set onSystemEventL (logDebug . display) -- Show all events of the capataz sub-system on debug
 
 
 main :: IO ()
 main = do
-  n <- procNumber <$> getRecord "Counter spawner"
-  logOptions <- logOptionsHandle stdout False
+  n                        <- procNumber <$> getRecord "Counter spawner"
+  logOptions               <- logOptionsHandle stdout False
   (loggerOptions, logFunc) <- buildLogWorkerOptions logOptions "logger" n id
 
   runRIO logFunc $ do
-    capataz <- forkCapataz "unix-process-capataz" rootSupervisorOptions
+    capataz       <- forkCapataz "unix-process-capataz" rootSupervisorOptions
 
     _loggerWorker <- forkWorker loggerOptions capataz
     let numberWriter i a = logInfo $ displayShow (i :: Int, a :: Int)

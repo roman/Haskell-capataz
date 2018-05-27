@@ -119,7 +119,7 @@ notifyProcessStarted mRestartInfo ParentSupervisorEnv { supervisorId, supervisor
 -- | Utility function to send notifications when a Process sub-routine completes
 -- without errors.
 notifyProcessCompleted
-  :: MonadIO m => SupervisorEnv m -> Process m -> UTCTime -> m ()
+  :: SupervisorEnv m -> Process m -> UTCTime -> m ()
 notifyProcessCompleted SupervisorEnv { supervisorId, supervisorName, notifyEvent } process eventTime
   = notifyEvent ProcessCompleted
     { supervisorId
@@ -139,7 +139,7 @@ callProcessOnCompletion procSpec = case procSpec of
   _                                               -> return ()
 
 -- | Utility function to execute a Process onFailure sub-routine.
-callProcessOnFailure :: Monad m => ProcessSpec m -> SomeException -> m ()
+callProcessOnFailure :: ProcessSpec m -> SomeException -> m ()
 callProcessOnFailure procSpec err = case procSpec of
   WorkerSpec WorkerOptions { workerOnFailure } -> workerOnFailure err
   SupervisorSpec SupervisorOptions { supervisorOnFailure } ->
@@ -153,7 +153,7 @@ callProcessOnTermination procSpec = case procSpec of
 
 -- | Handles errors produced - or thrown to - a process thread.
 handleProcessException
-  :: (MonadUnliftIO m, MonadIO m)
+  :: (MonadUnliftIO m)
   => (m () -> m a)
   -> ParentSupervisorEnv m
   -> ProcessSpec m
@@ -258,7 +258,7 @@ handleProcessException unmask ParentSupervisorEnv { supervisorId, supervisorName
 
 -- | Handles completion of a Process sub-routine.
 handleProcessCompletion
-  :: (MonadUnliftIO m, MonadIO m)
+  :: (MonadUnliftIO m)
   => (m () -> m a)
   -> ParentSupervisorEnv m
   -> ProcessSpec m
@@ -306,7 +306,7 @@ handleProcessCompletion unmask ParentSupervisorEnv { supervisorId, supervisorNam
 -- function gets executed on the supervisor's thread.
 --
 terminateProcess
-  :: (MonadUnliftIO m, MonadIO m)
+  :: (MonadUnliftIO m)
   => Text -- ^ Description that indicates _why_ there is a termination
   -> SupervisorEnv m
   -> Process m
@@ -321,7 +321,7 @@ terminateProcess processTerminationReason env process = do
 
 -- | Internal utility function that manages execution of a termination policy
 -- for a Worker.
-terminateWorker :: (MonadUnliftIO m, MonadIO m) => Text -> Worker m -> m ()
+terminateWorker :: (MonadUnliftIO m) => Text -> Worker m -> m ()
 terminateWorker processTerminationReason Worker { workerId, workerOptions, workerAsync }
   = do
     let processId = workerId
@@ -369,7 +369,7 @@ terminateSupervisor processTerminationReason Supervisor { supervisorId = process
 -- | Internal sub-routine that terminates workers of a supervisor, used when a
 -- supervisor instance is terminated.
 terminateProcessMap
-  :: (MonadUnliftIO m, MonadIO m) => Text -> SupervisorEnv m -> m ()
+  :: (MonadUnliftIO m) => Text -> SupervisorEnv m -> m ()
 terminateProcessMap terminationReason env@SupervisorEnv { supervisorId, supervisorName, supervisorProcessTerminationOrder, notifyEvent }
   = do
     eventTime  <- getCurrentTime

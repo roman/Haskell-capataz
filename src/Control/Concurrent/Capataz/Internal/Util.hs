@@ -91,7 +91,7 @@ readProcessMap SupervisorEnv { supervisorProcessMap } =
 -- | Returns all processes of a 'Supervisor' by 'ProcessTerminationOrder'. This
 -- is used on 'AllForOne' restarts and shutdown operations.
 sortProcessesByTerminationOrder
-  :: Monad m => ProcessTerminationOrder -> ProcessMap m -> [Process m]
+  :: ProcessTerminationOrder -> ProcessMap m -> [Process m]
 sortProcessesByTerminationOrder terminationOrder processMap =
   case terminationOrder of
     OldestFirst -> workers
@@ -146,7 +146,7 @@ writeSupervisorStatus SupervisorEnv { supervisorId, supervisorName, supervisorSt
 
 -- | Used from public API functions to send 'ControlAction' messages to a
 -- Supervisor thread loop.
-sendControlMsg :: MonadIO m => SupervisorEnv m -> ControlAction m -> m ()
+sendControlMsg :: SupervisorEnv m -> ControlAction m -> m ()
 sendControlMsg SupervisorEnv { supervisorNotify } ctrlMsg =
   supervisorNotify (ControlAction ctrlMsg)
 
@@ -166,12 +166,12 @@ sendSyncControlMsg SupervisorEnv { supervisorNotify } mkCtrlMsg = do
 -- | Utility function to transform a 'CapatazOptions' record to a
 -- 'SupervisorOptions' record.
 capatazOptionsToSupervisorOptions
-  :: Monad m => CapatazOptions m -> SupervisorOptions m
+  :: CapatazOptions m -> SupervisorOptions m
 capatazOptionsToSupervisorOptions CapatazOptions {..} = SupervisorOptions {..}
 
 -- | Utility function to transform a 'SupervisorEnv' record to a
 -- 'ParentSupervisorEnv' record; used on functions where supervision of
 -- supervisors is managed.
-toParentSupervisorEnv :: Monad m => SupervisorEnv m -> ParentSupervisorEnv m
+toParentSupervisorEnv :: SupervisorEnv m -> ParentSupervisorEnv m
 toParentSupervisorEnv SupervisorEnv { supervisorId, supervisorName, supervisorNotify, notifyEvent }
   = ParentSupervisorEnv {..}

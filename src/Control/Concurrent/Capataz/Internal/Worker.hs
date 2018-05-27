@@ -20,7 +20,7 @@ import Control.Concurrent.Capataz.Internal.Types
 
 -- | Decorates the given @IO ()@ sub-routine with failure handling
 workerMain
-  :: (MonadUnliftIO m, MonadIO m)
+  :: (MonadUnliftIO m)
   => ParentSupervisorEnv m
   -> WorkerOptions m
   -> WorkerId
@@ -60,7 +60,7 @@ workerMain env@ParentSupervisorEnv { supervisorNotify } workerOptions@WorkerOpti
 -- this is different from the public @forkWorker@ function which sends a message
 -- to the capataz loop
 forkWorker
-  :: (MonadUnliftIO m, MonadIO m)
+  :: (MonadUnliftIO m)
   => ParentSupervisorEnv m
   -> WorkerOptions m
   -> Maybe (WorkerId, RestartCount)

@@ -65,7 +65,7 @@ runLoggerThread logOptions inputQueue = withLogFunc logOptions $ \logFunc ->
 --
 -- @since 0.2.0.0
 buildLogWorkerSpec
-  :: (MonadUnliftIO m, MonadIO m, MonadIO m0)
+  :: (MonadUnliftIO m, MonadIO m0)
   => LogOptions  -- ^ options for the 'LogFunc' instance
   -> WorkerName  -- ^ name of the logger worker process
   -> Int         -- ^ how many log messages can be in-flight when writer is slow?
@@ -118,7 +118,7 @@ buildLogWorkerSpec logOptions procName bufferSize modOptions = do
 --
 -- @since 0.2.0.0
 buildLogWorkerOptions
-  :: (MonadUnliftIO m, MonadIO m, MonadIO m0)
+  :: (MonadUnliftIO m, MonadIO m0)
   => LogOptions
   -> WorkerName
   -> Int

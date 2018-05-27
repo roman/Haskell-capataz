@@ -172,7 +172,7 @@ onSystemEventL k CapatazOptions { notifyEvent, ..} = fmap
 -- worker "WorkerTerminationPolicy".
 --
 workerOnFailureL
-  :: (MonadIO m, Functor f)
+  :: (Functor f)
   => ((SomeException -> m ()) -> f (SomeException -> m ()))
   -> WorkerOptions m
   -> f (WorkerOptions m)
@@ -187,7 +187,7 @@ workerOnFailureL k WorkerOptions { workerOnFailure, ..} = fmap
 -- worker "WorkerTerminationPolicy".
 --
 workerOnCompletionL
-  :: (MonadIO m, Functor f)
+  :: (Functor f)
   => (m () -> f (m ()))
   -> WorkerOptions m
   -> f (WorkerOptions m)

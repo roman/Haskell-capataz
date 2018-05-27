@@ -172,9 +172,9 @@ instance Pretty CapatazEvent where
         <> prettyAttributes [ ("Supervisor ID"
                               , prettySupervisorId supervisorId supervisorName)
                             , ("Previous State"
-                              , Pretty.dquotes $ Pretty.viaShow prevSupervisorStatus)
+                              , Pretty.dquotes $ Pretty.pretty prevSupervisorStatus)
                             , ("New State"
-                              , Pretty.dquotes (Pretty.viaShow newSupervisorStatus))
+                              , Pretty.dquotes (Pretty.pretty newSupervisorStatus))
                             ]
 
       ProcessStarted {
@@ -342,11 +342,11 @@ instance Pretty CapatazEvent where
 
       prettySupervisorId supId supName =
         Pretty.angles
-        $ Pretty.viaShow supId <> "/" <> pretty supName
+        $ pretty (show supId) <> "/" <> pretty supName
 
       prettyProcessId procId procName procTid =
         Pretty.angles
-        $ Pretty.viaShow procId <> "/" <> pretty procName <> "/" <> pretty procTid
+        $ pretty (show procId) <> "/" <> pretty procName <> "/" <> pretty procTid
 
 -- | @since 0.2.0.0
 instance Display CapatazEvent where
@@ -695,6 +695,10 @@ data SupervisorStatus
   deriving (Generic, Show, Eq)
 
 instance NFData SupervisorStatus
+
+instance Pretty SupervisorStatus where
+  pretty =
+    pretty . show
 
 -- | Internal message delivered to a supervisor process that can either be a
 -- call from public API or an event from its monitored worker process.

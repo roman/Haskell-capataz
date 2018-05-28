@@ -20,6 +20,7 @@ data LogMsg
   = LogMsg
   {
     lmCallStack :: !CallStack
+  , lmThreadId  :: !ThreadId
   , lmLogSource :: !LogSource
   , lmLogLevel  :: !LogLevel
   , lmPayload   :: !Utf8Builder
@@ -30,9 +31,9 @@ runLoggerThread :: MonadUnliftIO m => LogOptions -> TBQueue LogMsg -> m a
 runLoggerThread logOptions inputQueue = withLogFunc logOptions $ \logFunc ->
   runRIO logFunc $ forever $ do
     logMsg <- atomically $ readTBQueue inputQueue
-    let LogMsg { lmLogSource, lmLogLevel, lmPayload } = logMsg
+    let LogMsg { lmCallStack, lmThreadId, lmLogSource, lmLogLevel, lmPayload } = logMsg
     -- TODO: create a ticket for a logGenericWithStack function in rio
-    logGeneric lmLogSource lmLogLevel lmPayload
+    logGenericFromThread lmCallStack lmThreadId lmLogSource lmLogLevel lmPayload
 
 -- | Builds a 'ProcessSpec' that spawns a thread that logs messages written with
 -- the returned 'LogFunc'. Use this function when your want your logger to be
@@ -73,11 +74,14 @@ buildLogWorkerSpec
 buildLogWorkerSpec logOptions procName bufferSize modOptions = do
   inputQueue <- newTBQueueIO bufferSize
   let myLogFunc =
-        mkLogFunc $ \lmCallStack lmLogSource lmLogLevel lmPayload -> atomically
-          (writeTBQueue
-            inputQueue
-            LogMsg {lmCallStack , lmLogSource , lmLogLevel , lmPayload }
-          )
+        mkLogFunc $ \lmCallStack lmThreadId lmLogSource lmLogLevel lmPayload -> do
+          minLevel <- getLogMinLevel logOptions
+          when (lmLogLevel >= minLevel)
+            $ atomically
+                (writeTBQueue
+                  inputQueue
+                  LogMsg {lmCallStack , lmThreadId ,  lmLogSource , lmLogLevel , lmPayload }
+                )
 
       loggerSpec = workerSpec
         procName
@@ -126,10 +130,10 @@ buildLogWorkerOptions
 buildLogWorkerOptions logOptions procName bufferSize modOptions = do
   inputQueue <- newTBQueueIO bufferSize
   let myLogFunc =
-        mkLogFunc $ \lmCallStack lmLogSource lmLogLevel lmPayload -> atomically
+        mkLogFunc $ \lmCallStack lmThreadId lmLogSource lmLogLevel lmPayload -> atomically
           (writeTBQueue
             inputQueue
-            LogMsg {lmCallStack , lmLogSource , lmLogLevel , lmPayload }
+            LogMsg {lmCallStack , lmThreadId, lmLogSource , lmLogLevel , lmPayload }
           )
 
       loggerSpec = buildWorkerOptions

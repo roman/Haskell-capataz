@@ -1,5 +1,5 @@
 {-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
+
 {-# LANGUAGE NoImplicitPrelude #-}
 
 -- | Offers functions to build a supervised thread dedicated to logging all the
@@ -13,8 +13,8 @@ module Control.Concurrent.Capataz.Util.Logger
   )
   where
 
-import RIO
 import Control.Concurrent.Capataz
+import RIO
 
 data LogMsg
   = LogMsg

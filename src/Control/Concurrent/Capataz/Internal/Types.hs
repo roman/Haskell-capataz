@@ -945,8 +945,8 @@ buildWorkerOptions
   -> (WorkerOptions m -> WorkerOptions m) -- ^ Function to modify default worker
                                       -- options
   -> WorkerOptions m
-buildWorkerOptions workerName workerAction f =
-  buildWorkerOptions1 workerName (const workerAction) f
+buildWorkerOptions workerName workerAction =
+  buildWorkerOptions1 workerName (const workerAction)
 {-# INLINE buildWorkerOptions #-}
 
 -- | Builds a 'WorkerOptions' record, keeps the defaults from

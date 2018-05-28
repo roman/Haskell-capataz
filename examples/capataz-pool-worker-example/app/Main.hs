@@ -68,7 +68,7 @@ fetchUrlList manager url = do
   -- logInfo $ "  status: " <> display (statusCode $ responseStatus response)
   -- logInfo $ "  length: " <> display (LB.length $ responseBody response)
   -- logInfo $ displayShow (responseBody response)
-  let edoc = (parseHtml . Text.unpack)
+  let edoc = parseHtml . Text.unpack
         <$> decodeUtf8' (LB.toStrict (responseBody response))
   case edoc of
     Left  err -> return $ Left err

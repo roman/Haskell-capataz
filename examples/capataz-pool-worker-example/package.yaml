@@ -1,0 +1,33 @@
+name: capataz-pool-worker-example
+version: '0.0.0.1'
+category: TODO
+author: Roman Gonzalez
+maintainer: open-source@roman-gonzalez.info
+copyright: © 2018 Roman Gonzalez
+license: MIT
+github: roman/Haskell-capataz
+extra-source-files:
+- README.md
+dependencies:
+- base >= 4 && < 5
+- optparse-generic >= 1.1.1
+- pretty-show >= 1.6.13
+- rio >= 0.1.2.0
+- capataz >= 0.2.1.0
+- random >= 1.1
+
+- network-uri
+- http-client
+- http-client-tls
+- http-types
+
+- HandsomeSoup
+- hxt
+# - tagsoup
+executables:
+  pool-worker-example:
+    main: Main.hs
+    source-dirs: app
+    ghc-options:
+    - -threaded
+    - -O2

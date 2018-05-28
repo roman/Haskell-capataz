@@ -7,6 +7,7 @@ module Control.Concurrent.Capataz.Util (
   , Logger.buildLogWorkerOptions
 
     -- * Concurrent utilities
+  , Pool.WorkerPoolArgs (..)
   , Pool.buildStealWorkerPoolOptions
   , Pool.buildStealWorkerPoolSpec
   ) where

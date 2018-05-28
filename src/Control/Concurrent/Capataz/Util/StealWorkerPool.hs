@@ -9,7 +9,8 @@
 -- @since 0.2.1.0
 module Control.Concurrent.Capataz.Util.StealWorkerPool
   (
-    buildStealWorkerPoolOptions
+    WorkerPoolArgs (..)
+  , buildStealWorkerPoolOptions
   , buildStealWorkerPoolSpec
   )
   where
@@ -17,12 +18,26 @@ module Control.Concurrent.Capataz.Util.StealWorkerPool
 import RIO
 import Control.Concurrent.Capataz
 
-data PoolWorkerSpec m a
-  = PoolWorkerSpec
-    { poolWorkerNamePrefix  :: !Text -- ^ Prefix of worker's name in the pool (used for telemetry)
-    , poolWorkerCount       :: !Int  -- ^ Number of worker threads on the pool
-    , poolWorkerAction      :: !(WorkerId -> a -> m ()) -- ^ Sub-routine that does something with a Job
-    , poolWorkerOptions     :: !(WorkerOptions m -> WorkerOptions m) -- ^ Supervision options for workers in the pool
+-- | Record help gather arguments to build a pool of workers
+--
+-- @since 0.2.1.0
+data WorkerPoolArgs m a
+  = WorkerPoolArgs
+    {
+      -- | sub-routine that pulls new work to get processed (read SQS, read TQueue, etc.)
+      poolPullNewWork       :: !(m a)
+      -- | Name of pool supervisor (used for telemetry)
+    , poolSupervisorName    :: !SupervisorName
+      -- | Options for the supervisor of the worker pool
+    , poolSupervisorOptions :: !(SupervisorOptions m -> SupervisorOptions m)
+      -- | Prefix of worker's name in the pool (used for telemetry)
+    , poolWorkerNamePrefix  :: !Text
+      -- | Number of worker threads on the pool
+    , poolWorkerCount       :: !Int
+      -- | Sub-routine that does something with a pulled job
+    , poolWorkerAction      :: !(WorkerId -> a -> m ())
+      -- | Supervision options for workers in the pool
+    , poolWorkerOptions     :: !(WorkerOptions m -> WorkerOptions m)
     }
   deriving (Generic)
 
@@ -43,15 +58,15 @@ runPoolWorker requestWork workerAction workerId = do
     workerAction workerId a
 
 -- | Transforms a PoolWorkerSpec into a list of WorkerSpec
-buildWorkersFromPoolSpec :: MonadIO m => ((a -> m ()) -> m ()) -> PoolWorkerSpec m a -> [ProcessSpec m]
-buildWorkersFromPoolSpec requestWork workerPoolSpec =
+buildWorkersFromPoolSpec :: MonadIO m => ((a -> m ()) -> m ()) -> WorkerPoolArgs m a -> [ProcessSpec m]
+buildWorkersFromPoolSpec requestWork poolArgs =
   let
-    PoolWorkerSpec {
+    WorkerPoolArgs {
         poolWorkerNamePrefix
       , poolWorkerCount
       , poolWorkerAction
       , poolWorkerOptions
-      } = workerPoolSpec
+      } = poolArgs
   in
     [ workerSpec1 (poolWorkerNamePrefix <> "-" <> tshow i)
                   (runPoolWorker requestWork poolWorkerAction)
@@ -69,15 +84,17 @@ buildWorkersFromPoolSpec requestWork workerPoolSpec =
 -- For the following invokation
 --
 -- @
--- stealWorkerPoolProcessOptions
---   "my-worker-pool"
---   (set supervisorRestartStraregyL AllForOne)
---   (atomically $ readTBQueue incomingWorkFromSocket)
---   PoolWorkerSpec { poolWorkerNamePrefix = "worker-pool"
---                  , poolWorkerCount      = 10
---                  , poolWorkerAction     = processWorkFromSocket
---                  , poolWorkerOptions    = set workerRestartStrategyL Permanent }
--- @
+-- buildStealWorkerPoolOptions
+--   WorkerPoolArgs {
+--       poolSupervisorName    = "my-worker-pool"
+--     , poolSupervisorOptions = set supervisorRestartStraregyL AllForOne
+--     , poolPullNewWork       = "worker-pool"
+--     , poolWorkerNamePrefix  = atomically (readTBQueue incomingWorkFromSocket)
+--     , poolWorkerCount       = 10
+--     , poolWorkerAction      = processWorkFromSocket
+--     , poolWorkerOptions     = set workerRestartStrategyL Permanent
+--     }
+--
 --
 -- When we call 'forkSupervisor', a supervision tree like the following is
 -- spawned:
@@ -96,34 +113,38 @@ buildWorkersFromPoolSpec requestWork workerPoolSpec =
 -- @since 0.2.1.0
 buildStealWorkerPoolOptions
   :: (MonadIO m1, MonadIO m)
-  => SupervisorName      -- ^ Name of pool supervisor
-  -> (SupervisorOptions m -> SupervisorOptions m) -- ^ Options for the supervisor of the worker pool
-  -> m a                 -- ^ sub-routine that pulls new work to get processed (read SQS, read TQueue, etc.)
-  -> PoolWorkerSpec m a  -- ^ spec for workers in the pool
+  => WorkerPoolArgs m a  -- ^ arguments for the worker pool
   -> m1 (SupervisorOptions m)
-buildStealWorkerPoolOptions supName poolSupervisorOptions pullJob workerPoolSpec = do
-    workQueue <- newTBQueueIO (poolWorkerCount workerPoolSpec)
-    let
-      requestWork  = atomically . writeTBQueue workQueue
-      acceptWorker = atomically (readTBQueue workQueue)
+buildStealWorkerPoolOptions poolArgs = do
+  let WorkerPoolArgs {
+          poolSupervisorName
+        , poolSupervisorOptions
+        , poolPullNewWork
+        } = poolArgs
 
-      workerSpecList =
-        buildWorkersFromPoolSpec requestWork workerPoolSpec
+  workQueue <- newTBQueueIO (poolWorkerCount poolArgs)
+  let
+    requestWork  = atomically . writeTBQueue workQueue
+    acceptWorker = atomically (readTBQueue workQueue)
 
-      workerPoolSupervisor =
-        supervisorSpec "pool-supervisor"
-                       (set supervisorProcessSpecListL workerSpecList
-                        . poolSupervisorOptions)
+    workerSpecList =
+      buildWorkersFromPoolSpec requestWork poolArgs
 
-      workManagerSpec =
-        workerSpec "work-manager"
-                   (runWorkManager pullJob acceptWorker)
-                   (set workerRestartStrategyL Permanent)
+    workerPoolSupervisor =
+      supervisorSpec "pool-supervisor"
+                     (set supervisorProcessSpecListL workerSpecList
+                      . poolSupervisorOptions)
 
-      rootSupervisorOptions =
-        buildSupervisorOptions supName (set supervisorProcessSpecListL [workManagerSpec, workerPoolSupervisor])
+    workManagerSpec =
+      workerSpec "work-manager"
+                 (runWorkManager poolPullNewWork acceptWorker)
+                 (set workerRestartStrategyL Permanent)
 
-    return rootSupervisorOptions
+    rootSupervisorOptions =
+      buildSupervisorOptions poolSupervisorName
+                             (set supervisorProcessSpecListL [workManagerSpec, workerPoolSupervisor])
+
+  return rootSupervisorOptions
 
 -- | This function returns the settings needed to /statically/ build a
 -- supervision tree that contains:
@@ -136,13 +157,15 @@ buildStealWorkerPoolOptions supName poolSupervisorOptions pullJob workerPoolSpec
 --
 -- @
 -- buildStealWorkerPoolSpec
---   "my-worker-pool"
---   (set supervisorRestartStraregyL AllForOne)
---   (atomically $ readTBQueue incomingWorkFromSocket)
---   PoolWorkerSpec { poolWorkerNamePrefix = "worker-pool"
---                  , poolWorkerCount      = 10
---                  , poolWorkerAction     = processWorkFromSocket
---                  , poolWorkerOptions    = set workerRestartStrategyL Permanent }
+--   WorkerPoolArgs {
+--       poolSupervisorName    = "my-worker-pool"
+--     , poolSupervisorOptions = set supervisorRestartStraregyL AllForOne
+--     , poolPullNewWork       = "worker-pool"
+--     , poolWorkerNamePrefix  = atomically (readTBQueue incomingWorkFromSocket)
+--     , poolWorkerCount       = 10
+--     , poolWorkerAction      = processWorkFromSocket
+--     , poolWorkerOptions     = set workerRestartStrategyL Permanent
+--     }
 -- @
 --
 -- A supervision tree like the following is spawned:
@@ -162,11 +185,9 @@ buildStealWorkerPoolOptions supName poolSupervisorOptions pullJob workerPoolSpec
 -- @since 0.2.1.0
 buildStealWorkerPoolSpec
   :: (MonadIO m1, MonadIO m)
-  => SupervisorName      -- ^ Name of pool supervisor
-  -> (SupervisorOptions m -> SupervisorOptions m) -- ^ Options for the supervisor of the worker pool
-  -> m a                 -- ^ sub-routine that pulls new work to get processed (read SQS, read TQueue, etc.)
-  -> PoolWorkerSpec m a  -- ^ spec for workers in the pool
+  => WorkerPoolArgs m a  -- ^ spec for workers in the pool
   -> m1 (ProcessSpec m)
-buildStealWorkerPoolSpec supName poolSupervisorOptions pullJob workerPoolSpec = do
-  options <- buildStealWorkerPoolOptions supName poolSupervisorOptions pullJob workerPoolSpec
-  return $ supervisorSpec supName (const options)
+buildStealWorkerPoolSpec poolArgs = do
+  let WorkerPoolArgs { poolSupervisorName } = poolArgs
+  options <- buildStealWorkerPoolOptions poolArgs
+  return $ supervisorSpec poolSupervisorName (const options)

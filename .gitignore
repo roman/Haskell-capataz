@@ -7,6 +7,7 @@ target/*
 .tasty-rerun-log
 **/.stack-work/*
 **/.stack-work_*
+.stack-work*
 *.cabal
 /tutorial.md
 .dir-locals.el

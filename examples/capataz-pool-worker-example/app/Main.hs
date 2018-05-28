@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -13,9 +14,16 @@ import qualified RIO.Text            as Text
 import Network.URI (uriAuthority, uriRegName, uriScheme)
 -- import Network.HTTP.Client (Manager, Request, parseRequest, httpLbs, responseStatus, responseBody, getUri)
 -- import Network.HTTP.Types.Status (statusCode)
+
+#if MIN_VERSION_http_client_tls(0,2,4)
+import Network.HTTP.Client
+    (Manager, Request, getUri, httpLbs, newManager, parseRequest, responseBody)
+import Network.HTTP.Client.TLS (tlsManagerSettings)
+#else
 import Network.HTTP.Client
     (Manager, Request, getUri, httpLbs, parseRequest, responseBody)
 import Network.HTTP.Client.TLS (newTlsManagerWith, tlsManagerSettings)
+#endif
 
 import           Text.HandsomeSoup (css, parseHtml, (!))
 import           Text.XML.HXT.Core ((>>>))
@@ -47,7 +55,8 @@ inferUrlDomain req linkStr =
               else Nothing
 
 fetchUrlList
-  :: (HasLogFunc env, MonadReader env m, MonadIO m)
+  -- :: (HasLogFunc env, MonadReader env m, MonadIO m)
+  :: (MonadReader env m, MonadIO m)
   => Manager
   -> Text
   -> m (Either UnicodeException [Text])
@@ -135,7 +144,11 @@ webCrawler manager startUrl workerCount = do
 main :: IO ()
 main = do
   logOptions  <- logOptionsHandle stdout True
+#if MIN_VERSION_http_client_tls(0,2,4)
+  manager     <- newManager tlsManagerSettings
+#else
   manager     <- newTlsManagerWith tlsManagerSettings
+#endif
   crawlerSpec <- webCrawler manager genesysUrl 20
   withLogFunc logOptions $ \logFunc -> runRIO logFunc $ do
     capataz <- forkCapataz

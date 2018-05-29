@@ -16,6 +16,8 @@ module Control.Concurrent.Capataz.Util.Logger
 import RIO
 import Control.Concurrent.Capataz
 
+import qualified RIO.Text as Text
+
 data LogMsg
   = LogMsg
   {
@@ -27,13 +29,20 @@ data LogMsg
   }
 
 
+-- | Dedicated thread whose only job is to read messages from a queue and log
+-- them
 runLoggerThread :: MonadUnliftIO m => LogOptions -> TBQueue LogMsg -> m a
 runLoggerThread logOptions inputQueue = withLogFunc logOptions $ \logFunc ->
   runRIO logFunc $ forever $ do
     logMsg <- atomically $ readTBQueue inputQueue
     let LogMsg { lmCallStack, lmThreadId, lmLogSource, lmLogLevel, lmPayload } = logMsg
     -- TODO: create a ticket for a logGenericWithStack function in rio
-    logGenericFromThread lmCallStack lmThreadId lmLogSource lmLogLevel lmPayload
+    logGenericCallStack lmCallStack lmLogSource lmLogLevel $ (renderThreadId lmThreadId) <> lmPayload
+  where
+    renderThreadId tid =
+      case Text.words (tshow tid) of
+        (_:tidTxt:_) -> "[" <> display tidTxt <> "] "
+        _ -> mempty
 
 -- | Builds a 'ProcessSpec' that spawns a thread that logs messages written with
 -- the returned 'LogFunc'. Use this function when your want your logger to be
@@ -41,8 +50,7 @@ runLoggerThread logOptions inputQueue = withLogFunc logOptions $ \logFunc ->
 --
 --
 -- __IMPORTANT__ If you use the returned 'LogFunc' to log functions and the
--- 'ProcessSpec' is not used in a supervision tree, your logging won't work and
--- your application will eventually block the current thread when logging.
+-- 'ProcessSpec' is not used in a supervision tree, your logging won't work.
 --
 -- A minimal example:
 --
@@ -74,14 +82,17 @@ buildLogWorkerSpec
 buildLogWorkerSpec logOptions procName bufferSize modOptions = do
   inputQueue <- newTBQueueIO bufferSize
   let myLogFunc =
-        mkLogFunc $ \lmCallStack lmThreadId lmLogSource lmLogLevel lmPayload -> do
+        mkLogFunc $ \lmCallStack lmLogSource lmLogLevel lmPayload -> do
           minLevel <- getLogMinLevel logOptions
+          lmThreadId <- myThreadId
           when (lmLogLevel >= minLevel)
             $ atomically
-                (writeTBQueue
-                  inputQueue
-                  LogMsg {lmCallStack , lmThreadId ,  lmLogSource , lmLogLevel , lmPayload }
-                )
+            $ do isFull <- isFullTBQueue inputQueue
+                 unless isFull
+                    (writeTBQueue
+                      inputQueue
+                      LogMsg {lmCallStack , lmThreadId ,  lmLogSource , lmLogLevel , lmPayload }
+                    )
 
       loggerSpec = workerSpec
         procName
@@ -96,8 +107,7 @@ buildLogWorkerSpec logOptions procName bufferSize modOptions = do
 --
 --
 -- __IMPORTANT__ If you use the returned 'LogFunc' to log functions and the
--- 'WorkerOptions' is not used in a 'forkWorker' call, your logging won't work
--- and your application will eventually block the current thread when logging.
+-- 'WorkerOptions' is not used in a 'forkWorker' call, your logging won't work.
 --
 -- A minimal example:
 --
@@ -130,11 +140,13 @@ buildLogWorkerOptions
 buildLogWorkerOptions logOptions procName bufferSize modOptions = do
   inputQueue <- newTBQueueIO bufferSize
   let myLogFunc =
-        mkLogFunc $ \lmCallStack lmThreadId lmLogSource lmLogLevel lmPayload -> atomically
-          (writeTBQueue
-            inputQueue
-            LogMsg {lmCallStack , lmThreadId, lmLogSource , lmLogLevel , lmPayload }
-          )
+        mkLogFunc $ \lmCallStack lmLogSource lmLogLevel lmPayload -> do
+          lmThreadId <- myThreadId
+          atomically
+            (writeTBQueue
+              inputQueue
+              LogMsg {lmCallStack , lmThreadId, lmLogSource , lmLogLevel , lmPayload}
+            )
 
       loggerSpec = buildWorkerOptions
         procName

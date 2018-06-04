@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- | Offers functions that build a pool of workers that run concurrently in a
 -- supervised environment
@@ -16,8 +16,8 @@ module Control.Concurrent.Capataz.Util.StealWorkerPool
   )
   where
 
-import RIO
 import Control.Concurrent.Capataz
+import RIO
 
 -- | Exception that gets thrown when worker is not able to finish
 --   after specified period of time
@@ -40,19 +40,19 @@ data WorkerPoolArgs m a
   = WorkerPoolArgs
     {
       -- | sub-routine that pulls new work to get processed (read SQS, read TQueue, etc.)
-      poolPullNewWork       :: !(m a)
+      poolPullNewWork         :: !(m a)
       -- | Name of pool supervisor (used for telemetry)
-    , poolSupervisorName    :: !SupervisorName
+    , poolSupervisorName      :: !SupervisorName
       -- | Options for the supervisor of the worker pool
-    , poolSupervisorOptions :: !(SupervisorOptions m -> SupervisorOptions m)
+    , poolSupervisorOptions   :: !(SupervisorOptions m -> SupervisorOptions m)
       -- | Prefix of worker's name in the pool (used for telemetry)
-    , poolWorkerNamePrefix  :: !Text
+    , poolWorkerNamePrefix    :: !Text
       -- | Number of worker threads on the pool
-    , poolWorkerCount       :: !Int
+    , poolWorkerCount         :: !Int
       -- | Sub-routine that does something with a pulled job
-    , poolWorkerAction      :: !(WorkerId -> a -> m ())
+    , poolWorkerAction        :: !(WorkerId -> a -> m ())
       -- | Supervision options for workers in the pool
-    , poolWorkerOptions     :: !(WorkerOptions m -> WorkerOptions m)
+    , poolWorkerOptions       :: !(WorkerOptions m -> WorkerOptions m)
       -- | Maximum amount of time a request processing can take
     , poolWorkerTimeoutMicros :: !Int
     }
@@ -62,64 +62,53 @@ data WorkerPoolArgs m a
 runWorkManager :: Monad m => m a -> m (a -> m ()) -> m ()
 runWorkManager pullJob acceptWorker = forever $ do
   sendToWorker <- acceptWorker
-  workToDo <- pullJob
+  workToDo     <- pullJob
   sendToWorker workToDo
 
 -- | Sub-routine that requests new work and does it
 runPoolWorker
-  :: (MonadUnliftIO m, MonadIO m, MonadThrow m, Typeable a, Show a)
+  :: (MonadUnliftIO m, MonadThrow m, Typeable a, Show a)
   => ((a -> m ()) -> m ())
   -> Text
   -> WorkerPoolArgs m a
   -> WorkerId
   -> m ()
 runPoolWorker requestWork poolWorkerName poolArgs poolWorkerId = do
-  let
-    WorkerPoolArgs {
-        poolWorkerAction
-      , poolWorkerTimeoutMicros
-      } = poolArgs
+  let WorkerPoolArgs { poolWorkerAction, poolWorkerTimeoutMicros } = poolArgs
 
   reqBox <- newEmptyMVar
   forever $ do
     requestWork (putMVar reqBox)
     poolWorkerPayload <- takeMVar reqBox
 
-    result <-
-      timeout poolWorkerTimeoutMicros
-        $ poolWorkerAction poolWorkerId poolWorkerPayload
+    result            <- timeout poolWorkerTimeoutMicros
+      $ poolWorkerAction poolWorkerId poolWorkerPayload
 
     case result of
-      Nothing ->
-        throwM $ WorkerPoolTimeout {
-          poolWorkerId
-          , poolWorkerName
-          , poolWorkerPayload
-          }
+      Nothing -> throwM $ WorkerPoolTimeout
+        { poolWorkerId
+        , poolWorkerName
+        , poolWorkerPayload
+        }
 
-      Just _ ->
-        return ()
+      Just _ -> return ()
 
 -- | Transforms a PoolWorkerSpec into a list of WorkerSpec
 buildWorkersFromPoolSpec
-  :: (MonadUnliftIO m, MonadIO m, MonadThrow m, Typeable a, Show a)
+  :: (MonadUnliftIO m, MonadThrow m, Typeable a, Show a)
   => ((a -> m ()) -> m ())
   -> WorkerPoolArgs m a
   -> [ProcessSpec m]
 buildWorkersFromPoolSpec requestWork poolArgs =
   let
-    WorkerPoolArgs {
-        poolWorkerNamePrefix
-      , poolWorkerCount
-      , poolWorkerOptions
-      } = poolArgs
-  in
-    [ workerSpec1 workerName
-                  (runPoolWorker requestWork workerName poolArgs)
-                  poolWorkerOptions
-    | i <- [1..poolWorkerCount]
-    , let workerName = poolWorkerNamePrefix <> "-" <> tshow i
-    ]
+    WorkerPoolArgs { poolWorkerNamePrefix, poolWorkerCount, poolWorkerOptions }
+      = poolArgs
+  in  [ workerSpec1 workerName
+                    (runPoolWorker requestWork workerName poolArgs)
+                    poolWorkerOptions
+      | i <- [1 .. poolWorkerCount]
+      , let workerName = poolWorkerNamePrefix <> "-" <> tshow i
+      ]
 
 -- | This function returns the settings needed to /dynamically/ build a
 -- supervision tree that contains:
@@ -164,33 +153,29 @@ buildStealWorkerPoolOptions
   => WorkerPoolArgs m a  -- ^ arguments for the worker pool
   -> m1 (SupervisorOptions m)
 buildStealWorkerPoolOptions poolArgs = do
-  let WorkerPoolArgs {
-          poolSupervisorName
-        , poolSupervisorOptions
-        , poolPullNewWork
-        } = poolArgs
+  let
+    WorkerPoolArgs { poolSupervisorName, poolSupervisorOptions, poolPullNewWork }
+      = poolArgs
 
   workQueue <- newTBQueueIO (poolWorkerCount poolArgs)
   let
-    requestWork  = atomically . writeTBQueue workQueue
-    acceptWorker = atomically (readTBQueue workQueue)
+    requestWork          = atomically . writeTBQueue workQueue
+    acceptWorker         = atomically (readTBQueue workQueue)
 
-    workerSpecList =
-      buildWorkersFromPoolSpec requestWork poolArgs
+    workerSpecList       = buildWorkersFromPoolSpec requestWork poolArgs
 
-    workerPoolSupervisor =
-      supervisorSpec "pool-supervisor"
-                     (set supervisorProcessSpecListL workerSpecList
-                      . poolSupervisorOptions)
+    workerPoolSupervisor = supervisorSpec
+      "pool-supervisor"
+      (set supervisorProcessSpecListL workerSpecList . poolSupervisorOptions)
 
-    workManagerSpec =
-      workerSpec "work-manager"
-                 (runWorkManager poolPullNewWork acceptWorker)
-                 (set workerRestartStrategyL Permanent)
+    workManagerSpec = workerSpec
+      "work-manager"
+      (runWorkManager poolPullNewWork acceptWorker)
+      (set workerRestartStrategyL Permanent)
 
-    rootSupervisorOptions =
-      buildSupervisorOptions poolSupervisorName
-                             (set supervisorProcessSpecListL [workManagerSpec, workerPoolSupervisor])
+    rootSupervisorOptions = buildSupervisorOptions
+      poolSupervisorName
+      (set supervisorProcessSpecListL [workManagerSpec, workerPoolSupervisor])
 
   return rootSupervisorOptions
 

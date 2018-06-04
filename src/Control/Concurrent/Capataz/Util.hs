@@ -1,5 +1,5 @@
-{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 module Control.Concurrent.Capataz.Util (
     -- * Logging utilities
@@ -12,5 +12,5 @@ module Control.Concurrent.Capataz.Util (
   , Pool.buildStealWorkerPoolSpec
   ) where
 
-import qualified Control.Concurrent.Capataz.Util.Logger as Logger
+import qualified Control.Concurrent.Capataz.Util.Logger          as Logger
 import qualified Control.Concurrent.Capataz.Util.StealWorkerPool as Pool

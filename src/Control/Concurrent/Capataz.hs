@@ -38,10 +38,12 @@ module Control.Concurrent.Capataz
 , Control.Concurrent.Capataz.Internal.Types.buildSupervisorOptions
 , Control.Concurrent.Capataz.Internal.Types.buildSupervisorOptionsWithDefaults
 , Control.Concurrent.Capataz.Internal.Types.buildWorkerOptions
+, Control.Concurrent.Capataz.Internal.Types.buildWorkerOptions1
 , Control.Concurrent.Capataz.Internal.Types.buildWorkerOptionsWithDefaults
 , Control.Concurrent.Capataz.Internal.Types.supervisorSpec
 , Control.Concurrent.Capataz.Internal.Types.supervisorSpecWithDefaults
 , Control.Concurrent.Capataz.Internal.Types.workerSpec
+, Control.Concurrent.Capataz.Internal.Types.workerSpec1
 , Control.Concurrent.Capataz.Internal.Types.workerSpecWithDefaults
 
 -- * Lenses to modify Option Records

@@ -6,6 +6,11 @@ module Control.Concurrent.Capataz.Util (
     Logger.buildLogWorkerSpec
   , Logger.buildLogWorkerOptions
 
+    -- * Concurrent utilities
+  , Pool.WorkerPoolArgs (..)
+  , Pool.buildStealWorkerPoolOptions
+  , Pool.buildStealWorkerPoolSpec
   ) where
 
 import qualified Control.Concurrent.Capataz.Util.Logger as Logger
+import qualified Control.Concurrent.Capataz.Util.StealWorkerPool as Pool

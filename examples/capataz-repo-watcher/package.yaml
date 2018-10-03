@@ -2,7 +2,7 @@ name: capataz-repo-watcher
 version: '0.0.0.0'
 category: TODO
 author: Roman Gonzalez
-maintainer: Roman Gonzalez <open-source@roman-gonzalez.info>
+maintainer: open-source@roman-gonzalez.info
 copyright: © 2018 Roman Gonzalez
 stability: alpha (experimental)
 license: MIT

@@ -2,8 +2,8 @@ name: capataz-simple-example
 version: '0.0.0.1'
 category: TODO
 author: Roman Gonzalez
-maintainer: romanandreg@gmail.com
-copyright: © 2017 Roman Gonzalez
+maintainer: open-source@roman-gonzalez.info
+copyright: © 2017, 2018 Roman Gonzalez
 license: MIT
 github: roman/Haskell-capataz
 extra-source-files:

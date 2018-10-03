@@ -37,6 +37,7 @@ resolver: lts-11.10
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - .
+- examples/capataz-pool-worker-example
 - examples/capataz-simple-example
 # - examples/capataz-repo-watcher
 # Dependency packages to be pulled from upstream that are not in the resolver

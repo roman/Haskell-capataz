@@ -6,6 +6,12 @@ The change log is available [on GitHub][2].
 [1]: http://semver.org/spec/v2.0.0.html
 [2]: https://github.com/roman/capataz/releases
 
+## v0.2.1.0
+
+* Export `buildWorkerOptions1` and `workerSpec1` through the public API
+* Add `buildStealWorkerPoolSpec` and `buildStealWorkerPoolOptions`, which allows
+  you to create a supervision tree for pool of workers
+
 ## v0.2.0.0 Bumblebee release
 
 **BREAKING CHANGES**

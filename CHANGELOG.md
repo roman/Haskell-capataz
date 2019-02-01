@@ -6,6 +6,14 @@ The change log is available [on GitHub][2].
 [1]: http://semver.org/spec/v2.0.0.html
 [2]: https://github.com/roman/capataz/releases
 
+## v0.2.1.0
+
+* Support GHC-8.6.3.
+* Deprecate `buildLogWorkerSpec` in favour of `buildLogWorkerSpec1` which takes
+  `Natural` instead of `Int` for compatibility with `stm-2.5`.
+* Deprecate `buildLogWorkerOptions` in favour of `buildLogWorkerOptions1` which
+  takes `Natural` instead of `Int` for compatibility with `stm-2.5`.
+
 ## v0.2.0.0 Bumblebee release
 
 **BREAKING CHANGES**

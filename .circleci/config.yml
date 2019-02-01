@@ -34,6 +34,24 @@ jobs:
             - /root/.cabal
             - .stack-work
 
+  lts-13:
+    docker:
+      - image: romanandreg/stack:latest
+    environment:
+      - STACK_ARGS: '--resolver lts-13'
+      - CABAL_DIR: '/root/.local/bin'
+    steps:
+      - checkout
+      - restore_cache:
+          key: build-cache-{{ checksum "package.yaml" }}-lts13
+      - run: "make -f make/solver.make fix-solver && make test"
+      - save_cache:
+          key: build-cache-{{ checksum "package.yaml" }}-lts13
+          paths:
+            - /root/.stack
+            - /root/.ghc
+            - .stack-work
+
   lts-11:
     docker:
       - image: romanandreg/stack:latest
@@ -111,6 +129,7 @@ workflows:
   main:
     jobs:
       - sdist
+      - lts-13
       - lts-11
       - lts-9
       - lts-7

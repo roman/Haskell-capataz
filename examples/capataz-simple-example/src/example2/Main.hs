@@ -8,7 +8,7 @@ import Capataz
     ( CapatazOptions
     , SupervisorRestartStrategy (..)
     , WorkerRestartStrategy (..)
-    , buildLogWorkerOptions
+    , buildLogWorkerOptions1
     , buildWorkerOptions
     , buildWorkerOptionsWithDefaults
     , forkCapataz
@@ -34,13 +34,13 @@ main :: IO ()
 main = do
   n                        <- procNumber <$> getRecord "Counter spawner"
   logOptions               <- logOptionsHandle stdout False
-  (loggerOptions, logFunc) <- buildLogWorkerOptions logOptions "logger" n id
+  (loggerOptions, logFunc) <- buildLogWorkerOptions1 logOptions "logger" n id
 
   runRIO logFunc $ do
     capataz       <- forkCapataz "unix-process-capataz" rootSupervisorOptions
 
     _loggerWorker <- forkWorker loggerOptions capataz
-    let numberWriter i a = logInfo $ displayShow (i :: Int, a :: Int)
+    let numberWriter i a = logInfo $ displayShow (i :: Natural, a :: Natural)
         delayMicros = 5000100
 
     _workerIdList <- forM [1 .. n] $ \i -> do

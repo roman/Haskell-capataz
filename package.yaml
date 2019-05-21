@@ -1,5 +1,5 @@
 name: capataz
-version: '0.2.0.0'
+version: '0.2.1.0'
 synopsis: OTP-like supervision trees in Haskell
 description: |
   `capataz` enhances the reliability of your concurrent applications by offering
@@ -26,7 +26,7 @@ copyright: © 2018 Roman Gonzalez
 license: MIT
 license-file: LICENSE
 github: roman/Haskell-capataz
-tested-with: GHC==8.0.1 GHC==8.0.2 GHC==8.2.1
+tested-with: GHC==8.0.1 GHC==8.0.2 GHC==8.2.1 GHC==8.6.3
 extra-source-files:
 - README.md
 - CHANGELOG.md

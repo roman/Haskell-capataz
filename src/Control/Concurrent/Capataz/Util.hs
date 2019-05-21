@@ -2,7 +2,9 @@
 
 {-# LANGUAGE NoImplicitPrelude #-}
 module Control.Concurrent.Capataz.Util (
-    buildLogWorkerSpec
+    buildLogWorkerSpec1
+  , buildLogWorkerSpec
+  , buildLogWorkerOptions1
   , buildLogWorkerOptions
   ) where
 
@@ -63,15 +65,15 @@ runLoggerThread logOptions inputQueue = withLogFunc logOptions $ \logFunc ->
 --       threadDelay 1000100
 -- @
 --
--- @since 0.2.0.0
-buildLogWorkerSpec
+-- @since 0.2.1.0
+buildLogWorkerSpec1
   :: (MonadUnliftIO m, MonadIO m0)
   => LogOptions  -- ^ options for the 'LogFunc' instance
   -> WorkerName  -- ^ name of the logger worker process
-  -> Int         -- ^ how many log messages can be in-flight when writer is slow?
+  -> Natural     -- ^ how many log messages can be in-flight when writer is slow?
   -> (WorkerOptions m -> WorkerOptions m) -- ^ worker process modifier
   -> m0 (ProcessSpec m, LogFunc)
-buildLogWorkerSpec logOptions procName bufferSize modOptions = do
+buildLogWorkerSpec1 logOptions procName bufferSize modOptions = do
   inputQueue <- newTBQueueIO bufferSize
   let myLogFunc =
         mkLogFunc $ \lmCallStack lmLogSource lmLogLevel lmPayload -> atomically
@@ -86,6 +88,23 @@ buildLogWorkerSpec logOptions procName bufferSize modOptions = do
         (modOptions . set workerRestartStrategyL Permanent)
 
   return (loggerSpec, myLogFunc)
+
+-- | Deprecated in favour of 'buildLogWorkerSpec1'.
+--
+-- __IMPORTANT__ Since 0.2.1.0 this function throws a runtime error if
+-- the argumet of the type 'Int' is negative.
+--
+-- @since 0.2.0.0
+buildLogWorkerSpec
+  :: (MonadUnliftIO m, MonadIO m0)
+  => LogOptions  -- ^ options for the 'LogFunc' instance
+  -> WorkerName  -- ^ name of the logger worker process
+  -> Int         -- ^ how many log messages can be in-flight when writer is slow?
+  -> (WorkerOptions m -> WorkerOptions m) -- ^ worker process modifier
+  -> m0 (ProcessSpec m, LogFunc)
+buildLogWorkerSpec logOptions procName bufferSize =
+  buildLogWorkerSpec1 logOptions procName (fromIntegral bufferSize)
+{-# DEPRECATED buildLogWorkerSpec "Use buildLogWorkerSpec1 instead" #-}
 
 -- | Builds a 'WorkerOptions' record that spawns a thread that logs messages
 -- written with the returned 'LogFunc'. Use this function if you want to build a
@@ -116,15 +135,15 @@ buildLogWorkerSpec logOptions procName bufferSize modOptions = do
 --       threadDelay 1000100
 -- @
 --
--- @since 0.2.0.0
-buildLogWorkerOptions
+-- @since 0.2.1.0
+buildLogWorkerOptions1
   :: (MonadUnliftIO m, MonadIO m0)
   => LogOptions
   -> WorkerName
-  -> Int
+  -> Natural
   -> (WorkerOptions m -> WorkerOptions m)
   -> m0 (WorkerOptions m, LogFunc)
-buildLogWorkerOptions logOptions procName bufferSize modOptions = do
+buildLogWorkerOptions1 logOptions procName bufferSize modOptions = do
   inputQueue <- newTBQueueIO bufferSize
   let myLogFunc =
         mkLogFunc $ \lmCallStack lmLogSource lmLogLevel lmPayload -> atomically
@@ -139,3 +158,20 @@ buildLogWorkerOptions logOptions procName bufferSize modOptions = do
         (modOptions . set workerRestartStrategyL Permanent)
 
   return (loggerSpec, myLogFunc)
+
+-- | Deprecated in favour of 'buildLogWorkerOptions1'.
+--
+-- __IMPORTANT__ Since 0.2.1.0 this function throws a runtime error if
+-- the argumet of the type 'Int' is negative.
+--
+-- @since 0.2.0.0
+buildLogWorkerOptions
+  :: (MonadUnliftIO m, MonadIO m0)
+  => LogOptions
+  -> WorkerName
+  -> Int
+  -> (WorkerOptions m -> WorkerOptions m)
+  -> m0 (WorkerOptions m, LogFunc)
+buildLogWorkerOptions logOptions procName bufferSize =
+  buildLogWorkerOptions1 logOptions procName (fromIntegral bufferSize)
+{-# DEPRECATED buildLogWorkerOptions "Use buildLogWorkerOptions1 instead" #-}

@@ -8,7 +8,7 @@ STACK := stack $(STACK_ARGS) --install-ghc --local-bin-path ./out/bin
 ################################################################################
 
 $(CABAL_BIN):
-	stack --resolver lts-9 install --local-bin-path $(CABAL_DIR) cabal-install
+	stack --resolver lts-13 install --local-bin-path $(CABAL_DIR) cabal-install
 
 cabal: $(CABAL_BIN) ## Install cabal for resolver
 .PHONY: cabal

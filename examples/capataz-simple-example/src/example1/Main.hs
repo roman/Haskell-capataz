@@ -15,7 +15,7 @@ main = do
 
     n <- liftIO $ getRecord "Counter spawner"
 
-    let numberWriter i a = logInfo $ displayShow (i :: Int, a :: Int)
+    let numberWriter i a = logInfo $ displayShow (i :: Natural, a :: Natural)
         delayMicros = 5000100
 
     _asyncList <- forM [1 .. procNumber n]

@@ -11,7 +11,7 @@ REFACTOR_BIN := $(TOOLS_DIR)/refactor
 
 FIND_HASKELL_FILES := find . -name "*.hs" -not -path '*.stack-work*' -not -path "*tmp*" -not -name "Setup.hs"
 
-STACK := stack --resolver lts-11 --local-bin-path $(TOOLS_DIR)
+STACK := stack --resolver lts-13 --local-bin-path $(TOOLS_DIR)
 
 ################################################################################
 

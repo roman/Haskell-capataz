@@ -18,7 +18,7 @@ import           Options.Generic (ParseRecord)
 import qualified System.Random   as Random
 
 newtype Cli =
-  Cli { procNumber :: Int }
+  Cli { procNumber :: Natural }
   deriving (Generic, Show)
 
 instance ParseRecord Cli
@@ -66,7 +66,7 @@ counterProc =
     & Process.setStdout Process.byteStringOutput
 
 
-spawnNumbersProcess :: (HasLogFunc env) => (Int -> RIO env ()) -> RIO env ()
+spawnNumbersProcess :: (HasLogFunc env) => (Natural -> RIO env ()) -> RIO env ()
 spawnNumbersProcess writeNumber =
   bracket (Process.startProcess counterProc) Process.stopProcess
     $ \countProcess -> do
